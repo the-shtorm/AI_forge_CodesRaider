@@ -118,7 +118,7 @@ curl -G http://localhost:8080/v1/analytics \
 
 ## Внутренний контракт энкодера
 
-Spring берёт `profile_id` из `GET /ready` при создании индекса и сохраняет его в манифесте. Перед онлайн-запросом используется профиль активного снимка. В `POST /internal/v1/embeddings` для `query` передаётся ровно один непустой текст, для `passage` — от 1 до 32. Энкодер добавляет префикс один раз. Ответ сохраняет порядок текстов и содержит по одному L2-нормализованному вектору размерности 384 на текст. Профиль в примере Swagger и единичный вектор синтетические.
+Spring берёт `profile_id` из `GET /ready` при создании индекса и сохраняет его в манифесте. Перед онлайн-запросом используется профиль активного снимка. В `POST /internal/v1/embeddings` для `query` передаётся ровно один непустой текст, для `passage` — от 1 до 32. Энкодер добавляет префикс один раз. Ответ сохраняет порядок текстов и содержит по одному L2-нормализованному вектору размерности 384 на текст. Swagger показывает идентификатор закреплённого профиля. Единичный вектор в примере ответа синтетический.
 
 | HTTP | Условие | Действие клиента |
 |---|---|---|
@@ -127,7 +127,40 @@ Spring берёт `profile_id` из `GET /ready` при создании инд�
 | `422 INVALID_REQUEST` | Пустой текст, неверный тип или размер пачки | Исправить входной пакет. |
 | `503` | Модель не готова, перегружена или вернула непригодные векторы | Онлайн-поиск продолжает работу по лексическому индексу. |
 
-У служебного `GET /health` в FastAPI ответ `{"status":"up"}` означает доступность процесса. `GET /ready` отражает готовность энкодера к вычислению. В каркасе его текущее состояние — `503 MODEL_NOT_READY`. [Спецификация сервиса эмбеддингов](FASTAPI_RETRIEVAL_HANDOFF.md)
+### Рабочий сервис FastAPI
+
+Контейнер `model` обслуживает вычисления по адресу `http://model:8000` в сети Compose. `GET /health` сообщает о доступности процесса. Во время загрузки `GET /ready` возвращает `503 MODEL_NOT_READY`, после успешного прогрева — `200` с `profile_id` и размерностью. Стенд `api-docs` публикует справочные примеры на порту 8001. [Запуск в Docker и демонстрационный запрос](../README.md#первый-смысловой-поиск-через-fastapi)
+
+Сборка образа скачивает CPU-зависимости и веса `intfloat/multilingual-e5-small` ревизии `614241f622f53c4eeff9890bdc4f31cfecc418b3`. Для автономного показа заранее соберите образ и запустите демонстрационный запрос. При старте контейнера загрузка идёт из встроенного кэша в режиме `HF_HUB_OFFLINE=1`. [Ревизия и лицензия модели](https://huggingface.co/intfloat/multilingual-e5-small/tree/614241f622f53c4eeff9890bdc4f31cfecc418b3)
+
+Для разработки и собственного Swagger запустите сервис из каталога `model` с Python 3.12 и uv. Первый запуск с доступом в интернет заполнит кэш Hugging Face. Путь к кэшу можно задать через `HF_HOME`; после успешного прогрева этот же каталог доступен с `HF_HUB_OFFLINE=1`.
+
+```sh
+uv run --locked --group ml uvicorn app:app --host 127.0.0.1 --port 8002
+```
+
+Откройте [Swagger рабочего сервиса](http://127.0.0.1:8002/docs), выполните `GET /ready` и подставьте полученный профиль при вызове `POST /internal/v1/embeddings`. В PowerShell следующий пример кодирует один запрос и два документа.
+
+```powershell
+$base = 'http://127.0.0.1:8002'
+$profileId = (Invoke-RestMethod "$base/ready").profile_id
+$batches = @(
+    @{ input_type = 'query'; texts = @('Как восстановить файлы после сбоя?') }
+    @{ input_type = 'passage'; texts = @('Резервное копирование данных', 'Лазерный принтер для офиса') }
+)
+foreach ($batch in $batches) {
+    $batch.profile_id = $profileId
+    $body = [Text.Encoding]::UTF8.GetBytes(($batch | ConvertTo-Json))
+    $result = Invoke-RestMethod "$base/internal/v1/embeddings" -Method Post -ContentType 'application/json' -Body $body
+    "$($batch.input_type) — $($result.vectors.Count) вектор(а), размерность $($result.dimension)"
+}
+```
+
+Демонстрационный клиент отправляет описания четырёх примеров одним пакетом, кодирует запрос и сортирует примеры по скалярному произведению единичных векторов. Для локального сервиса в другом терминале из каталога `model` выполните `uv run --locked --group ml python demo_search.py --base-url http://127.0.0.1:8002 "Как печатать счета на бумаге?"`. Для рабочего каталога план предусматривает предварительную индексацию описаний в Lucene.
+
+Тесты HTTP-контракта запускаются командой `uv run --locked --group test python -m unittest discover -s tests -v`. Для проверки настоящей модели в подготовленном кэше задайте в PowerShell `$env:RUN_MODEL_SMOKE='1'` и выполните `uv run --locked --group ml --group test python -m unittest discover -s tests -p test_real_model.py -v`. Тест проверяет форму векторов, ранжирование русскоязычного запроса и выводит время запросов на прогретой модели. [Требования к энкодеру и приёмке](FASTAPI_RETRIEVAL_HANDOFF.md)
+
+В одиночном прогоне этого теста на Windows с Intel Core Ultra 9 285H и двумя потоками PyTorch обработка прогретого запроса заняла 18,7 мс, пакета из четырёх описаний — 32,8 мс. Замер включает обработку FastAPI в процессе теста. Для решения о включении E5 в витрине требуется отдельный нагрузочный прогон поиска по каталогу.
 
 ## Приёмка поискового обработчика Spring
 
@@ -167,7 +200,7 @@ python backend/acceptance/build_fixtures.py ../Mindbox.yml.gz.xml backend/target
 ```sh
 uv run --locked --group docs python export_openapi.py
 uv run --locked --group docs python export_openapi.py --check
-uv run --locked --group docs python -m unittest discover -s tests
+uv run --locked --group docs --group test python -m unittest discover -s tests
 ```
 
 Ошибки имеют media type `application/problem+json` и поля `type`, `title`, `status`, `detail`, `code`. Клиент переключает поведение по HTTP-статусу и `code`. Для проверки публичной схемы ввода используется `400 INVALID_REQUEST`. Для схемы входа энкодера применяется `422 INVALID_REQUEST`.
