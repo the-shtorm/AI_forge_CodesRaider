@@ -67,6 +67,11 @@ class Filters(DTO):
     )
 
 
+class AssistantTurn(DTO):
+    role: Literal["user", "assistant"]
+    text: Text = Field(max_length=2000)
+
+
 class SearchRequest(DTO):
     q: Text = Field(
         description="Исходная строка покупателя, в том числе префикс при выборе подсказки."
@@ -78,6 +83,15 @@ class SearchRequest(DTO):
     filters: Filters = Field(default_factory=Filters)
     selected_target: SelectedTarget | None = Field(
         None, description="Выбранная подсказка. Сервер проверяет её ID и тип в текущем снимке."
+    )
+    strategy: Literal["standard", "llm"] = Field(
+        "standard", description="llm запрашивает интерпретацию намерения. Явные фильтры всегда обязательны."
+    )
+    assistant_history: list[AssistantTurn] | None = Field(
+        None, max_length=8, description="Предыдущие сообщения чата от старых к новым. Текущий вопрос находится в q."
+    )
+    sort: Literal["relevance", "price_asc", "price_desc"] = Field(
+        "relevance", description="Порядок прямых результатов. Точный SKU сохраняет приоритет, товары без цены идут в конце."
     )
     limit: int = Field(
         4,
@@ -103,6 +117,7 @@ class Offer(DTO):
     name: Text
     vendor: Text
     url: Link
+    image_url: Link | None = Field(None, description="Фотография предложения из каталога, если доступна.")
     available: bool = Field(description="Флаг наличия из снимка.")
     price_minor: PositiveInt | None = Field(
         description="Цена выбранного предложения в минимальных единицах. Неизвестная или нулевая цена фида возвращается как null."
@@ -161,6 +176,17 @@ class AlternativeCard(Card):
 TopCard = Annotated[DirectCard | ComplementCard, Field(discriminator="role")]
 
 
+class SearchFacet(DTO):
+    id: Text
+    label: Text
+    count: NonNegativeInt = Field(description="Число подходящих прямых семейств.")
+
+
+class SearchFacets(DTO):
+    vendors: list[SearchFacet]
+    categories: list[SearchFacet]
+
+
 class SearchResponse(DTO):
     search_id: Text = Field(description="ID этого поиска, включая поиск с пустым результатом.")
     index_version: Text = Field(description="Версия снимка каталога и поискового индекса.")
@@ -189,6 +215,15 @@ class SearchResponse(DTO):
     )
     shortfall_reason: Literal["NO_DIRECT_MATCH", "NOT_ENOUGH_VERIFIED_FAMILIES"] | None = Field(
         description="null при полной четвёрке. При нуле прямых совпадений — NO_DIRECT_MATCH, при недоборе проверенных семейств — NOT_ENOUGH_VERIFIED_FAMILIES."
+    )
+    facets: SearchFacets | None = Field(
+        None, description="Варианты фильтров по прямым совпадениям. Для каждой группы учитывать все явные ограничения, кроме собственного фильтра."
+    )
+    llm_applied: bool | None = Field(
+        None, description="true, когда интерпретация LLM участвовала в поиске, false при деградации."
+    )
+    assistant_message: Text | None = Field(
+        None, max_length=2000, description="Ответ чата на основе найденных сведений или уточняющий вопрос."
     )
 
 
