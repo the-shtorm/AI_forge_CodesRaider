@@ -3,9 +3,15 @@ package ru.codesraider.smartsearch;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+import ru.codesraider.smartsearch.catalog.CatalogImporter;
+
 @SpringBootApplication
 public class SmartSearchApplication {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
+        if (args.length > 0 && args[0].equals("import")) {
+            CatalogImporter.run(args);
+            return;
+        }
         SpringApplication.run(SmartSearchApplication.class, args);
     }
 }
