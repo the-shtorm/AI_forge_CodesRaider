@@ -158,8 +158,11 @@ public class SearchController {
             }
             (i < 4 ? top : more).add(card);
         }
-        if (!anchors.isEmpty() && top.size() < 4 && !input.skipsConsumables())
-            top.addAll(db.complements(anchors, filters, 4 - top.size()));
+        var complements =
+                anchors.isEmpty() || input.skipsConsumables()
+                        ? List.<Map<String, Object>>of()
+                        : db.complements(anchors, filters, 4);
+        top.addAll(complements.subList(0, Math.min(4 - top.size(), complements.size())));
         if (!conflict && direct.isEmpty() && missingModel != null && q.contains("принтер")) {
             for (Row item : db.printerAlternatives(filters, missingModel, q)) {
                 var card = item.card("alternative", "FUNCTIONAL_ALTERNATIVE");
@@ -185,6 +188,7 @@ public class SearchController {
         result.put("top4", top);
         result.put("more_results", more);
         result.put("alternatives", alternatives);
+        result.put("related_offers", SearchCatalog.relatedOffers(complements));
         result.put(
                 "shortfall_reason",
                 top.size() == 4
@@ -238,6 +242,12 @@ public class SearchController {
             if (kind.equals("offer") || kind.equals("family")) {
                 var variants = db.variants(target, scope);
                 result.put("offers", db.detailedOffers(variants));
+                if (kind.equals("offer") && !variants.isEmpty()) {
+                    result.put(
+                            "related_offers",
+                            SearchCatalog.relatedOffers(
+                                    db.complements(variants, Map.of("available_only", true), 4)));
+                }
                 if (kind.equals("offer")
                         && !variants.isEmpty()
                         && variants.getFirst().get("family_key") != null) {

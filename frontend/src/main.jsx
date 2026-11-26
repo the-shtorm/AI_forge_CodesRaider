@@ -1,319 +1,103 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import AnalyticsPage from "./AnalyticsPage";
 import AssistantChat from "./AssistantChat";
-import ProductImage from "./ProductImage";
-import { demoSearch, demoSuggestions, fetchSearch, safeLink } from "./catalog";
+import CartPage from "./CartPage";
+import CatalogPage from "./CatalogPage";
+import EntityPage from "./EntityPage";
+import { entityKinds, eventSession, filtersFromParams } from "./api";
+import { trackEvents } from "./events";
 import "./style.css";
 
-const DEFAULT_QUERY = "Pantum P2500W или BM1800W";
-const examples = ["сервер", DEFAULT_QUERY, "мтс", "EP2-06605"];
-const tabs = [
-  ["products", "Товары"],
-  ["vendors", "Производители"],
-  ["categories", "Категории"],
-];
-const navigationLabels = {
-  vendor: "Перейти на страницу производителя",
-  category: "Перейти в категорию",
-  family: "Перейти к семейству",
-  collection: "Перейти к подборке",
-};
-const money = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 2, minimumFractionDigits: 0 });
-
-function formatPrice(item) {
-  if (item.price_minor == null) return "Цена по запросу";
-  return !item.currency || item.currency === "RUB" ? money.format(item.price_minor / 100)
-    : new Intl.NumberFormat("ru-RU", { style: "currency", currency: item.currency }).format(item.price_minor / 100);
+function readRoute() {
+  const params = new URLSearchParams(window.location.search);
+  const demo = params.get("demo") === "1";
+  const kind = params.get("kind");
+  const id = params.get("id");
+  const entity = entityKinds.includes(kind) && id ? { kind, id } : null;
+  const view = params.get("view");
+  return {
+    demo, entity, filters: filtersFromParams(params), origin: window.history.state?.origin,
+    view: entity ? "entity" : ["analytics", "cart"].includes(view) ? view : "catalog",
+    key: window.location.search,
+  };
 }
 
-function FacetSelect({ label, value, options, onChange }) {
-  const known = options.some(option => option.id === value);
-  const retained = value && !known;
-  return (
-    <label className="filter-field">
-      <span>{label}</span>
-      <select value={value} onChange={event => onChange(event.target.value)} disabled={!options.length && !retained}>
-        <option value="">Все</option>
-        {retained && <option value={value}>{value}</option>}
-        {options.map(option => <option key={option.id} value={option.id}>{option.label} ({option.count})</option>)}
-      </select>
-    </label>
-  );
-}
-
-function Filters({ filters, facets, update, reset, busy }) {
-  const [price, setPrice] = useState("");
-  const [advanced, setAdvanced] = useState({ platform: "", version: "", device_count: "", term_months: "" });
-  const [open, setOpen] = useState(false);
-  const active = Object.values(filters).some(Boolean) || filters.max_price_minor === 0;
-
-  function apply(event) {
-    event.preventDefault();
-    update({ ...Object.fromEntries(Object.entries(advanced).map(([key, value]) => [key, value ? (key === "device_count" || key === "term_months" ? Number(value) : value.trim()) : undefined])),
-      max_price_minor: price === "" ? undefined : Math.round(Number(price) * 100) });
-  }
-
-  function clear() {
-    setPrice("");
-    setAdvanced({ platform: "", version: "", device_count: "", term_months: "" });
-    reset();
-  }
-
-  return (
-    <aside className={`filters${open ? " filters-open" : ""}`} aria-labelledby="filters-title">
-      <div className="filter-heading">
-        <h2 id="filters-title">Фильтры</h2>
-        <button className="filter-toggle" type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls="filter-panel">{open ? "Свернуть" : "Развернуть"}</button>
-        {active && <button className="text-button filter-reset" type="button" onClick={clear} disabled={busy}>Сбросить</button>}
-      </div>
-      <form className="filter-form" id="filter-panel" onSubmit={apply}>
-        <FacetSelect label="Категория" value={filters.category_id ?? ""} options={facets.categories} onChange={value => update({ category_id: value || undefined })} />
-        <FacetSelect label="Производитель" value={filters.vendor_id ?? ""} options={facets.vendors} onChange={value => update({ vendor_id: value || undefined })} />
-        <label className="filter-field">
-          <span>Цена до, ₽</span>
-          <input type="number" min="0" max="1000000000" step="0.01" inputMode="decimal" placeholder="Без ограничения" value={price} onChange={event => setPrice(event.target.value)} />
-        </label>
-        <label className="checkbox-field">
-          <input type="checkbox" checked={filters.available_only ?? false} onChange={event => update({ available_only: event.target.checked || undefined })} />
-          Только в наличии
-        </label>
-        <details className="license-filters">
-          <summary>Условия лицензии</summary>
-          <div className="license-fields">
-            <label className="filter-field">Тип лицензии
-              <select value={filters.license_type ?? ""} onChange={event => update({ license_type: event.target.value || undefined })}>
-                <option value="">Любой</option><option value="new">Новая</option><option value="renewal">Продление</option><option value="upgrade">Обновление</option>
-              </select>
-            </label>
-            {[["platform", "Платформа"], ["version", "Версия"], ["device_count", "Устройства"], ["term_months", "Срок, мес."]].map(([key, label], index) => (
-              <label className="filter-field" key={key}>{label}
-                <input value={advanced[key]} type={index < 2 ? "text" : "number"} min={index < 2 ? undefined : 1}
-                  onChange={event => setAdvanced({ ...advanced, [key]: event.target.value })} />
-              </label>
-            ))}
-          </div>
-        </details>
-        <button className="button secondary apply-button" type="submit" disabled={busy}>Применить</button>
-      </form>
-    </aside>
-  );
-}
-
-function ProductCard({ item, anchor }) {
-  const url = safeLink(item.url);
-  const attributes = Object.entries(item.attributes ?? {}).slice(0, 2);
-  return (
-    <article className="product-card" data-role={item.role}>
-      <figure className="product-figure">
-        <div className="product-photo"><ProductImage item={item} /></div>
-        <figcaption><h3>{item.name}</h3></figcaption>
-      </figure>
-      <div className="product-top">
-        <span className="vendor-name">{item.vendor}</span>
-        {item.role === "complement" && <span className="compatibility-tag">Совместимо</span>}
-      </div>
-      {item.sku && <p className="sku">Артикул {item.sku}</p>}
-      {attributes.length > 0 && <dl className="product-attributes">
-        {attributes.map(([key, values]) => <div key={key}><dt>{key}</dt><dd>{values.join(", ")}</dd></div>)}
-      </dl>}
-      {anchor && <p className="compatible-with">Подходит к {anchor.name}</p>}
-      <div className="product-bottom">
-        <div><p className="price">{formatPrice(item)}</p><p className={`stock${item.available ? " available" : ""}`}>{item.available ? "В наличии" : "Нет в наличии"}</p></div>
-        {url && <a className="button secondary card-link" href={url} target="_blank" rel="noreferrer">К товару</a>}
-      </div>
-      {!!item.checks?.length && <details className="proof"><summary>Почему подходит</summary>
-        <ul>{item.checks.map((check, index) => {
-          const source = safeLink(check.source_url);
-          return <li key={index}>{check.candidate_value} подходит к {check.anchor_value}. {source && <a href={source} target="_blank" rel="noreferrer">Источник проверки</a>}</li>;
-        })}</ul>
-      </details>}
-      {!!item.differences?.length && <p className="compatible-with">{item.differences.join(". ")}</p>}
-    </article>
-  );
-}
-
-function ProductGrid({ items, anchors }) {
-  return <div className="product-grid" data-size={items.length}>{items.map(item => <ProductCard key={item.offer_id} item={item} anchor={anchors?.get(item.anchor_offer_id)} />)}</div>;
+function loadCart(key) {
+  try {
+    const items = JSON.parse(localStorage.getItem(key));
+    if (Array.isArray(items)) return items.filter(row => typeof row?.item?.offer_id === "string" && typeof row.item.name === "string");
+  } catch { /* The cart can stay in memory if storage is blocked. */ }
+  return [];
 }
 
 function App() {
-  const demo = new URLSearchParams(window.location.search).get("demo") === "1";
-  const initialRequest = demo ? { q: DEFAULT_QUERY, strategy: "standard", sort: "relevance", filters: {} } : null;
-  const [query, setQuery] = useState(initialRequest?.q ?? "");
-  const [request, setRequest] = useState(initialRequest);
-  const [result, setResult] = useState(() => initialRequest ? demoSearch(initialRequest) : null);
-  const [filters, setFilters] = useState({});
-  const [sort, setSort] = useState("relevance");
-  const [tab, setTab] = useState("products");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [activeInput, setActiveInput] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [activeSuggestion, setActiveSuggestion] = useState(-1);
-  const searchRequest = useRef(null);
-  const sessionId = useRef(null);
-  const suggestionsId = useId();
-
-  useEffect(() => () => searchRequest.current?.abort(), []);
+  const [route, setRoute] = useState(readRoute);
+  const cartKey = `softline-cart-v1${route.demo ? "-demo" : ""}`;
+  const [cart, setCart] = useState(() => loadCart(cartKey));
+  const routed = useRef(false);
+  const saved = new Set(cart.map(({ item }) => item.offer_id));
+  const catalogHref = route.demo ? "/?demo=1" : "/";
+  const analyticsHref = route.demo ? "/?demo=1&view=analytics" : "/?view=analytics";
+  const cartHref = route.demo ? "/?demo=1&view=cart" : "/?view=cart";
 
   useEffect(() => {
-    const value = query.trim();
-    if (!activeInput || value.length < 2 || value === request?.q) return;
-    const controller = new AbortController();
-    const timeout = window.setTimeout(async () => {
-      try {
-        const params = new URLSearchParams({ q: value });
-        if (filters.category_id) params.set("category_id", filters.category_id);
-        const items = demo ? demoSuggestions(value) : await fetchSearch(`/v1/suggest?${params}`, { signal: controller.signal });
-        if (!controller.signal.aborted) setSuggestions(items);
-      } catch {
-        if (!controller.signal.aborted) setSuggestions([]);
-      }
-    }, 150);
-    return () => { window.clearTimeout(timeout); controller.abort(); };
-  }, [activeInput, query, request?.q, demo, filters.category_id]);
+    function pop() { setRoute(readRoute()); }
+    window.addEventListener("popstate", pop);
+    return () => window.removeEventListener("popstate", pop);
+  }, []);
 
-  async function search(next) {
-    searchRequest.current?.abort();
-    setRequest(next);
-    setSuggestions([]);
-    setActiveSuggestion(-1);
-    setError("");
-    if (demo) {
-      setResult(demoSearch(next));
-      return;
-    }
-    const controller = new AbortController();
-    searchRequest.current = controller;
-    setPending(true);
-    setResult(null);
-    sessionId.current ??= globalThis.crypto?.randomUUID?.() ?? `search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    try {
-      const payload = await fetchSearch("/v1/search", {
-        method: "POST", signal: controller.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...next, session_id: sessionId.current }),
-      });
-      if (!controller.signal.aborted) setResult(payload);
-    } catch (failure) {
-      if (!controller.signal.aborted) setError(failure.message === "Failed to fetch" ? "Сервис поиска пока недоступен." : failure.message);
-    } finally {
-      if (!controller.signal.aborted) setPending(false);
-    }
+  useEffect(() => {
+    document.title = `${route.view === "analytics" ? "Аналитика поиска" : route.view === "cart" ? "Корзина" : "Каталог решений"} · CodesRaider`;
+    if (routed.current) document.querySelector("main:not([hidden])")?.focus({ preventScroll: true });
+    routed.current = true;
+  }, [route]);
+
+  useEffect(() => {
+    try { localStorage.setItem(cartKey, JSON.stringify(cart)); } catch { /* The current cart remains available. */ }
+  }, [cartKey, cart]);
+
+  function navigate(event, href, origin = null) {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    event.preventDefault();
+    if (`${window.location.pathname}${window.location.search}` === href) return;
+    window.history.pushState({ origin }, "", href);
+    setRoute(readRoute());
+    window.scrollTo(0, 0);
   }
 
-  function submit(q, suggestion) {
-    if (!q.trim()) return;
-    setQuery(q);
-    setTab("products");
-    setActiveInput(false);
-    search({ q: q.trim(), strategy: "standard", sort, filters, selected_target: suggestion && { kind: suggestion.kind, target_id: suggestion.target_id } });
+  function add(item, origin) {
+    if (saved.has(item.offer_id)) return;
+    const session = eventSession(origin);
+    const attributed = origin?.session === session;
+    setCart(current => [...current, { item, origin: attributed ? origin : null }]);
+    const events = [];
+    if (attributed && origin.familyKey) events.push({
+      type: "click", block: "details", search_id: origin.searchId, offer_id: item.offer_id, family_key: origin.familyKey,
+    });
+    events.push({ type: "add_to_cart", offer_id: item.offer_id, search_id: attributed ? origin.searchId : null });
+    trackEvents(route.demo, session, events);
   }
 
-  function setAndSearch(nextFilters) {
-    setFilters(nextFilters);
-    if (request) search({ ...request, filters: nextFilters });
-  }
-
-  function applyFacet(group, id) {
-    setTab("products");
-    setAndSearch({ ...filters, [group === "vendors" ? "vendor_id" : "category_id"]: id });
-  }
-
-  const showSuggestions = activeInput && suggestions.length > 0;
-  const facets = result?.facets ?? { vendors: [], categories: [] };
-  const direct = (result?.top4 ?? []).filter(item => item.role === "direct");
-  const anchors = new Map(direct.map(item => [item.offer_id, item]));
-  const complements = (result?.top4 ?? []).filter(item => item.role === "complement" && anchors.has(item.anchor_offer_id) && item.checks?.length && item.checks.every(check => check.result === "pass"));
-  const primary = result?.primary_target;
-  const primaryUrl = safeLink(primary?.url);
-  const facetItems = tab === "products" ? [] : facets[tab];
-  const title = request ? `Результаты по запросу «${request.q}»` : "Поиск по каталогу";
-
-  return (
-    <>
-      <header className="site-header">
-        <div className="container header-content">
-          <div className="identity"><span className="identity-mark" aria-hidden="true" /><span>Каталог решений</span></div>
-          {demo && <span className="demo-label">Демоданные</span>}
-        </div>
-      </header>
-      <main className="container page">
-        <form className="searchbar" role="search" onSubmit={event => {
-          event.preventDefault();
-          submit(query, showSuggestions ? suggestions[activeSuggestion] : undefined);
-        }}>
-          <div className="input-group" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setActiveInput(false); }}>
-            <label className="sr-only" htmlFor="search-input">Товар, артикул или задача</label>
-            <input id="search-input" required type="search" role="combobox" autoComplete="off" placeholder="Название, артикул или задача"
-              aria-autocomplete="list" aria-expanded={showSuggestions} aria-controls={showSuggestions ? suggestionsId : undefined}
-              aria-activedescendant={showSuggestions && activeSuggestion >= 0 ? `${suggestionsId}-${activeSuggestion}` : undefined}
-              value={query} onFocus={() => setActiveInput(true)} onChange={event => { setQuery(event.target.value); setActiveInput(true); setSuggestions([]); setActiveSuggestion(-1); }}
-              onKeyDown={event => {
-                if (event.key === "Escape") setActiveInput(false);
-                if (!showSuggestions || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
-                event.preventDefault();
-                setActiveSuggestion(index => index < 0 ? (event.key === "ArrowDown" ? 0 : suggestions.length - 1)
-                  : (index + (event.key === "ArrowDown" ? 1 : -1) + suggestions.length) % suggestions.length);
-              }} />
-            {showSuggestions && <ul role="listbox" id={suggestionsId} className="suggestions" aria-label="Подсказки">
-              {suggestions.map((suggestion, index) => <li key={`${suggestion.kind}-${suggestion.target_id}`} role="option" aria-selected={index === activeSuggestion} id={`${suggestionsId}-${index}`}
-                onMouseDown={event => event.preventDefault()} onClick={() => submit(query, suggestion)}>{suggestion.label}</li>)}
-            </ul>}
-          </div>
-          <button className="button primary search-button" type="submit">Найти</button>
-        </form>
-
-        <div className="catalog-workspace">
-          <div className="catalog-pane">
-            <div className="result-heading">
-              <h1>{title}</h1>
-              {result && <p className="summary-text">Подходящих семейств: {result.direct_count}{complements.length > 0 && ` · Дополнений: ${complements.length}`}</p>}
-            </div>
-
-            <nav className="result-tabs" aria-label="Виды результатов">
-              {tabs.map(([key, label]) => <button type="button" key={key} aria-pressed={tab === key} onClick={() => setTab(key)}>{label}
-                {result && <span>{key === "products" ? result.direct_count : facets[key].length}</span>}
-              </button>)}
-            </nav>
-
-            <div className="result-layout">
-              <Filters filters={filters} facets={facets} update={change => setAndSearch({ ...filters, ...change })} reset={() => setAndSearch({})} busy={pending} />
-              <section className="result-main" aria-busy={pending} aria-label="Результаты поиска">
-                {tab === "products" && result && <label className="sort-control">Сортировка
-                  <select value={sort} onChange={event => {
-                    const value = event.target.value;
-                    setSort(value);
-                    if (request) search({ ...request, sort: value });
-                  }}><option value="relevance">По релевантности</option><option value="price_asc">Сначала дешевле</option><option value="price_desc">Сначала дороже</option></select>
-                </label>}
-
-                {pending && <p className="result-state" role="status">Ищем товары…</p>}
-                {error && <div className="result-state" role="alert"><p>{error}</p><a href="?demo=1">Открыть демо с примерами</a></div>}
-                {!request && <div className="result-state"><p>Введите модель, артикул или опишите, что вам нужно.</p>
-                  <div className="example-links">{examples.map(example => <button type="button" className="button secondary" key={example} onClick={() => submit(example)}>{example}</button>)}</div>
-                </div>}
-
-                {result && tab === "products" && <>
-                  {primaryUrl && primary.kind !== "offer" && <a className="primary-target" href={primaryUrl} target="_blank" rel="noreferrer">{primary.label ?? navigationLabels[primary.kind]}</a>}
-                  {direct.length ? <ProductGrid items={direct} /> : <div className="result-state"><p>Подходящих товаров не найдено.</p><p>Уточните запрос или сбросьте фильтры.</p></div>}
-                  {!!complements.length && <section className="result-group" aria-labelledby="complements-title"><h2 id="complements-title">Совместимые дополнения</h2><ProductGrid items={complements} anchors={anchors} /></section>}
-                  {result.shortfall_reason === "NOT_ENOUGH_VERIFIED_FAMILIES" && <p className="shortfall">В каталоге меньше четырёх подтверждённых семейств для этого запроса.</p>}
-                  {!!result.more_results?.length && <section className="result-group"><h2>Другие подходящие товары</h2><ProductGrid items={result.more_results} /></section>}
-                  {!!result.alternatives?.length && <section className="result-group"><h2>Альтернативы</h2><ProductGrid items={result.alternatives} /></section>}
-                </>}
-
-                {result && tab !== "products" && (facetItems.length ? <ul className="facet-results">
-                  {facetItems.map(facet => <li key={facet.id}><button type="button" onClick={() => applyFacet(tab, facet.id)}><span>{facet.label}</span><span>{facet.count}</span></button></li>)}
-                </ul> : <p className="result-state">{tab === "vendors" ? "Производители не найдены." : "Категории не найдены."}</p>)}
-              </section>
-            </div>
-          </div>
-        </div>
-      </main>
-      <AssistantChat demo={demo} />
-    </>
-  );
+  return <>
+    <header className="site-header">
+      <div className="container header-content">
+        <a className="identity" href={catalogHref} onClick={event => navigate(event, catalogHref)}><span className="identity-mark" aria-hidden="true" />Каталог решений</a>
+        <nav className="site-nav" aria-label="Разделы приложения">
+          <a href={analyticsHref} onClick={event => navigate(event, analyticsHref)} aria-current={route.view === "analytics" ? "page" : undefined}>Аналитика</a>
+          <a href={cartHref} onClick={event => navigate(event, cartHref)} aria-current={route.view === "cart" ? "page" : undefined}>Корзина{cart.length > 0 && ` · ${cart.length}`}</a>
+        </nav>
+        {route.demo && <span className="demo-label">Демоданные</span>}
+      </div>
+    </header>
+    <CatalogPage demo={route.demo} active={route.view === "catalog"} navigate={navigate} />
+    {route.view === "entity" && <EntityPage key={route.key} target={route.entity} filters={route.filters}
+      demo={route.demo} origin={route.origin} navigate={navigate} add={add} saved={saved} />}
+    {route.view === "cart" && <CartPage items={cart} demo={route.demo} navigate={navigate}
+      remove={id => setCart(current => current.filter(({ item }) => item.offer_id !== id))} />}
+    {route.view === "analytics" && <AnalyticsPage demo={route.demo} />}
+    <div hidden={route.view === "analytics"}><AssistantChat demo={route.demo} navigate={navigate} /></div>
+  </>;
 }
 
 createRoot(document.getElementById("root")).render(<App />);

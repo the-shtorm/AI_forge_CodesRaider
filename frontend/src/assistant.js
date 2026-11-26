@@ -1,4 +1,5 @@
-import { demoSearch, fetchSearch } from "./catalog.js";
+import { api } from "./api.js";
+import { demoSearch } from "./catalog.js";
 
 const topics = {
   office: {
@@ -8,7 +9,7 @@ const topics = {
   },
   backup: {
     pattern: /резерв|восстанов|бэкап|backup/i,
-    query: "PS16NL",
+    query: "Кибер Бэкап",
     text: "Для резервного копирования и восстановления файлов посмотрите серверную лицензию Кибер Бэкап. Какую ОС и сколько устройств нужно защитить?",
   },
   meetings: {
@@ -69,14 +70,10 @@ export function demoAssistant(question, history) {
 }
 
 export async function requestAssistant(question, history, sessionId, signal) {
-  const result = await fetchSearch("/v1/search", {
-    method: "POST", signal,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ q: question, strategy: "llm", session_id: sessionId, assistant_history: history }),
-  });
-  const products = (result.top4 ?? []).filter(item => item.role === "direct").slice(0, 3);
+  const result = await api("/v1/search", { signal, body: { q: question, strategy: "llm", session_id: sessionId, assistant_history: history } });
+  const products = result.top4.flatMap((item, index) => item.role === "direct" ? [{ ...item, position: index + 1 }] : []).slice(0, 3);
   const text = result.assistant_message || (products.length
     ? "В каталоге нашлись подходящие программы. Если уточните ОС, бюджет или число устройств, смогу сузить подборку."
     : "Уточните, для какой задачи нужна программа, на какой ОС она должна работать и сколько устройств будет использоваться.");
-  return { text, products };
+  return { text, products, searchId: result.search_id, appliedFilters: result.applied_filters };
 }

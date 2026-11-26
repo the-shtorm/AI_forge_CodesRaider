@@ -213,6 +213,11 @@ class SearchResponse(DTO):
     alternatives: list[AlternativeCard] = Field(
         description="Отдельный блок функциональных замен ниже основной выдачи."
     )
+    related_offers: list[Offer] = Field(
+        default_factory=list,
+        max_length=4,
+        description="Отдельный ряд допродаж. Доступные подтверждённые позиции в порядке ранжирования.",
+    )
     shortfall_reason: Literal["NO_DIRECT_MATCH", "NOT_ENOUGH_VERIFIED_FAMILIES"] | None = Field(
         description="null при полной четвёрке. При нуле прямых совпадений — NO_DIRECT_MATCH, при недоборе проверенных семейств — NOT_ENOUGH_VERIFIED_FAMILIES."
     )
@@ -234,6 +239,11 @@ class Entity(DTO):
     url: Link
     offers: list[Offer] = Field(
         description="Для семейства — варианты лицензий после фильтрации, для offer — выбранный SKU."
+    )
+    related_offers: list[Offer] = Field(
+        default_factory=list,
+        max_length=4,
+        description="Отдельный ряд допродаж для открытого предложения.",
     )
     children: list[Target] = Field(
         description="Для вендора, категории и collection — переходы внутри выбранной области."

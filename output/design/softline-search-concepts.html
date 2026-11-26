@@ -1,0 +1,254 @@
+<style>
+  #catalog-concepts .catalog-screen {
+    color-scheme: light;
+    --canvas: light-dark(#faf9f7, #1b191a);
+    --surface: light-dark(#ffffff, #252123);
+    --ink: light-dark(#282126, #f9edf2);
+    --quiet: light-dark(#655b63, #c8b7c1);
+    --line: light-dark(#e7e0e2, #493b43);
+    --wine: light-dark(#8c2949, #f4a1bc);
+    --on-wine: light-dark(#ffffff, #351423);
+    --rose: light-dark(#f8edf1, #3c2532);
+    --tint: light-dark(#f0edeb, #342f34);
+    --positive: light-dark(#31624e, #a2d9bd);
+    box-sizing: border-box;
+    min-height: 540px;
+    color: var(--ink);
+    background: var(--canvas);
+    font: 14px/1.45 system-ui, 'Segoe UI', sans-serif;
+    border: 1px solid var(--line);
+  }
+  #catalog-concepts .catalog-screen *, #catalog-concepts .catalog-screen *::before { box-sizing: border-box; }
+  #catalog-concepts .masthead { background: var(--surface); border-bottom: 1px solid var(--line); }
+  #catalog-concepts .content-width { padding-inline: clamp(14px, 3.5vw, 34px); }
+  #catalog-concepts .masthead-inner { display: grid; gap: 13px; padding-block: 19px 21px; }
+  #catalog-concepts .wordmark { display: flex; align-items: center; gap: 9px; font-size: 17px; font-weight: 700; letter-spacing: -.035em; }
+  #catalog-concepts .wordmark i { width: 18px; height: 16px; border-left: 4px solid var(--wine); border-right: 4px solid var(--wine); transform: skewX(-23deg); }
+  #catalog-concepts .search-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+  #catalog-concepts .search-input { min-width: 0; height: 43px; padding: 0 13px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: var(--canvas); font: inherit; font-size: 15px; }
+  #catalog-concepts .search-input::placeholder { color: var(--quiet); }
+  #catalog-concepts .search-submit { min-height: 43px; padding: 0 18px; border: 0; border-radius: 8px; background: var(--wine); color: var(--on-wine); font: inherit; font-weight: 650; }
+  #catalog-concepts .catalog-screen :focus-visible { outline: 2px solid var(--wine); outline-offset: 3px; }
+  #catalog-concepts .search-content { display: grid; gap: 16px; padding-block: 23px 26px; }
+  #catalog-concepts .result-header { display: grid; gap: 4px; }
+  #catalog-concepts .catalog-screen h2, #catalog-concepts .catalog-screen h3, #catalog-concepts .catalog-screen p { margin: 0; }
+  #catalog-concepts .result-header h2 { font-size: clamp(21px, 3.4vw, 31px); line-height: 1.18; letter-spacing: -.04em; font-weight: 700; }
+  #catalog-concepts .result-meta, #catalog-concepts .product-status { color: var(--quiet); font-size: 12px; }
+  #catalog-concepts .result-note { color: var(--quiet); }
+  #catalog-concepts .destination { color: var(--wine); width: fit-content; font-weight: 650; }
+  #catalog-concepts .product-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+  #catalog-concepts .product { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 11px; }
+  #catalog-concepts .product-body { display: grid; align-content: start; gap: 5px; min-width: 0; }
+  #catalog-concepts .product-art { display: grid; place-items: center; background: var(--tint); color: var(--quiet); border-radius: 7px; }
+  #catalog-concepts .product-art svg { width: 25px; height: 25px; stroke-width: 1.5; }
+  #catalog-concepts .product-art[data-visual='package'] { background: var(--rose); color: var(--wine); }
+  #catalog-concepts .product-kind { color: var(--quiet); font-size: 11px; font-weight: 600; }
+  #catalog-concepts .product-name { font: 650 14px/1.28 system-ui, 'Segoe UI', sans-serif; overflow-wrap: anywhere; }
+  #catalog-concepts .product-name a { color: inherit; text-decoration-color: var(--line); text-underline-offset: 3px; }
+  #catalog-concepts .product-spec { color: var(--quiet); font-size: 12px; }
+  #catalog-concepts .product-price { font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
+  #catalog-concepts .product-cost { display: grid; gap: 2px; align-content: start; }
+  #catalog-concepts .product-status[data-available='true'] { color: var(--positive); }
+  #catalog-concepts .proof { font-size: 12px; color: var(--wine); }
+  #catalog-concepts .proof summary { width: fit-content; font-weight: 600; }
+  #catalog-concepts .proof p { padding-top: 5px; color: var(--quiet); }
+  #catalog-concepts .proof a { display: inline-block; padding-top: 4px; color: var(--wine); }
+  #catalog-concepts .grid-mode .product-list { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; }
+  #catalog-concepts .grid-mode .product { display: grid; grid-template-rows: auto minmax(74px, auto) auto auto; gap: 9px; padding: 10px; }
+  #catalog-concepts .grid-mode .product-art { height: 94px; }
+  #catalog-concepts .grid-mode .product-art svg { width: 34px; height: 34px; }
+  #catalog-concepts .grid-mode .product-price { font-size: 17px; }
+  #catalog-concepts .list-mode .product-list { gap: 0; border-top: 1px solid var(--line); }
+  #catalog-concepts .list-mode .product { border-width: 0 0 1px; border-radius: 0; background: transparent; }
+  #catalog-concepts .list-mode .product, #catalog-concepts .paired-mode .product { display: grid; grid-template-columns: 47px minmax(0, 1fr) auto; align-items: start; gap: 7px 12px; padding: 10px 8px; }
+  #catalog-concepts .list-mode .product-art, #catalog-concepts .paired-mode .product-art { height: 47px; }
+  #catalog-concepts .list-mode .product-cost, #catalog-concepts .paired-mode .product-cost { text-align: right; }
+  #catalog-concepts .list-mode .proof, #catalog-concepts .paired-mode .proof { grid-column: 2 / -1; }
+  #catalog-concepts .paired-mode .group-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  #catalog-concepts .paired-mode .group { display: grid; gap: 8px; align-content: start; min-width: 0; }
+  #catalog-concepts .paired-mode .group h3 { font-size: 14px; font-weight: 650; }
+  #catalog-concepts .paired-mode .group .product { padding-inline: 9px; }
+  #catalog-concepts .paired-mode .group .product-kind { display: none; }
+  #catalog-concepts .paired-mode .group[data-role='complement'] .product { border-left: 3px solid var(--wine); }
+  @media (max-width: 720px) {
+    #catalog-concepts .grid-mode .product-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    #catalog-concepts .paired-mode .group-layout { grid-template-columns: minmax(0, 1fr); }
+    #catalog-concepts .catalog-screen { min-height: 740px; }
+  }
+  @media (max-width: 380px) {
+    #catalog-concepts .search-submit { padding-inline: 12px; }
+    #catalog-concepts .list-mode .product, #catalog-concepts .paired-mode .product { grid-template-columns: 38px minmax(0, 1fr) auto; column-gap: 8px; }
+  }
+</style>
+
+<div id="catalog-concepts" class="viz-carousel" aria-label="Варианты поисковой выдачи" data-previous-label="Предыдущий вариант" data-next-label="Следующий вариант">
+  <section data-variant="Витрина" aria-label="Витрина" class="catalog-screen grid-mode"></section>
+  <section data-variant="Список" aria-label="Список" class="catalog-screen list-mode" hidden></section>
+  <section data-variant="Подборка" aria-label="Подборка" class="catalog-screen paired-mode" hidden></section>
+</div>
+
+<template id="catalog-concepts-shell">
+  <header class="masthead">
+    <div class="content-width masthead-inner">
+      <div class="wordmark"><i aria-hidden="true"></i>Поиск по каталогу</div>
+      <div class="search-form" role="search">
+        <input class="search-input" type="search" aria-label="Товар, артикул или задача" placeholder="Товар, артикул или задача" autocomplete="off">
+        <button class="search-submit cursor-interaction" type="button">Найти</button>
+      </div>
+    </div>
+  </header>
+  <div class="content-width search-content" aria-live="polite"></div>
+</template>
+
+<script>
+  (() => {
+    const root = document.getElementById('catalog-concepts');
+    const shell = document.getElementById('catalog-concepts-shell');
+    const productUrl = 'https://www.pantum.ru/products/laser-devices/monohromnyj-printer-p2500w/';
+    const cartridgeUrl = 'https://www.pantum.ru/options-and-supplies/toner-kartridzh-tl-c2318h/';
+    const fixtures = {
+      pantum: {
+        query: 'Pantum P2500W или BM1800W',
+        description: '2 товара и 2 совместимых дополнения · Демо-цены',
+        products: [
+          { title: 'Pantum P2500W', spec: 'Лазерный принтер · Wi-Fi', price: '12 990 ₽', type: 'Прямое совпадение', visual: 'printer', url: productUrl },
+          { title: 'Pantum BM1800W', spec: 'Лазерное МФУ · Wi-Fi', price: '19 990 ₽', type: 'Прямое совпадение', visual: 'printer' },
+          { title: 'Pantum PC-211P', spec: 'Картридж для P2500W', price: '3 690 ₽', type: 'Совместимое дополнение', visual: 'package', check: 'Производитель указывает PC-211P для модели P2500W.', source: productUrl },
+          { title: 'Pantum TL-C2318H', spec: 'Картридж для BM1800W', price: '4 490 ₽', type: 'Совместимое дополнение', visual: 'package', check: 'BM1800W есть в перечне поддерживаемых устройств TL-C2318H.', source: cartridgeUrl },
+        ],
+      },
+      servers: {
+        query: 'сервер',
+        description: '4 готовых сервера · Демо-цены',
+        products: [
+          { title: 'DEPO Storm 3470S2A', spec: 'Стоечный сервер', price: '289 900 ₽', url: 'https://store.softline.ru/depo/3470s2a-1-438239/' },
+          { title: 'DEPO Storm 3470E2A', spec: 'Стоечный сервер', price: '319 900 ₽', url: 'https://store.softline.ru/depo/3470e2a-6-467607/' },
+          { title: 'DEPO Storm 3470Z1A', spec: 'Стоечный сервер', price: '349 900 ₽', url: 'https://store.softline.ru/depo/3470z1a-4-467610/' },
+          { title: 'Supermicro SuperServer 621P-TRT', spec: 'Стоечный сервер', price: '429 900 ₽', url: 'https://store.softline.ru/supermicro/sys-621p-trt-482054/' },
+        ].map(product => ({ ...product, type: 'Оборудование', visual: 'server' })),
+      },
+      mts: {
+        query: 'мтс', description: '3 подходящих семейства',
+        destination: ['МТС Линк', 'https://store.softline.ru/webinar/'],
+        note: 'Для четвёртой позиции нет подтверждённого дополнения.',
+        products: ['Optimum 30', 'Стандарт', 'Про'].map(plan => ({ title: `МТС Линк ${plan}`, spec: 'Сервис видеовстреч', status: 'Демо-карточка', type: 'Прямое совпадение', visual: 'video' })),
+      },
+    };
+    const suggestions = Object.values(fixtures).map(item => item.query);
+
+    function element(tag, className, text) {
+      const item = document.createElement(tag);
+      if (className) item.className = className;
+      if (text) item.textContent = text;
+      return item;
+    }
+
+    function link(label, url, className) {
+      const anchor = element('a', className, label);
+      anchor.href = url;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      return anchor;
+    }
+
+    function productCard(product) {
+      const item = element('li', 'product');
+      const art = element('div', 'product-art');
+      const icon = element('i');
+      icon.dataset.lucide = product.visual;
+      icon.setAttribute('aria-hidden', 'true');
+      art.dataset.visual = product.visual;
+      art.append(icon);
+
+      const body = element('div', 'product-body');
+      const name = element('div', 'product-name');
+      name.append(product.url ? link(product.title, product.url) : document.createTextNode(product.title));
+      body.append(element('div', 'product-kind', product.type), name, element('p', 'product-spec', product.spec));
+      item.append(art, body);
+
+      const cost = element('div', 'product-cost');
+      if (product.price) cost.append(element('span', 'product-price', product.price));
+      const status = element('span', 'product-status', product.status ?? 'В наличии');
+      if (!product.status) status.dataset.available = 'true';
+      cost.append(status);
+      item.append(cost);
+
+      if (product.check) {
+        const proof = element('details', 'proof');
+        proof.append(element('summary', 'cursor-interaction', 'Почему подходит'), element('p', '', product.check), link('Источник проверки', product.source));
+        item.append(proof);
+      }
+      return item;
+    }
+
+    function productList(products) {
+      const list = element('ul', 'product-list');
+      list.append(...products.map(productCard));
+      return list;
+    }
+
+    function render(screen, query) {
+      const normalized = query.trim().toLocaleLowerCase('ru');
+      const fixture = normalized === 'сервер' || normalized === 'серверы' ? fixtures.servers
+        : normalized.startsWith('мтс') ? fixtures.mts
+        : normalized.includes('p2500w') && normalized.includes('bm1800w') ? fixtures.pantum
+        : null;
+      const content = screen.querySelector('.search-content');
+      const heading = element('div', 'result-header');
+      heading.append(element('h2', '', normalized ? `Результаты по запросу «${query.trim()}»` : 'Поиск товаров'));
+      content.replaceChildren(heading);
+      if (!fixture) {
+        content.append(element('p', 'result-note', normalized ? 'В демонстрационных данных совпадений нет.' : 'Введите название товара, артикул или задачу.'));
+        return;
+      }
+      heading.append(element('p', 'result-meta', fixture.description));
+      if (fixture.destination) content.append(link(...fixture.destination, 'destination'));
+      const complements = fixture.products.filter(product => product.check);
+      if (screen.classList.contains('paired-mode') && complements.length) {
+        const groupLayout = element('div', 'group-layout');
+        const groups = [
+          ['direct', 'По запросу', fixture.products.filter(product => !product.check)],
+          ['complement', 'Совместимые дополнения', complements],
+        ];
+        for (const [role, label, products] of groups) {
+          const group = element('div', 'group');
+          group.dataset.role = role;
+          group.append(element('h3', '', label), productList(products));
+          groupLayout.append(group);
+        }
+        content.append(groupLayout);
+      } else {
+        content.append(productList(fixture.products));
+      }
+      if (fixture.note) content.append(element('p', 'result-note', fixture.note));
+      if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+
+    for (const [index, screen] of [...root.querySelectorAll('.catalog-screen')].entries()) {
+      screen.append(shell.content.cloneNode(true));
+      const form = screen.querySelector('.search-form');
+      const search = form.querySelector('input');
+      const list = element('datalist');
+      list.id = `catalog-concepts-queries-${index}`;
+      for (const suggestion of suggestions) {
+        const option = element('option');
+        option.value = suggestion;
+        list.append(option);
+      }
+      form.append(list);
+      search.setAttribute('list', list.id);
+      search.value = fixtures.pantum.query;
+      const runSearch = () => render(screen, search.value);
+      form.querySelector('button').addEventListener('click', runSearch);
+      search.addEventListener('keydown', event => {
+        if (event.key === 'Enter') runSearch();
+      });
+      runSearch();
+      if (typeof Tweak !== 'undefined') {
+        const state = { accent: '#8c2949' };
+        const tweak = new Tweak({ container: screen, onChange: () => screen.style.setProperty('--wine', state.accent) });
+        tweak.addColorPicker(state, 'accent', { label: 'Акцент', reference: '--wine' });
+      }
+    }
+  })();
+</script>

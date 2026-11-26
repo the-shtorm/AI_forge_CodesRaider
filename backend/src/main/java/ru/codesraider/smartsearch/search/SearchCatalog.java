@@ -445,6 +445,25 @@ final class SearchCatalog implements AutoCloseable {
         return out;
     }
 
+    static List<Map<String, Object>> relatedOffers(List<Map<String, Object>> cards) {
+        return cards.stream()
+                .filter(card -> Boolean.TRUE.equals(card.get("available")) && card.get("price_minor") != null)
+                .map(
+                        card -> {
+                            Map<String, Object> offer = new LinkedHashMap<>(card);
+                            offer.keySet()
+                                    .removeAll(
+                                            Set.of(
+                                                    "role",
+                                                    "family_key",
+                                                    "reason_codes",
+                                                    "checks",
+                                                    "anchor_offer_id"));
+                            return offer;
+                        })
+                .toList();
+    }
+
     private List<Map<String, Object>> check(Row anchor, Row candidate, Row rule) {
         List<Map<String, Object>> checks = new ArrayList<>();
         JsonNode predicates = JSON.readTree(rule.str("predicates_json"));

@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import ProductImage from "./ProductImage";
 import { demoAssistant, requestAssistant } from "./assistant";
-import { safeLink } from "./catalog";
+import { entityHref, eventSession, newId } from "./api";
+import { cardEvent, trackEvents } from "./events";
 import { appendMessage, loadChats, pruneChats, saveChats } from "./chatHistory";
 
 const greeting = "Расскажите, для чего нужна программа. Помогу подобрать ПО под вашу задачу и бюджет.";
 const suggestions = ["Офис без подписки", "Как восстановить файлы после сбоя?"];
 const chatDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
 
-export default function AssistantChat({ demo }) {
+export default function AssistantChat({ demo, navigate }) {
   const storageKey = `softline-assistant-chats-v1${demo ? "-demo" : ""}`;
   const [chats, setChats] = useState(() => loadChats(storageKey));
   const [activeId, setActiveId] = useState(chats[0]?.id ?? null);
@@ -18,6 +19,7 @@ export default function AssistantChat({ demo }) {
   const request = useRef(null);
   const conversation = useRef(null);
   const input = useRef(null);
+  const lastImpression = useRef(null);
   const activeChat = chats.find(chat => chat.id === activeId);
   const messages = activeChat?.messages ?? [];
 
@@ -46,6 +48,16 @@ export default function AssistantChat({ demo }) {
     if (expanded && conversation.current) conversation.current.scrollTop = conversation.current.scrollHeight;
   }, [activeChat, expanded, pending]);
 
+  useEffect(() => {
+    const answer = activeChat?.messages.at(-1);
+    const search = answer?.search;
+    if (!expanded || !search || search.searchId === lastImpression.current || !answer.products?.length) return;
+    lastImpression.current = search.searchId;
+    if (eventSession(search) === search.session) {
+      trackEvents(demo, search.session, answer.products.map(item => cardEvent("impression", item, "top4", item.position, search.searchId)));
+    }
+  }, [activeChat, demo, expanded]);
+
   function chooseChat(id) {
     setActiveId(id || null);
     setDraft("");
@@ -55,7 +67,9 @@ export default function AssistantChat({ demo }) {
   async function send(text) {
     const question = text.trim();
     if (!question || request.current) return;
-    const id = activeChat?.id ?? globalThis.crypto?.randomUUID?.() ?? `assistant-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const id = activeChat?.id ?? newId();
+    const previous = messages.findLast(message => message.search)?.search;
+    const session = previous && eventSession(previous) === previous.session ? previous.session : newId();
     const history = messages.filter(message => !message.error).slice(-8).map(({ role, text: body }) => ({ role, text: body }));
     setActiveId(id);
     setExpanded(true);
@@ -66,10 +80,14 @@ export default function AssistantChat({ demo }) {
     setPending(true);
     input.current?.focus();
     try {
-      const answer = demo ? demoAssistant(question, history) : await requestAssistant(question, history, id, controller.signal);
+      const answer = demo ? demoAssistant(question, history) : await requestAssistant(question, history, session, controller.signal);
       if (!controller.signal.aborted) {
-        const products = answer.products.map(({ offer_id, name, url, image_url }) => ({ offer_id, name, url, image_url }));
-        setChats(current => appendMessage(current, id, { role: "assistant", text: answer.text, products }));
+        const products = answer.products.map(({ offer_id, name, image_url, family_key, role, position }) =>
+          ({ offer_id, name, image_url, family_key, role, position }));
+        const search = answer.searchId
+          ? { searchId: answer.searchId, session, filters: answer.appliedFilters, assistant: true, at: Date.now() }
+          : undefined;
+        setChats(current => appendMessage(current, id, { role: "assistant", text: answer.text, products, search }));
       }
     } catch {
       if (!controller.signal.aborted) setChats(current => appendMessage(current, id, { role: "assistant", error: true, text: "Помощник пока недоступен. Можно продолжить обычный поиск или открыть демо чата." }));
@@ -106,9 +124,15 @@ export default function AssistantChat({ demo }) {
               <p>{message.text}</p>
               {!!message.products?.length && <ul className="assistant-products">
                 {message.products.map(item => {
-                  const url = safeLink(item.url);
+                  const href = entityHref({ kind: "offer", id: item.offer_id }, message.search?.filters, demo);
                   return <li key={item.offer_id}><div className="assistant-product-image"><ProductImage item={item} /></div>
-                    {url ? <a href={url} target="_blank" rel="noreferrer">{item.name}</a> : <span>{item.name}</span>}</li>;
+                    <a href={href} onClick={event => {
+                      const search = message.search;
+                      const attributed = search && eventSession(search) === search.session;
+                      if (attributed) trackEvents(demo, search.session, [cardEvent("click", item, "top4", item.position, search.searchId)]);
+                      navigate(event, href, attributed ? { ...search, familyKey: item.family_key } : null);
+                      setExpanded(false);
+                    }}>{item.name}</a></li>;
                 })}
               </ul>}
               {message.error && <a className="assistant-error-link" href="?demo=1">Открыть демо</a>}
