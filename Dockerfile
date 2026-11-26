@@ -17,12 +17,13 @@ COPY backend/.mvn/ ./.mvn/
 COPY backend/pom.xml ./
 COPY contracts/sql/ /workspace/contracts/sql/
 COPY backend/src/ ./src/
+COPY contracts/sql/ ../contracts/sql/
 COPY --from=frontend-dist /workspace/frontend/dist/ ./src/main/resources/static/
 RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -ntp package
 
 FROM eclipse-temurin:21-jre-alpine AS app
 WORKDIR /app
-RUN mkdir -p /data/snapshots /data/events && chown -R 10001:10001 /data
+RUN mkdir -p /app/data/snapshots /app/data/events && chown -R 10001:10001 /app/data
 COPY --from=backend-build /workspace/backend/target/app.jar ./app.jar
 USER 10001:10001
 EXPOSE 8080

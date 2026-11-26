@@ -1,6 +1,6 @@
 /backend/target/
-/data/
 /backend/data/
+/data/
 /frontend/node_modules/
 /frontend/dist/
 /model/.venv/

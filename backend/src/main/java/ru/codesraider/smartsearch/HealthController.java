@@ -12,6 +12,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import ru.codesraider.smartsearch.search.SearchIndex;
 
+import ru.codesraider.smartsearch.catalog.CatalogAccess;
+
 @RestController
 class HealthController {
     private final RestClient modelClient;
@@ -20,6 +22,7 @@ class HealthController {
     HealthController(RestClient.Builder builder, SearchIndex index,
                      @Value("${MODEL_BASE_URL:http://localhost:8000}") String modelBaseUrl) {
         var factory = new SimpleClientHttpRequestFactory();
+        this.catalog = catalog;
         factory.setConnectTimeout(Duration.ofSeconds(1));
         factory.setReadTimeout(Duration.ofSeconds(1));
         modelClient = builder.baseUrl(modelBaseUrl).requestFactory(factory).build();

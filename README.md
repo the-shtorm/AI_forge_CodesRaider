@@ -50,15 +50,19 @@ docker compose exec -T model python demo_search.py "Как вернуть док
 docker compose --profile docs up -d --build api-docs
 ```
 
-[Приёмка поискового обработчика Spring](docs/SEARCH_API.md#приёмка-поискового-обработчика-spring) описывает запуск JUnit для подборки «Кибер Бэкап», дедупликации устройств Pantum, совместимости и очерёдности резерва.
+[Приёмка поискового обработчика Spring](docs/SEARCH_API.md#приёмка-поискового-обработчика-spring) описывает запуск JUnit для подборки «Кибер Бэкап», дедупликации устройств Pantum, совместимости и очерёдности резерва. Для прогона нужен запущенный Spring с импортированным снимком.
 
 ## Запуск через Docker
 
-Из корня репозитория запустите все три контейнера с помощью Docker Compose с поддержкой `depends_on.required` (v2.20+).
+Из корня репозитория соберите приложение и импортируйте выгрузку. Укажите абсолютный путь к файлу на хосте. Для импорта и запуска нужен Docker Compose с поддержкой `depends_on.required` (v2.20+).
 
 ```sh
+docker compose build app
+docker compose run --rm --no-deps -v "/absolute/path/Mindbox.yml.gz.xml:/catalog.xml:ro" app import
 docker compose --profile dev up --build -d
 ```
+
+PowerShell принимает путь к файлу в форме `D:/path/Mindbox.yml.gz.xml:/catalog.xml:ro`. После импорта нового снимка выполните `docker compose restart app`, чтобы Spring открыл его. Снимки и журнал хранятся в именованных томах `snapshots` и `events`. Поле `search_ready` в `GET /health` показывает, открыт ли снимок.
 
 | Сервис | Адрес | Назначение |
 |---|---|---|

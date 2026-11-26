@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const springUrl = process.env.SPRING_BASE_URL || "http://localhost:8080";
+const spring = process.env.SPRING_BASE_URL || "http://localhost:8080";
 
 export default defineConfig({
   plugins: [react()],
@@ -9,8 +9,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      "/health": springUrl,
-      "/v1": springUrl,
+      "/health": spring,
+      "/v1": spring,
     },
   },
 });
