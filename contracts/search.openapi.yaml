@@ -1,0 +1,2595 @@
+openapi: 3.1.0
+info:
+  title: Умный поиск Softline · публичный API
+  description: 'Контракт витрины, поиска и аналитики для реализации в Spring Boot. Разверните операцию, чтобы посмотреть
+    схему и именованные примеры в **Responses**. На этом справочном стенде **Try it out** проверяет входные данные.
+    Корректный вызов возвращает **501 CONTRACT_ONLY**, ошибка формата — **400 INVALID_REQUEST**. Живой публичный
+    сервис принимает запросы на порту 8080.
+
+
+    [Swagger энкодера](/model/docs) · [ReDoc поиска](/redoc)'
+  version: 1.0.0
+paths:
+  /v1/search:
+    post:
+      tags:
+      - Поиск
+      summary: Найти товары
+      description: 'Точный артикул и явные фильтры имеют приоритет над контекстом. Все ограничения лицензии должны
+
+        совпасть у одного SKU. В top4 каждое семейство занимает одно место. Дополнение содержит ID опорного
+
+        предложения и положительные проверки. Навигация и функциональные аналоги выводятся отдельно.
+
+
+        Отсутствие совпадений даёт 200 и пустой top4. При недоступности модели поиск переходит в lexical.
+
+        Сервер регистрирует отправленный поиск один раз и возвращает search_id.'
+      operationId: searchProducts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            examples:
+              sku:
+                summary: Точный артикул
+                value:
+                  q: EP2-06605
+                  session_id: demo-session-1
+              selected:
+                summary: Выбор подсказки по префиксу
+                value:
+                  q: EP2-0
+                  selected_target:
+                    kind: offer
+                    target_id: '473582'
+              context:
+                summary: Неоднозначный запрос с B2B-контекстом
+                value:
+                  q: сервер
+                  context:
+                    segment: b2b
+                    profile_id: hardware-buyer
+              license:
+                summary: Ограничения одной лицензии
+                value:
+                  q: КриптоПро CSP
+                  filters:
+                    version: '5.0'
+                    license_type: renewal
+                    device_count: 5
+                    term_months: 12
+                    available_only: true
+              task:
+                summary: Поиск по задаче
+                value:
+                  q: Как восстановить файлы после сбоя?
+                  limit: 10
+              pantum:
+                summary: Два устройства и два дополнения
+                value:
+                  q: Покажи устройства Pantum P2500W или BM1800W
+              backup:
+                summary: Поиск подборки по названию
+                value:
+                  q: кибер бэкап
+              selected_backup:
+                summary: Выбор подборки по префиксу
+                value:
+                  q: кибер бэ
+                  selected_target:
+                    kind: collection
+                    target_id: cyberprotect-1033
+              mts:
+                summary: Навигация к вендору
+                value:
+                  q: мтс
+              analog:
+                summary: Отсутствующая модель с известным назначением
+                value:
+                  q: Нужен монохромный лазерный принтер A4 Pantum P2507
+              absent:
+                summary: Пустая выдача
+                value:
+                  q: несуществующая-модель-000
+        required: true
+      responses:
+        '200':
+          description: Список в порядке показа, включая пустой результат.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+              examples:
+                sku:
+                  summary: Office, цена 36 584 ₽, один прямой SKU
+                  value:
+                    search_id: example-search-1
+                    index_version: 2026-11-25T14:12
+                    mode: lexical
+                    normalized_q: ep2-06605
+                    applied_filters: {}
+                    primary_target:
+                      kind: offer
+                      id: '473582'
+                      url: https://store.softline.ru/microsoft/ep2-06605-473582/
+                    direct_count: 1
+                    top4:
+                    - offer_id: '473582'
+                      name: Microsoft Office для дома и бизнеса 2024
+                      sku: EP2-06605
+                      vendor: Программы и лицензии Microsoft Corporation
+                      price_minor: 3658400
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/microsoft/ep2-06605-473582/
+                      family_key: family/391338
+                      role: direct
+                      reason_codes:
+                      - EXACT_SKU
+                    more_results: []
+                    alternatives: []
+                    shortfall_reason: NOT_ENOUGH_VERIFIED_FAMILIES
+                pantum:
+                  summary: Полная четвёрка с проверяемыми допродажами
+                  value:
+                    search_id: example-search-1
+                    index_version: 2026-11-25T14:12
+                    mode: lexical
+                    normalized_q: покажи устройства pantum p2500w или bm1800w
+                    applied_filters: {}
+                    primary_target: null
+                    direct_count: 2
+                    top4:
+                    - offer_id: '363882'
+                      name: Pantum P2500W
+                      sku: P2500W
+                      vendor: Pantum
+                      price_minor: 1036800
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/pantum/p2500w-363882/
+                      family_key: hardware/pantum/p2500w
+                      role: direct
+                      reason_codes:
+                      - MODEL_MATCH
+                    - offer_id: '521379'
+                      name: Pantum BM1800W
+                      sku: BM1800W
+                      vendor: Pantum
+                      price_minor: 1449100
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/pantum/bm1800w-521379/
+                      family_key: hardware/pantum/bm1800w
+                      role: direct
+                      reason_codes:
+                      - MODEL_MATCH
+                    - offer_id: '526683'
+                      name: Картридж Pantum PC-211P
+                      sku: PC-211P
+                      vendor: Pantum
+                      price_minor: 397500
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/pantum/pc-211p-526683/
+                      family_key: hardware/pantum/pc-211p
+                      role: complement
+                      reason_codes:
+                      - COMPATIBLE_CONSUMABLE
+                      anchor_offer_id: '363882'
+                      checks:
+                      - field: supported_device
+                        anchor_value: P2500W
+                        candidate_value: PC-211P
+                        source_url: https://www.pantum.ru/products/laser-devices/monohromnyj-printer-p2500w/
+                        result: pass
+                    - offer_id: '513625'
+                      name: Картридж Pantum TL-C2318H
+                      sku: TL-C2318H
+                      vendor: Pantum
+                      price_minor: 345600
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/pantum/tl-c2318h-513625/
+                      family_key: hardware/pantum/tl-c2318h
+                      role: complement
+                      reason_codes:
+                      - COMPATIBLE_CONSUMABLE
+                      anchor_offer_id: '521379'
+                      checks:
+                      - field: supported_device
+                        anchor_value: BM1800W
+                        candidate_value: TL-C2318H
+                        source_url: https://www.pantum.ru/options-and-supplies/toner-kartridzh-tl-c2318h/
+                        result: pass
+                    more_results: []
+                    alternatives: []
+                    shortfall_reason: null
+                backup:
+                  summary: Четыре семейства вендора в категории 1033
+                  value:
+                    search_id: example-search-1
+                    index_version: 2026-11-25T14:12
+                    mode: lexical
+                    normalized_q: кибер бэкап
+                    applied_filters:
+                      vendor_id: cyberprotect
+                      category_id: '1033'
+                    primary_target:
+                      kind: collection
+                      id: cyberprotect-1033
+                      url: https://store.softline.ru/cyberprotect/?filter%5Bcategory%5D%5B%5D=1033
+                    direct_count: 4
+                    top4:
+                    - offer_id: '418697'
+                      name: Киберпротект Кибер Бэкап Стандартная редакция (лицензия для коммерческих организаций),
+                        для физического сервера
+                      sku: PSCNL
+                      vendor: Киберпротект
+                      price_minor: 7925000
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/cyberprotect/ps16nl-418697/
+                      family_key: family/173614
+                      role: direct
+                      reason_codes:
+                      - COLLECTION_MATCH
+                    - offer_id: '418698'
+                      name: Киберпротект Кибер Бэкап Расширенная редакция (бессрочная лицензия для коммерческих
+                        организаций), для физического
+                      sku: PACNL
+                      vendor: Киберпротект
+                      price_minor: 18716900
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/cyberprotect/pa16nl-418698/
+                      family_key: family/173615
+                      role: direct
+                      reason_codes:
+                      - COLLECTION_MATCH
+                    - offer_id: '536456'
+                      name: Киберпротект Кибер Бэкап Облачный (лицензия), Лицензия для физического сервера
+                      sku: SPEAM1
+                      vendor: Киберпротект
+                      price_minor: 117200
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/cyberprotect/speam1-536456/
+                      family_key: family/442025
+                      role: direct
+                      reason_codes:
+                      - COLLECTION_MATCH
+                    - offer_id: '539763'
+                      name: Киберпротект Кибер Бэкап Старт (подписка на 1 год, включая услугу по технической поддержке),
+                        1 ПК
+                      sku: СBSS1PC0GB-1Y-SUB
+                      vendor: Киберпротект
+                      price_minor: 137000
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/cyberprotect/bss1pc0gb-1y-sub-539763/
+                      family_key: family/444870
+                      role: direct
+                      reason_codes:
+                      - COLLECTION_MATCH
+                    more_results: []
+                    alternatives: []
+                    shortfall_reason: null
+                mts:
+                  summary: Три прямых семейства и отдельный переход
+                  value:
+                    search_id: example-search-1
+                    index_version: 2026-11-25T14:12
+                    mode: lexical
+                    normalized_q: мтс
+                    applied_filters: {}
+                    primary_target:
+                      kind: vendor
+                      id: webinar
+                      url: https://store.softline.ru/webinar/
+                    direct_count: 3
+                    top4:
+                    - offer_id: '535950'
+                      name: МТС Линк Optimum 30
+                      sku: null
+                      vendor: МТС Линк
+                      price_minor: 662000
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/webinar/-535950/
+                      family_key: family/414326
+                      role: direct
+                      reason_codes:
+                      - VENDOR_MATCH
+                    - offer_id: '541589'
+                      name: МТС Линк Стандарт
+                      sku: null
+                      vendor: МТС Линк
+                      price_minor: 360000
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/webinar/-541589/
+                      family_key: family/447242
+                      role: direct
+                      reason_codes:
+                      - VENDOR_MATCH
+                    - offer_id: '541591'
+                      name: МТС Линк Про
+                      sku: null
+                      vendor: МТС Линк
+                      price_minor: 450000
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/webinar/-541591/
+                      family_key: family/447243
+                      role: direct
+                      reason_codes:
+                      - VENDOR_MATCH
+                    more_results: []
+                    alternatives: []
+                    shortfall_reason: NOT_ENOUGH_VERIFIED_FAMILIES
+                analog:
+                  summary: Искомая модель отсутствует в тестовом снимке, есть подходящий аналог
+                  value:
+                    search_id: example-search-1
+                    index_version: 2026-11-25T14:12
+                    mode: lexical
+                    normalized_q: нужен монохромный лазерный принтер a4 pantum p2507
+                    applied_filters: {}
+                    primary_target: null
+                    direct_count: 0
+                    top4: []
+                    more_results: []
+                    alternatives:
+                    - offer_id: '363882'
+                      name: Pantum P2500W
+                      sku: P2500W
+                      vendor: Pantum
+                      price_minor: 1036800
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/pantum/p2500w-363882/
+                      family_key: hardware/pantum/p2500w
+                      role: alternative
+                      reason_codes:
+                      - FUNCTIONAL_ALTERNATIVE
+                      differences:
+                      - 'Другая модель принтера: P2500W вместо P2507.'
+                    shortfall_reason: NO_DIRECT_MATCH
+                absent:
+                  summary: Совпадений нет
+                  value:
+                    search_id: example-search-1
+                    index_version: 2026-11-25T14:12
+                    mode: lexical
+                    normalized_q: несуществующая-модель-000
+                    applied_filters: {}
+                    primary_target: null
+                    direct_count: 0
+                    top4: []
+                    more_results: []
+                    alternatives: []
+                    shortfall_reason: NO_DIRECT_MATCH
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '400':
+          description: Некорректный запрос или цель подсказки
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Некорректный запрос или цель подсказки
+                    status: 400
+                    detail: Поле q должно содержать текст.
+                    code: INVALID_REQUEST
+                UNKNOWN_TARGET:
+                  value:
+                    type: about:blank
+                    title: Некорректный запрос или цель подсказки
+                    status: 400
+                    detail: Выбранная цель отсутствует в текущем снимке.
+                    code: UNKNOWN_TARGET
+        '503':
+          description: Каталог недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CATALOG_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Каталог недоступен
+                    status: 503
+                    detail: Активный снимок каталога ещё не опубликован.
+                    code: CATALOG_UNAVAILABLE
+  /v1/suggest:
+    get:
+      tags:
+      - Поиск
+      summary: Дополнить поисковую строку
+      description: 'Выбор мышью или Enter передаёт kind и target_id в selected_target обычного поиска.
+
+        Клиент сохраняет исходный q. Вызов подсказок не создаёт отправленный поиск.'
+      operationId: suggestTargets
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          pattern: \S
+          description: Непустой префикс, например EP2-0.
+          title: Q
+        description: Непустой префикс, например EP2-0.
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Ограничить подсказки текущим разделом.
+          title: Category Id
+        description: Ограничить подсказки текущим разделом.
+      responses:
+        '200':
+          description: До шести подсказок, пустой массив при отсутствии вариантов.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Suggestion'
+                maxItems: 6
+                title: Response Suggesttargets
+              examples:
+                offer:
+                  summary: Префикс EP2-0
+                  value:
+                  - kind: offer
+                    target_id: '473582'
+                    label: Microsoft Office 2024 · EP2-06605
+                backup:
+                  summary: Префикс кибер бэ
+                  value:
+                  - kind: collection
+                    target_id: cyberprotect-1033
+                    label: Кибер Бэкап
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '503':
+          description: Каталог недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CATALOG_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Каталог недоступен
+                    status: 503
+                    detail: Активный снимок каталога ещё не опубликован.
+                    code: CATALOG_UNAVAILABLE
+  /v1/entities/{kind}/{id}:
+    get:
+      tags:
+      - Каталог
+      summary: Открыть сущность каталога
+      description: 'Повторно применяет фильтры поиска, переданные отдельными query-параметрами.
+
+        Известная сущность с пустым списком удовлетворяющих фильтрам вариантов даёт 200.'
+      operationId: getEntity
+      parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          enum:
+          - offer
+          - family
+          - vendor
+          - category
+          - collection
+          type: string
+          title: Kind
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          pattern: \S
+          description: Строковый ID сущности выбранного kind.
+          title: Id
+        description: Строковый ID сущности выбранного kind.
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Обязательный раздел каталога.
+          title: Category Id
+        description: Обязательный раздел каталога.
+      - name: vendor_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Ключ вендора из каталога.
+          title: Vendor Id
+        description: Ключ вендора из каталога.
+      - name: platform
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Требуемая ОС или платформа.
+          title: Platform
+        description: Требуемая ОС или платформа.
+      - name: version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Версия продукта как строка, например 5.0.
+          title: Version
+        description: Версия продукта как строка, например 5.0.
+      - name: license_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - new
+            - renewal
+            - upgrade
+            type: string
+          - type: 'null'
+          description: Покупка новой лицензии, продление или обновление.
+          title: License Type
+        description: Покупка новой лицензии, продление или обновление.
+      - name: term_months
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Срок лицензии в месяцах.
+          title: Term Months
+        description: Срок лицензии в месяцах.
+      - name: device_count
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Сколько устройств должна покрывать лицензия.
+          title: Device Count
+        description: Сколько устройств должна покрывать лицензия.
+      - name: seat_count
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Сколько рабочих мест должна покрывать лицензия.
+          title: Seat Count
+        description: Сколько рабочих мест должна покрывать лицензия.
+      - name: available_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: При true исключить недоступные предложения, включая резерв.
+          default: false
+          title: Available Only
+        description: При true исключить недоступные предложения, включая резерв.
+      - name: max_price_minor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 0
+          - type: 'null'
+          description: Бюджет всей запрошенной конфигурации в минимальных единицах валюты.
+          title: Max Price Minor
+        description: Бюджет всей запрошенной конфигурации в минимальных единицах валюты.
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[A-Z]{3}$
+          description: Валюта бюджета по ISO 4217. Для рублей сумма дана в копейках.
+          default: RUB
+          title: Currency
+        description: Валюта бюджета по ISO 4217. Для рублей сумма дана в копейках.
+      responses:
+        '200':
+          description: Карточка, отфильтрованные SKU и дочерние переходы.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+              examples:
+                family:
+                  summary: Семейство Office
+                  value:
+                    kind: family
+                    id: '391338'
+                    name: Microsoft Office для дома и бизнеса 2024
+                    url: https://store.softline.ru/microsoft/microsoft-office-dlya-doma-i-biznesa-2024/
+                    offers:
+                    - offer_id: '473582'
+                      name: Microsoft Office для дома и бизнеса 2024
+                      sku: EP2-06605
+                      vendor: Программы и лицензии Microsoft Corporation
+                      price_minor: 3658400
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/microsoft/ep2-06605-473582/
+                    children: []
+                backup:
+                  summary: Подборка Кибер Бэкап
+                  value:
+                    kind: collection
+                    id: cyberprotect-1033
+                    url: https://store.softline.ru/cyberprotect/?filter%5Bcategory%5D%5B%5D=1033
+                    name: Кибер Бэкап
+                    offers: []
+                    children:
+                    - kind: offer
+                      id: '418697'
+                      url: https://store.softline.ru/cyberprotect/ps16nl-418697/
+                    - kind: offer
+                      id: '418698'
+                      url: https://store.softline.ru/cyberprotect/pa16nl-418698/
+                    - kind: offer
+                      id: '536456'
+                      url: https://store.softline.ru/cyberprotect/speam1-536456/
+                    - kind: offer
+                      id: '539763'
+                      url: https://store.softline.ru/cyberprotect/bss1pc0gb-1y-sub-539763/
+                reserve:
+                  summary: Резерв без цены
+                  value:
+                    kind: offer
+                    id: '504'
+                    name: Adobe InCopy CC
+                    url: https://store.softline.ru/adobe/65272676ba01a12-504/
+                    offers:
+                    - offer_id: '504'
+                      sku: null
+                      name: Adobe InCopy CC
+                      vendor: Adobe Systems
+                      url: https://store.softline.ru/adobe/65272676ba01a12-504/
+                      available: false
+                      price_minor: null
+                      currency: RUB
+                      offer_tier: reserve
+                    children: []
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '404':
+          description: Сущность отсутствует
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                ENTITY_NOT_FOUND:
+                  value:
+                    type: about:blank
+                    title: Сущность отсутствует
+                    status: 404
+                    detail: В снимке нет сущности с таким типом и ID.
+                    code: ENTITY_NOT_FOUND
+        '503':
+          description: Каталог недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CATALOG_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Каталог недоступен
+                    status: 503
+                    detail: Активный снимок каталога ещё не опубликован.
+                    code: CATALOG_UNAVAILABLE
+  /v1/events:
+    post:
+      tags:
+      - Аналитика
+      summary: Записать события сессии
+      description: 'Весь пакет проверяется и записывается в одной транзакции. При повторной доставке event_id
+
+        сохраняется первая запись. Сервер создаёт событие search самостоятельно. Для товарного клика,
+
+        корзины и позиции заказа передавайте фактический offer_id. У навигации передавайте тип и ID цели.
+
+
+        Каждая купленная позиция получает отдельный event_id. Сервер привязывает её к последнему предшествующему
+
+        клику по тому же offer_id в той же сессии. Заказ без такого клика сохраняется с search_id=null.'
+      operationId: recordEvents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              items:
+                anyOf:
+                - $ref: '#/components/schemas/Impression'
+                - $ref: '#/components/schemas/CardClick'
+                - $ref: '#/components/schemas/DetailClick'
+                - $ref: '#/components/schemas/NavigationClick'
+                - $ref: '#/components/schemas/Reformulation'
+                - $ref: '#/components/schemas/AddToCart'
+                - $ref: '#/components/schemas/OrderLine'
+              type: array
+              minItems: 1
+              title: Events
+            examples:
+              order:
+                summary: Клик и покупка того же SKU
+                value:
+                - type: click
+                  event_id: evt-click-1
+                  session_id: demo-session-1
+                  ts: '2026-11-26T10:05:00+03:00'
+                  search_id: example-search-1
+                  offer_id: '473582'
+                  family_key: family/391338
+                  role: direct
+                  block: top4
+                  position: 1
+                - type: order
+                  event_id: evt-order-line-1
+                  session_id: demo-session-1
+                  ts: '2026-11-26T10:12:00+03:00'
+                  offer_id: '473582'
+              navigation:
+                summary: Клик по вендору и переформулировка
+                value:
+                - type: click
+                  event_id: evt-nav-1
+                  session_id: demo-session-1
+                  ts: '2026-11-26T10:15:00+03:00'
+                  search_id: search-mts
+                  block: navigation
+                  target_kind: vendor
+                  target_id: webinar
+                - type: reformulation
+                  event_id: evt-edit-1
+                  session_id: demo-session-1
+                  ts: '2026-11-26T10:16:00+03:00'
+                  search_id: search-mts
+                  next_search_id: search-mts-standard
+        required: true
+      responses:
+        '204':
+          description: Пакет зафиксирован, тело ответа пустое.
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '503':
+          description: Журнал недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                EVENT_STORE_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Журнал недоступен
+                    status: 503
+                    detail: Запись временно недоступна.
+                    code: EVENT_STORE_UNAVAILABLE
+  /v1/analytics:
+    get:
+      tags:
+      - Аналитика
+      summary: Получить показатели поиска
+      description: 'Период [from, to) задаётся временем RFC 3339 с часовым поясом.
+
+        Нулевая выдача означает direct_count=0. Уход учитывается для завершённой неуспешной сессии после
+
+        30 минут бездействия. В конверсии сессия с атрибутированным заказом учитывается один раз.
+
+        При нулевом знаменателе value=null.'
+      operationId: getSearchAnalytics
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Включительная нижняя граница периода.
+          title: From
+        description: Включительная нижняя граница периода.
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+          description: Исключительная верхняя граница периода.
+          title: To
+        description: Исключительная верхняя граница периода.
+      - name: source
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - demo
+            - seed
+            type: string
+          - type: 'null'
+          description: Фильтр происхождения событий.
+          title: Source
+        description: Фильтр происхождения событий.
+      - name: index_version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Версия индекса, записанная вместе с поиском.
+          title: Index Version
+        description: Версия индекса, записанная вместе с поиском.
+      responses:
+        '200':
+          description: Агрегаты, числители, знаменатели и причины неудач.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+              examples:
+                seed:
+                  summary: Синтетический период
+                  value:
+                    period:
+                      from: '2026-11-26T00:00:00+03:00'
+                      to: '2026-11-27T00:00:00+03:00'
+                      source: seed
+                    zero_result_rate:
+                      numerator: 2
+                      denominator: 10
+                      value: 0.2
+                    abandonment_rate:
+                      numerator: 1
+                      denominator: 2
+                      value: 0.5
+                    conversion_rate:
+                      numerator: 1
+                      denominator: 5
+                      value: 0.2
+                    failures:
+                    - reason: missing_synonym
+                      count: 1
+                      query_examples:
+                      - мдаемон
+                      action: Проверить написание в каталоге и добавить подтверждённый синоним.
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '503':
+          description: Журнал недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                EVENT_STORE_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Журнал недоступен
+                    status: 503
+                    detail: Статистика временно недоступна.
+                    code: EVENT_STORE_UNAVAILABLE
+  /health:
+    get:
+      tags:
+      - Состояние
+      summary: Получить состояние Spring Boot
+      description: 'На рабочем Spring Boot этот маршрут уже доступен. На справочном стенде показывается его контракт.
+
+        Поля состояния индекса и семантики появятся при подключении этих компонентов.'
+      operationId: getSearchHealth
+      responses:
+        '200':
+          description: Доступность HTTP-приложения.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicHealth'
+              examples:
+                bootstrap:
+                  summary: Существующий ответ Spring Boot
+                  value:
+                    status: up
+                    model_service: unavailable
+                indexed:
+                  summary: После подключения каталога
+                  value:
+                    status: up
+                    model_service: up
+                    index_version: 2026-11-25T14:12
+                    search_ready: true
+                    semantic_ready: true
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+components:
+  schemas:
+    AddToCart:
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Event Id
+          description: Стабильный ключ идемпотентности. При повторной доставке сохранить тот же ID.
+        session_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Session Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+          description: RFC 3339 со смещением времени.
+        source:
+          type: string
+          enum:
+          - demo
+          - seed
+          title: Source
+          description: demo — действия на стенде, seed — подготовленные синтетические события.
+          default: demo
+        type:
+          type: string
+          const: add_to_cart
+          title: Type
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+        search_id:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Search Id
+      additionalProperties: false
+      type: object
+      required:
+      - event_id
+      - session_id
+      - ts
+      - type
+      - offer_id
+      title: AddToCart
+    AlternativeCard:
+      properties:
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+          description: ID предложения из XML. Именно этот ID передаётся в товарных событиях.
+        sku:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Sku
+          description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Name
+        vendor:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Vendor
+        url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Url
+          description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        available:
+          type: boolean
+          title: Available
+          description: Флаг наличия из снимка.
+        price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Price Minor
+          description: Цена выбранного предложения в минимальных единицах. Неизвестная или нулевая цена фида возвращается
+            как null.
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Currency
+        old_price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Old Price Minor
+          description: Предыдущая цена. Признак акции требует old_price_minor > price_minor и наличия.
+        offer_tier:
+          type: string
+          enum:
+          - primary
+          - reserve
+          title: Offer Tier
+          description: primary — доступен и имеет цену. reserve — подходящий товар второй очереди.
+        attributes:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+          title: Attributes
+          description: Подтверждённые свойства этого SKU. Повторяющиеся параметры сохраняются массивом.
+        family_key:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Family Key
+          description: Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}.
+        reason_codes:
+          items:
+            type: string
+            minLength: 1
+            pattern: \S
+          type: array
+          minItems: 1
+          title: Reason Codes
+          description: Основания показа, например EXACT_SKU, VENDOR_MATCH или COMPATIBLE_CONSUMABLE.
+        role:
+          type: string
+          const: alternative
+          title: Role
+        differences:
+          items:
+            type: string
+            minLength: 1
+            pattern: \S
+          type: array
+          minItems: 1
+          title: Differences
+          description: Существенные отличия от исходного запроса.
+      additionalProperties: false
+      type: object
+      required:
+      - offer_id
+      - sku
+      - name
+      - vendor
+      - url
+      - available
+      - price_minor
+      - currency
+      - offer_tier
+      - family_key
+      - reason_codes
+      - role
+      - differences
+      title: AlternativeCard
+    AnalyticsPeriod:
+      properties:
+        from:
+          type: string
+          format: date-time
+          title: From
+          description: Включительная нижняя граница периода.
+        to:
+          type: string
+          format: date-time
+          title: To
+          description: Исключительная верхняя граница периода.
+        source:
+          anyOf:
+          - type: string
+            enum:
+            - demo
+            - seed
+          - type: 'null'
+          title: Source
+          description: Фильтр происхождения событий.
+        index_version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Index Version
+          description: Версия индекса, записанная вместе с поиском.
+      additionalProperties: false
+      type: object
+      required:
+      - from
+      - to
+      title: AnalyticsPeriod
+    AnalyticsResponse:
+      properties:
+        period:
+          $ref: '#/components/schemas/AnalyticsPeriod'
+        zero_result_rate:
+          $ref: '#/components/schemas/Metric'
+        abandonment_rate:
+          $ref: '#/components/schemas/Metric'
+        conversion_rate:
+          $ref: '#/components/schemas/Metric'
+        failures:
+          items:
+            $ref: '#/components/schemas/FailureGroup'
+          type: array
+          title: Failures
+      additionalProperties: false
+      type: object
+      required:
+      - period
+      - zero_result_rate
+      - abandonment_rate
+      - conversion_rate
+      - failures
+      title: AnalyticsResponse
+    CardClick:
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Event Id
+          description: Стабильный ключ идемпотентности. При повторной доставке сохранить тот же ID.
+        session_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Session Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+          description: RFC 3339 со смещением времени.
+        source:
+          type: string
+          enum:
+          - demo
+          - seed
+          title: Source
+          description: demo — действия на стенде, seed — подготовленные синтетические события.
+          default: demo
+        search_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Search Id
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+        family_key:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Family Key
+        role:
+          type: string
+          enum:
+          - direct
+          - complement
+          - alternative
+          title: Role
+        block:
+          type: string
+          enum:
+          - top4
+          - more_results
+          - alternatives
+          title: Block
+        position:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Position
+          description: Позиция с 1 внутри указанного блока.
+        type:
+          type: string
+          const: click
+          title: Type
+      additionalProperties: false
+      type: object
+      required:
+      - event_id
+      - session_id
+      - ts
+      - search_id
+      - offer_id
+      - family_key
+      - role
+      - block
+      - position
+      - type
+      title: CardClick
+    CompatibilityCheck:
+      properties:
+        field:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Field
+          description: Проверенная характеристика или правило совместимости.
+        anchor_value:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Anchor Value
+          description: Значение основного SKU.
+        candidate_value:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Candidate Value
+          description: Значение дополнительного SKU.
+        source_url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Source Url
+          description: Источник правила или подтверждённой матрицы.
+        result:
+          type: string
+          const: pass
+          title: Result
+          description: В видимую допродажу попадают только прошедшие обязательные проверки.
+      additionalProperties: false
+      type: object
+      required:
+      - field
+      - anchor_value
+      - candidate_value
+      - source_url
+      - result
+      title: CompatibilityCheck
+    ComplementCard:
+      properties:
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+          description: ID предложения из XML. Именно этот ID передаётся в товарных событиях.
+        sku:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Sku
+          description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Name
+        vendor:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Vendor
+        url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Url
+          description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        available:
+          type: boolean
+          title: Available
+          description: Флаг наличия из снимка.
+        price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Price Minor
+          description: Цена выбранного предложения в минимальных единицах. Неизвестная или нулевая цена фида возвращается
+            как null.
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Currency
+        old_price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Old Price Minor
+          description: Предыдущая цена. Признак акции требует old_price_minor > price_minor и наличия.
+        offer_tier:
+          type: string
+          enum:
+          - primary
+          - reserve
+          title: Offer Tier
+          description: primary — доступен и имеет цену. reserve — подходящий товар второй очереди.
+        attributes:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+          title: Attributes
+          description: Подтверждённые свойства этого SKU. Повторяющиеся параметры сохраняются массивом.
+        family_key:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Family Key
+          description: Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}.
+        reason_codes:
+          items:
+            type: string
+            minLength: 1
+            pattern: \S
+          type: array
+          minItems: 1
+          title: Reason Codes
+          description: Основания показа, например EXACT_SKU, VENDOR_MATCH или COMPATIBLE_CONSUMABLE.
+        role:
+          type: string
+          const: complement
+          title: Role
+        anchor_offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Anchor Offer Id
+          description: offer_id прямой карточки из этой выдачи.
+        checks:
+          items:
+            $ref: '#/components/schemas/CompatibilityCheck'
+          type: array
+          minItems: 1
+          title: Checks
+      additionalProperties: false
+      type: object
+      required:
+      - offer_id
+      - sku
+      - name
+      - vendor
+      - url
+      - available
+      - price_minor
+      - currency
+      - offer_tier
+      - family_key
+      - reason_codes
+      - role
+      - anchor_offer_id
+      - checks
+      title: ComplementCard
+    Context:
+      properties:
+        category_id:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Category Id
+          description: Текущий раздел витрины. Помогает разрешать неоднозначность.
+        segment:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Segment
+          description: Сегмент покупателя, например b2b.
+        profile_id:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Profile Id
+          description: ID демонстрационного профиля. Историю сессии сервер находит по session_id.
+      additionalProperties: false
+      type: object
+      title: Context
+    DetailClick:
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Event Id
+          description: Стабильный ключ идемпотентности. При повторной доставке сохранить тот же ID.
+        session_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Session Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+          description: RFC 3339 со смещением времени.
+        source:
+          type: string
+          enum:
+          - demo
+          - seed
+          title: Source
+          description: demo — действия на стенде, seed — подготовленные синтетические события.
+          default: demo
+        type:
+          type: string
+          const: click
+          title: Type
+        block:
+          type: string
+          const: details
+          title: Block
+        search_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Search Id
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+          description: Фактически выбранный вариант из карточки семейства.
+        family_key:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Family Key
+      additionalProperties: false
+      type: object
+      required:
+      - event_id
+      - session_id
+      - ts
+      - type
+      - block
+      - search_id
+      - offer_id
+      - family_key
+      title: DetailClick
+    DirectCard:
+      properties:
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+          description: ID предложения из XML. Именно этот ID передаётся в товарных событиях.
+        sku:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Sku
+          description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Name
+        vendor:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Vendor
+        url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Url
+          description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        available:
+          type: boolean
+          title: Available
+          description: Флаг наличия из снимка.
+        price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Price Minor
+          description: Цена выбранного предложения в минимальных единицах. Неизвестная или нулевая цена фида возвращается
+            как null.
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Currency
+        old_price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Old Price Minor
+          description: Предыдущая цена. Признак акции требует old_price_minor > price_minor и наличия.
+        offer_tier:
+          type: string
+          enum:
+          - primary
+          - reserve
+          title: Offer Tier
+          description: primary — доступен и имеет цену. reserve — подходящий товар второй очереди.
+        attributes:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+          title: Attributes
+          description: Подтверждённые свойства этого SKU. Повторяющиеся параметры сохраняются массивом.
+        family_key:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Family Key
+          description: Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}.
+        reason_codes:
+          items:
+            type: string
+            minLength: 1
+            pattern: \S
+          type: array
+          minItems: 1
+          title: Reason Codes
+          description: Основания показа, например EXACT_SKU, VENDOR_MATCH или COMPATIBLE_CONSUMABLE.
+        role:
+          type: string
+          const: direct
+          title: Role
+      additionalProperties: false
+      type: object
+      required:
+      - offer_id
+      - sku
+      - name
+      - vendor
+      - url
+      - available
+      - price_minor
+      - currency
+      - offer_tier
+      - family_key
+      - reason_codes
+      - role
+      title: DirectCard
+    Entity:
+      properties:
+        kind:
+          type: string
+          enum:
+          - offer
+          - family
+          - vendor
+          - category
+          - collection
+          title: Kind
+        id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Id
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Name
+        url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Url
+          description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        offers:
+          items:
+            $ref: '#/components/schemas/Offer'
+          type: array
+          title: Offers
+          description: Для семейства — варианты лицензий после фильтрации, для offer — выбранный SKU.
+        children:
+          items:
+            $ref: '#/components/schemas/Target'
+          type: array
+          title: Children
+          description: Для вендора, категории и collection — переходы внутри выбранной области.
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      - name
+      - url
+      - offers
+      - children
+      title: Entity
+    FailureGroup:
+      properties:
+        reason:
+          type: string
+          enum:
+          - missing_synonym
+          - ranking
+          - catalog_gap
+          - unavailable
+          - filter_conflict
+          - unknown
+          title: Reason
+        count:
+          type: integer
+          minimum: 0.0
+          title: Count
+        query_examples:
+          items:
+            type: string
+          type: array
+          title: Query Examples
+        action:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Action
+          description: Предлагаемая проверка или действие менеджера.
+      additionalProperties: false
+      type: object
+      required:
+      - reason
+      - count
+      - query_examples
+      - action
+      title: FailureGroup
+    Filters:
+      properties:
+        category_id:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Category Id
+          description: Обязательный раздел каталога.
+        vendor_id:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Vendor Id
+          description: Ключ вендора из каталога.
+        platform:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Platform
+          description: Требуемая ОС или платформа.
+        version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Version
+          description: Версия продукта как строка, например 5.0.
+        license_type:
+          anyOf:
+          - type: string
+            enum:
+            - new
+            - renewal
+            - upgrade
+          - type: 'null'
+          title: License Type
+          description: Покупка новой лицензии, продление или обновление.
+        term_months:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Term Months
+          description: Срок лицензии в месяцах.
+        device_count:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Device Count
+          description: Сколько устройств должна покрывать лицензия.
+        seat_count:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Seat Count
+          description: Сколько рабочих мест должна покрывать лицензия.
+        available_only:
+          type: boolean
+          title: Available Only
+          description: При true исключить недоступные предложения, включая резерв.
+          default: false
+        max_price_minor:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Max Price Minor
+          description: Бюджет всей запрошенной конфигурации в минимальных единицах валюты.
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Currency
+          description: Валюта бюджета по ISO 4217. Для рублей сумма дана в копейках.
+          default: RUB
+      additionalProperties: false
+      type: object
+      title: Filters
+      description: Явные ограничения применяются совместно к одному предложению.
+    Impression:
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Event Id
+          description: Стабильный ключ идемпотентности. При повторной доставке сохранить тот же ID.
+        session_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Session Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+          description: RFC 3339 со смещением времени.
+        source:
+          type: string
+          enum:
+          - demo
+          - seed
+          title: Source
+          description: demo — действия на стенде, seed — подготовленные синтетические события.
+          default: demo
+        search_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Search Id
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+        family_key:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Family Key
+        role:
+          type: string
+          enum:
+          - direct
+          - complement
+          - alternative
+          title: Role
+        block:
+          type: string
+          enum:
+          - top4
+          - more_results
+          - alternatives
+          title: Block
+        position:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Position
+          description: Позиция с 1 внутри указанного блока.
+        type:
+          type: string
+          const: impression
+          title: Type
+      additionalProperties: false
+      type: object
+      required:
+      - event_id
+      - session_id
+      - ts
+      - search_id
+      - offer_id
+      - family_key
+      - role
+      - block
+      - position
+      - type
+      title: Impression
+    Metric:
+      properties:
+        numerator:
+          type: integer
+          minimum: 0.0
+          title: Numerator
+        denominator:
+          type: integer
+          minimum: 0.0
+          title: Denominator
+        value:
+          anyOf:
+          - type: number
+            maximum: 1.0
+            minimum: 0.0
+          - type: 'null'
+          title: Value
+          description: Доля от 0 до 1. null при нулевом знаменателе.
+      additionalProperties: false
+      type: object
+      required:
+      - numerator
+      - denominator
+      - value
+      title: Metric
+    NavigationClick:
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Event Id
+          description: Стабильный ключ идемпотентности. При повторной доставке сохранить тот же ID.
+        session_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Session Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+          description: RFC 3339 со смещением времени.
+        source:
+          type: string
+          enum:
+          - demo
+          - seed
+          title: Source
+          description: demo — действия на стенде, seed — подготовленные синтетические события.
+          default: demo
+        type:
+          type: string
+          const: click
+          title: Type
+        block:
+          type: string
+          const: navigation
+          title: Block
+        search_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Search Id
+        target_kind:
+          type: string
+          enum:
+          - offer
+          - family
+          - vendor
+          - category
+          - collection
+          title: Target Kind
+        target_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Target Id
+      additionalProperties: false
+      type: object
+      required:
+      - event_id
+      - session_id
+      - ts
+      - type
+      - block
+      - search_id
+      - target_kind
+      - target_id
+      title: NavigationClick
+    Offer:
+      properties:
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+          description: ID предложения из XML. Именно этот ID передаётся в товарных событиях.
+        sku:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Sku
+          description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Name
+        vendor:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Vendor
+        url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Url
+          description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        available:
+          type: boolean
+          title: Available
+          description: Флаг наличия из снимка.
+        price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Price Minor
+          description: Цена выбранного предложения в минимальных единицах. Неизвестная или нулевая цена фида возвращается
+            как null.
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Currency
+        old_price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Old Price Minor
+          description: Предыдущая цена. Признак акции требует old_price_minor > price_minor и наличия.
+        offer_tier:
+          type: string
+          enum:
+          - primary
+          - reserve
+          title: Offer Tier
+          description: primary — доступен и имеет цену. reserve — подходящий товар второй очереди.
+        attributes:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+          title: Attributes
+          description: Подтверждённые свойства этого SKU. Повторяющиеся параметры сохраняются массивом.
+      additionalProperties: false
+      type: object
+      required:
+      - offer_id
+      - sku
+      - name
+      - vendor
+      - url
+      - available
+      - price_minor
+      - currency
+      - offer_tier
+      title: Offer
+    OrderLine:
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Event Id
+          description: Стабильный ключ идемпотентности. При повторной доставке сохранить тот же ID.
+        session_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Session Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+          description: RFC 3339 со смещением времени.
+        source:
+          type: string
+          enum:
+          - demo
+          - seed
+          title: Source
+          description: demo — действия на стенде, seed — подготовленные синтетические события.
+          default: demo
+        type:
+          type: string
+          const: order
+          title: Type
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+          description: Одна купленная позиция на событие. search_id вычисляет сервер.
+      additionalProperties: false
+      type: object
+      required:
+      - event_id
+      - session_id
+      - ts
+      - type
+      - offer_id
+      title: OrderLine
+    PublicHealth:
+      properties:
+        status:
+          type: string
+          const: up
+          title: Status
+        model_service:
+          type: string
+          enum:
+          - up
+          - unavailable
+          title: Model Service
+        index_version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Index Version
+          description: Версия активного каталога после подключения индекса.
+        search_ready:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Search Ready
+          description: Готовность поиска после подключения каталога.
+        semantic_ready:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Semantic Ready
+          description: Прогрев совместимого энкодера после подключения модели.
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      - model_service
+      title: PublicHealth
+    Reformulation:
+      properties:
+        event_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Event Id
+          description: Стабильный ключ идемпотентности. При повторной доставке сохранить тот же ID.
+        session_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Session Id
+        ts:
+          type: string
+          format: date-time
+          title: Ts
+          description: RFC 3339 со смещением времени.
+        source:
+          type: string
+          enum:
+          - demo
+          - seed
+          title: Source
+          description: demo — действия на стенде, seed — подготовленные синтетические события.
+          default: demo
+        type:
+          type: string
+          const: reformulation
+          title: Type
+        search_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Search Id
+          description: Предыдущий отправленный поиск.
+        next_search_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Next Search Id
+          description: Поиск после переформулировки.
+      additionalProperties: false
+      type: object
+      required:
+      - event_id
+      - session_id
+      - ts
+      - type
+      - search_id
+      - next_search_id
+      title: Reformulation
+    SearchRequest:
+      properties:
+        q:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Q
+          description: Исходная строка покупателя, в том числе префикс при выборе подсказки.
+        session_id:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Session Id
+          description: Анонимный ID сессии для контекста и последующей атрибуции.
+        context:
+          anyOf:
+          - $ref: '#/components/schemas/Context'
+          - type: 'null'
+        filters:
+          $ref: '#/components/schemas/Filters'
+        selected_target:
+          anyOf:
+          - $ref: '#/components/schemas/SelectedTarget'
+          - type: 'null'
+          description: Выбранная подсказка. Сервер проверяет её ID и тип в текущем снимке.
+        limit:
+          type: integer
+          maximum: 50.0
+          minimum: 4.0
+          title: Limit
+          description: Размер основного списка вместе с more_results. Первые четыре места всегда находятся в top4.
+          default: 4
+      additionalProperties: false
+      type: object
+      required:
+      - q
+      title: SearchRequest
+    SearchResponse:
+      properties:
+        search_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Search Id
+          description: ID этого поиска, включая поиск с пустым результатом.
+        index_version:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Index Version
+          description: Версия снимка каталога и поискового индекса.
+        mode:
+          type: string
+          enum:
+          - lexical
+          - hybrid
+          title: Mode
+          description: Фактически использованный режим. При отказе энкодера применяется lexical.
+        normalized_q:
+          type: string
+          title: Normalized Q
+        applied_filters:
+          $ref: '#/components/schemas/Filters'
+          description: Ограничения, фактически применённые к SKU после разбора запроса.
+        primary_target:
+          anyOf:
+          - $ref: '#/components/schemas/Target'
+          - type: 'null'
+          description: Переход к SKU, семейству, вендору, категории или подборке. Учитывается отдельно от товарных
+            мест.
+        direct_count:
+          type: integer
+          minimum: 0.0
+          title: Direct Count
+          description: Число различных прямых семейств после фильтров и выбора очереди цены, до обрезки по limit.
+        top4:
+          items:
+            oneOf:
+            - $ref: '#/components/schemas/DirectCard'
+            - $ref: '#/components/schemas/ComplementCard'
+            discriminator:
+              propertyName: role
+              mapping:
+                complement: '#/components/schemas/ComplementCard'
+                direct: '#/components/schemas/DirectCard'
+          type: array
+          maxItems: 4
+          title: Top4
+          description: Порядок отображения. Сначала прямые семейства, затем подтверждённые дополнения. Все family_key
+            различны.
+        more_results:
+          items:
+            $ref: '#/components/schemas/DirectCard'
+          type: array
+          title: More Results
+          description: Дополнительные прямые семейства сверх первой четвёрки, до общего limit.
+        alternatives:
+          items:
+            $ref: '#/components/schemas/AlternativeCard'
+          type: array
+          title: Alternatives
+          description: Отдельный блок функциональных замен ниже основной выдачи.
+        shortfall_reason:
+          anyOf:
+          - type: string
+            enum:
+            - NO_DIRECT_MATCH
+            - NOT_ENOUGH_VERIFIED_FAMILIES
+          - type: 'null'
+          title: Shortfall Reason
+          description: null при полной четвёрке. При нуле прямых совпадений — NO_DIRECT_MATCH, при недоборе проверенных
+            семейств — NOT_ENOUGH_VERIFIED_FAMILIES.
+      additionalProperties: false
+      type: object
+      required:
+      - search_id
+      - index_version
+      - mode
+      - normalized_q
+      - applied_filters
+      - primary_target
+      - direct_count
+      - top4
+      - more_results
+      - alternatives
+      - shortfall_reason
+      title: SearchResponse
+    SelectedTarget:
+      properties:
+        kind:
+          type: string
+          enum:
+          - offer
+          - family
+          - vendor
+          - category
+          - collection
+          title: Kind
+        target_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Target Id
+          description: Строковый ID из ответа /v1/suggest, в пространстве выбранного kind.
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - target_id
+      title: SelectedTarget
+    Suggestion:
+      properties:
+        kind:
+          type: string
+          enum:
+          - offer
+          - family
+          - vendor
+          - category
+          - collection
+          title: Kind
+        target_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Target Id
+          description: Строковый ID из ответа /v1/suggest, в пространстве выбранного kind.
+        label:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Label
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - target_id
+      - label
+      title: Suggestion
+    Target:
+      properties:
+        kind:
+          type: string
+          enum:
+          - offer
+          - family
+          - vendor
+          - category
+          - collection
+          title: Kind
+        id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Id
+          description: ID сущности в её пространстве kind.
+        url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Url
+          description: Абсолютный HTTP(S) URL или путь от корня витрины.
+      additionalProperties: false
+      type: object
+      required:
+      - kind
+      - id
+      - url
+      title: Target
+    Problem:
+      additionalProperties: false
+      description: Ошибка в формате Problem Details. Клиент разбирает стабильный code.
+      properties:
+        type:
+          default: about:blank
+          title: Type
+          type: string
+        title:
+          title: Title
+          type: string
+        status:
+          title: Status
+          type: integer
+        detail:
+          title: Detail
+          type: string
+        code:
+          title: Code
+          type: string
+      required:
+      - title
+      - status
+      - detail
+      - code
+      title: Problem
+      type: object
+tags:
+- name: Поиск
+  description: Отбор семейств, ранжирование и подсказки.
+- name: Каталог
+  description: Навигация и варианты конкретного товара.
+- name: Аналитика
+  description: Доставка событий и агрегаты по сессиям.
+- name: Состояние
+  description: Доступность публичного сервиса и его зависимостей.

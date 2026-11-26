@@ -2,3 +2,8 @@
 !pyproject.toml
 !uv.lock
 !app.py
+!contract_http.py
+!search_contract/
+!search_contract/**
+**/__pycache__/
+**/*.pyc
