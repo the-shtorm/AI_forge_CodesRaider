@@ -1,0 +1,701 @@
+openapi: 3.1.0
+info:
+  title: Умный поиск Softline · энкодер
+  description: Внутренний API для Spring Boot. GET /health сообщает о доступности HTTP-процесса. В каркасе энкодер
+    ещё не загружен. Для /ready и корректного вызова /internal/v1/embeddings предусмотрен ответ 503. Примеры со
+    статусом 200 описывают контракт готовой модели.
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      tags:
+      - Состояние
+      summary: Проверить HTTP-процесс
+      description: Используется Docker Compose и Spring Boot для проверки связи с FastAPI.
+      operationId: getEncoderHealth
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelHealth'
+  /ready:
+    get:
+      tags:
+      - Состояние
+      summary: Узнать профиль прогретого энкодера
+      description: 'При импорте Java сохраняет profile_id в манифест снимка. Профиль фиксирует модель,
+
+        SHA весов, токенизацию, префиксы, pooling, размерность и нормализацию.'
+      operationId: getEncoderReadiness
+      responses:
+        '200':
+          description: Энкодер прогрет.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ready'
+              example:
+                ready: true
+                profile_id: example-e5-profile
+                dimension: 384
+        '503':
+          description: Профиль ещё недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                MODEL_NOT_READY:
+                  value:
+                    type: about:blank
+                    title: Профиль ещё недоступен
+                    status: 503
+                    detail: Модель ещё не прогрета.
+                    code: MODEL_NOT_READY
+  /internal/v1/embeddings:
+    post:
+      tags:
+      - Эмбеддинги
+      summary: Закодировать запрос или пакет карточек
+      description: 'Передавайте текст без служебного префикса. Энкодер добавляет query: или passage: один раз,
+
+        ограничивает вход 512 токенами и выдаёт 384 конечных числа для каждого текста.
+
+        При отказе энкодера публичный поиск использует лексический режим.'
+      operationId: encodeTexts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/QueryBatch'
+              - $ref: '#/components/schemas/PassageBatch'
+              title: Body
+              discriminator:
+                propertyName: input_type
+                mapping:
+                  query: '#/components/schemas/QueryBatch'
+                  passage: '#/components/schemas/PassageBatch'
+            examples:
+              query:
+                summary: Один запрос витрины
+                value:
+                  input_type: query
+                  profile_id: example-e5-profile
+                  texts:
+                  - Как восстановить файлы после сбоя?
+              passage:
+                summary: Пакет при импорте
+                value:
+                  input_type: passage
+                  profile_id: example-e5-profile
+                  texts:
+                  - Средства резервного копирования
+                  - Операционные системы
+        required: true
+      responses:
+        '200':
+          description: Векторы в порядке входных текстов.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Embeddings'
+              examples:
+                unit:
+                  summary: Синтетический единичный вектор для проверки формата
+                  value:
+                    profile_id: example-e5-profile
+                    dimension: 384
+                    vectors:
+                    - - 1.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+                      - 0.0
+        '409':
+          description: Профили различаются
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                PROFILE_MISMATCH:
+                  value:
+                    type: about:blank
+                    title: Профили различаются
+                    status: 409
+                    detail: Профиль запроса отличается от активного.
+                    code: PROFILE_MISMATCH
+        '422':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 422
+                    detail: Для query нужен ровно один непустой текст.
+                    code: INVALID_REQUEST
+        '503':
+          description: Энкодер временно недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                MODEL_NOT_READY:
+                  value:
+                    type: about:blank
+                    title: Энкодер временно недоступен
+                    status: 503
+                    detail: Модель ещё не прогрета.
+                    code: MODEL_NOT_READY
+                MODEL_BUSY:
+                  value:
+                    type: about:blank
+                    title: Энкодер временно недоступен
+                    status: 503
+                    detail: Очередь заполнена.
+                    code: MODEL_BUSY
+                INVALID_MODEL_OUTPUT:
+                  value:
+                    type: about:blank
+                    title: Энкодер временно недоступен
+                    status: 503
+                    detail: Энкодер вернул некорректные векторы.
+                    code: INVALID_MODEL_OUTPUT
+components:
+  schemas:
+    Embeddings:
+      properties:
+        profile_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Profile Id
+        dimension:
+          type: integer
+          const: 384
+          title: Dimension
+        vectors:
+          items:
+            items:
+              type: number
+            type: array
+            maxItems: 384
+            minItems: 384
+          type: array
+          maxItems: 32
+          minItems: 1
+          title: Vectors
+          description: Один L2-нормализованный вектор на каждый входной текст в исходном порядке.
+      additionalProperties: false
+      type: object
+      required:
+      - profile_id
+      - dimension
+      - vectors
+      title: Embeddings
+    ModelHealth:
+      properties:
+        status:
+          type: string
+          const: up
+          title: Status
+      additionalProperties: false
+      type: object
+      required:
+      - status
+      title: ModelHealth
+    PassageBatch:
+      properties:
+        input_type:
+          type: string
+          const: passage
+          title: Input Type
+        profile_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Profile Id
+        texts:
+          items:
+            type: string
+            minLength: 1
+            pattern: \S
+          type: array
+          maxItems: 32
+          minItems: 1
+          title: Texts
+      additionalProperties: false
+      type: object
+      required:
+      - input_type
+      - profile_id
+      - texts
+      title: PassageBatch
+    QueryBatch:
+      properties:
+        input_type:
+          type: string
+          const: query
+          title: Input Type
+        profile_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Profile Id
+        texts:
+          items:
+            type: string
+            minLength: 1
+            pattern: \S
+          type: array
+          maxItems: 1
+          minItems: 1
+          title: Texts
+      additionalProperties: false
+      type: object
+      required:
+      - input_type
+      - profile_id
+      - texts
+      title: QueryBatch
+    Ready:
+      properties:
+        ready:
+          type: boolean
+          const: true
+          title: Ready
+        profile_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Profile Id
+          description: ID профиля после загрузки и прогрева.
+        dimension:
+          type: integer
+          const: 384
+          title: Dimension
+      additionalProperties: false
+      type: object
+      required:
+      - ready
+      - profile_id
+      - dimension
+      title: Ready
+    Problem:
+      additionalProperties: false
+      description: Ошибка в формате Problem Details. Клиент разбирает стабильный code.
+      properties:
+        type:
+          default: about:blank
+          title: Type
+          type: string
+        title:
+          title: Title
+          type: string
+        status:
+          title: Status
+          type: integer
+        detail:
+          title: Detail
+          type: string
+        code:
+          title: Code
+          type: string
+      required:
+      - title
+      - status
+      - detail
+      - code
+      title: Problem
+      type: object
+tags:
+- name: Состояние
+- name: Эмбеддинги
