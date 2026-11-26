@@ -10,32 +10,35 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import ru.codesraider.smartsearch.search.SearchIndex;
 
 import ru.codesraider.smartsearch.catalog.CatalogAccess;
 
 @RestController
 class HealthController {
     private final RestClient modelClient;
-    private final CatalogAccess catalog;
+    private final SearchIndex index;
 
-    HealthController(RestClient.Builder builder, CatalogAccess catalog,
+    HealthController(RestClient.Builder builder, SearchIndex index,
                      @Value("${MODEL_BASE_URL:http://localhost:8000}") String modelBaseUrl) {
         var factory = new SimpleClientHttpRequestFactory();
         this.catalog = catalog;
         factory.setConnectTimeout(Duration.ofSeconds(1));
         factory.setReadTimeout(Duration.ofSeconds(1));
         modelClient = builder.baseUrl(modelBaseUrl).requestFactory(factory).build();
+        this.index = index;
     }
 
     @GetMapping("/health")
     Map<String, Object> health() {
-        var result = new LinkedHashMap<String, Object>();
-        result.put("status", "up");
-        result.put("model_service", isModelServiceUp() ? "up" : "unavailable");
-        result.put("search_ready", catalog.version() != null);
-        result.put("semantic_ready", false);
-        if (catalog.version() != null) result.put("index_version", catalog.version());
-        return result;
+        boolean modelUp = isModelServiceUp();
+        Map<String, Object> health = new LinkedHashMap<>();
+        health.put("status", "up");
+        health.put("model_service", modelUp ? "up" : "unavailable");
+        health.put("search_ready", index.ready());
+        health.put("index_version", index.version());
+        health.put("semantic_ready", modelUp && index.semanticReady());
+        return health;
     }
 
     private boolean isModelServiceUp() {

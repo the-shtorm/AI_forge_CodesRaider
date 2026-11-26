@@ -2,6 +2,8 @@
 !pyproject.toml
 !uv.lock
 !app.py
+!encoder.py
+!demo_search.py
 !contract_http.py
 !search_contract/
 !search_contract/**

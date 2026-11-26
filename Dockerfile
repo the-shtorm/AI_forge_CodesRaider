@@ -15,6 +15,7 @@ WORKDIR /workspace/backend
 COPY --chmod=755 backend/mvnw ./mvnw
 COPY backend/.mvn/ ./.mvn/
 COPY backend/pom.xml ./
+COPY contracts/sql/ /workspace/contracts/sql/
 COPY backend/src/ ./src/
 COPY contracts/sql/ ../contracts/sql/
 COPY --from=frontend-dist /workspace/frontend/dist/ ./src/main/resources/static/

@@ -26,7 +26,9 @@ services:
 
   model:
     profiles: [ml, dev]
-    build: ./model
+    build:
+      context: ./model
+      target: model
     expose:
       - "8000"
     healthcheck:
@@ -37,7 +39,9 @@ services:
 
   api-docs:
     profiles: [docs]
-    build: ./model
+    build:
+      context: ./model
+      target: docs
     command: ["uvicorn", "search_contract.api:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "127.0.0.1:${API_DOCS_PORT:-8001}:8000"
