@@ -3,6 +3,9 @@
 !backend/**
 !frontend/
 !frontend/**
+!contracts/
+!contracts/sql/
+!contracts/sql/**
 **/node_modules/
 **/dist/
 **/target/

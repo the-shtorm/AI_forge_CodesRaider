@@ -14,20 +14,24 @@
 docker compose --profile docs up -d --build api-docs
 ```
 
-[Приёмка поискового обработчика Spring](docs/SEARCH_API.md#приёмка-поискового-обработчика-spring) описывает запуск JUnit для подборки «Кибер Бэкап», дедупликации устройств Pantum, совместимости и очерёдности резерва. Для прогона нужны обработчики `/v1` и импортированный индекс. В текущей Java-сборке доступен `/health`.
+[Приёмка поискового обработчика Spring](docs/SEARCH_API.md#приёмка-поискового-обработчика-spring) описывает запуск JUnit для подборки «Кибер Бэкап», дедупликации устройств Pantum, совместимости и очерёдности резерва. Для прогона нужен запущенный Spring с импортированным снимком.
 
 ## Запуск через Docker
 
-Из корня репозитория запустите все три контейнера с помощью Docker Compose с поддержкой `depends_on.required` (v2.20+).
+Из корня репозитория соберите приложение и импортируйте выгрузку. Укажите абсолютный путь к файлу на хосте. Для импорта и запуска нужен Docker Compose с поддержкой `depends_on.required` (v2.20+).
 
 ```sh
+docker compose build app
+docker compose run --rm --no-deps -v "/absolute/path/Mindbox.yml.gz.xml:/catalog.xml:ro" app import
 docker compose --profile dev up --build -d
 ```
+
+PowerShell принимает путь к файлу в форме `D:/path/Mindbox.yml.gz.xml:/catalog.xml:ro`. После импорта нового снимка выполните `docker compose restart app`, чтобы Spring открыл его. Снимки и журнал хранятся в именованных томах `snapshots` и `events`. Поле `search_ready` в `GET /health` показывает, открыт ли снимок.
 
 | Сервис | Адрес | Назначение |
 |---|---|---|
 | `app` | [localhost:8080](http://localhost:8080) | Spring Boot на Java 21 отдаёт собранный React. Маршрут `/health` сообщает о доступности Spring и HTTP-сервиса FastAPI. |
-| `frontend` | [localhost:5173](http://localhost:5173) | Сервер разработки Vite с React. Изменения в `frontend/src` подхватываются из рабочей копии. Запрос `/health` проксируется в `app:8080`. |
+| `frontend` | [localhost:5173](http://localhost:5173) | Сервер разработки Vite с React. Изменения в `frontend/src` подхватываются из рабочей копии. Запросы `/health` и `/v1` проксируются в `app:8080`. |
 | `model` | `http://model:8000` в сети Compose | FastAPI на Python 3.12. Служебный маршрут `/health` отражает состояние HTTP-процесса. |
 
 В профиле `dev` Compose ожидает готовности `model` перед запуском `app`, затем готовности `app` перед запуском `frontend`. Основной интерфейс и Spring API доступны на одном порту `8080`. Порты на хосте можно задать переменными `APP_PORT` и `FRONTEND_PORT`.
