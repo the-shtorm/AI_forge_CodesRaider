@@ -427,7 +427,7 @@ paths:
                     detail: Выбранная цель отсутствует в текущем снимке.
                     code: UNKNOWN_TARGET
         '503':
-          description: Каталог недоступен
+          description: Хранилище временно недоступно
           content:
             application/problem+json:
               schema:
@@ -436,10 +436,17 @@ paths:
                 CATALOG_UNAVAILABLE:
                   value:
                     type: about:blank
-                    title: Каталог недоступен
+                    title: Хранилище временно недоступно
                     status: 503
-                    detail: Активный снимок каталога ещё не опубликован.
+                    detail: Активный снимок каталога недоступен.
                     code: CATALOG_UNAVAILABLE
+                JOURNAL_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Хранилище временно недоступно
+                    status: 503
+                    detail: Не удалось записать поиск в журнал.
+                    code: JOURNAL_UNAVAILABLE
   /v1/suggest:
     get:
       tags:

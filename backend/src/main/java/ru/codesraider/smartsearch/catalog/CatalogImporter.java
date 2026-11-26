@@ -1,0 +1,288 @@
+package ru.codesraider.smartsearch.catalog;
+
+import org.apache.lucene.analysis.ru.RussianAnalyzer;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.store.FSDirectory;
+
+import ru.codesraider.smartsearch.modelclient.EncoderClient;
+
+import java.io.BufferedInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.sql.DriverManager;
+import java.util.Comparator;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
+
+public final class CatalogImporter {
+    private static final String RECIPE = "catalog-v1.2";
+
+    private CatalogImporter() {}
+
+    public static void run(String[] args) throws Exception {
+        if (args.length > 2 || (args.length == 2 && !"--embeddings".equals(args[1]))) {
+            throw new IllegalArgumentException(
+                    "Usage: import [--embeddings] (set CATALOG_PATH and SNAPSHOTS_DIR)");
+        }
+        Path source = Path.of(System.getenv().getOrDefault("CATALOG_PATH", "Mindbox.yml.gz.xml"));
+        Path root =
+                Path.of(System.getenv().getOrDefault("SNAPSHOTS_DIR", "data/snapshots"))
+                        .toAbsolutePath();
+        try (var client =
+                new EncoderClient(
+                        System.getenv().getOrDefault("MODEL_BASE_URL", "http://model:8000"))) {
+            importSnapshot(source, root, args.length == 2, client);
+        }
+    }
+
+    static void importSnapshot(Path source, Path root, boolean embeddings, EncoderClient client)
+            throws Exception {
+        Files.createDirectories(root);
+        try (var channel =
+                        FileChannel.open(
+                                root.resolve(".import.lock"),
+                                StandardOpenOption.CREATE,
+                                StandardOpenOption.WRITE);
+                var lock = channel.tryLock()) {
+            if (lock == null)
+                throw new IOException("Another importer is already building a snapshot");
+            String profile = embeddings ? awaitProfile(client) : null;
+            String sourceHash;
+            try (InputStream in = Files.newInputStream(source)) {
+                MessageDigest md = digest();
+                new DigestInputStream(in, md).transferTo(java.io.OutputStream.nullOutputStream());
+                sourceHash = HexFormat.of().formatHex(md.digest());
+            }
+            String version =
+                    sourceHash.substring(0, 16)
+                            + "-"
+                            + HexFormat.of()
+                                    .formatHex(
+                                            digest().digest(
+                                                            (RECIPE + ":" + profile)
+                                                                    .getBytes(
+                                                                            StandardCharsets
+                                                                                    .UTF_8)))
+                                    .substring(0, 12);
+            Path target = root.resolve(version);
+            if (Files.notExists(target)) {
+                Path staging = Files.createTempDirectory(root, ".building-");
+                try {
+                    build(source, staging, version, sourceHash, profile, client);
+                    Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
+                } finally {
+                    if (Files.exists(staging)) {
+                        try (var entries = Files.walk(staging)) {
+                            for (Path item : entries.sorted(Comparator.reverseOrder()).toList())
+                                Files.delete(item);
+                        }
+                    }
+                }
+            } else {
+                verifySnapshot(target, version, sourceHash, profile);
+            }
+            Path pointer = Files.createTempFile(root, ".active-", ".tmp");
+            try {
+                Files.writeString(pointer, version + "\n", StandardCharsets.UTF_8);
+                Files.move(
+                        pointer,
+                        root.resolve("active"),
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } finally {
+                Files.deleteIfExists(pointer);
+            }
+            System.out.println("Activated catalog snapshot " + version);
+        }
+    }
+
+    private static String awaitProfile(EncoderClient client)
+            throws IOException, InterruptedException {
+        long deadline = System.nanoTime() + java.time.Duration.ofSeconds(60).toNanos();
+        while (true) {
+            try {
+                return client.readyProfile();
+            } catch (IOException unavailable) {
+                if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) {
+                    throw new IOException(
+                            "Encoder did not reach readiness for vector import", unavailable);
+                }
+                Thread.sleep(1000);
+            }
+        }
+    }
+
+    private static void verifySnapshot(Path dir, String version, String hash, String profile)
+            throws Exception {
+        var manifest = FeedOffer.JSON.readTree(dir.resolve("manifest.json").toFile());
+        if (!version.equals(manifest.path("index_version").asString())
+                || !hash.equals(manifest.path("source_sha256").asString())
+                || !java.util.Objects.equals(profile, manifest.path("profile_id").asString(null))
+                || !Files.isRegularFile(dir.resolve("catalog.db")))
+            throw new IOException("Incomplete snapshot: " + dir);
+        try (var db =
+                        DriverManager.getConnection(
+                                "jdbc:sqlite:"
+                                        + dir.resolve("catalog.db").toUri().toASCIIString()
+                                        + "?mode=ro");
+                var stmt = db.createStatement();
+                var counts = stmt.executeQuery("SELECT count(*) FROM offer")) {
+            if (!counts.next() || counts.getLong(1) != manifest.path("offer_count").asLong()) {
+                throw new IOException("Catalog count does not match manifest: " + version);
+            }
+        }
+        try (var directory = FSDirectory.open(dir.resolve("lucene"));
+                var reader = DirectoryReader.open(directory)) {
+            if (!version.equals(reader.getIndexCommit().getUserData().get("index_version"))) {
+                throw new IOException("Lucene does not match snapshot " + version);
+            }
+        }
+    }
+
+    private static void build(
+            Path source,
+            Path staging,
+            String version,
+            String hash,
+            String profile,
+            EncoderClient client)
+            throws Exception {
+        var manifest = new LinkedHashMap<String, Object>();
+        var md = digest();
+        try (var con = DriverManager.getConnection("jdbc:sqlite:" + staging.resolve("catalog.db"));
+                var analyzer = new RussianAnalyzer();
+                var lucene = FSDirectory.open(staging.resolve("lucene"));
+                var writer = new IndexWriter(lucene, new IndexWriterConfig(analyzer));
+                var input =
+                        new DigestInputStream(
+                                new BufferedInputStream(Files.newInputStream(source)), md)) {
+            var db = new CatalogDatabase(con);
+            var index = new CatalogIndex(writer, profile != null);
+            XMLInputFactory factory = XMLInputFactory.newFactory();
+            factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+            factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+            var xml = factory.createXMLStreamReader(input);
+            int count = 0;
+            try {
+                while (xml.hasNext()) {
+                    if (xml.next() != XMLStreamConstants.START_ELEMENT) continue;
+                    switch (xml.getLocalName()) {
+                        case "yml_catalog" ->
+                                manifest.put("date", xml.getAttributeValue(null, "date"));
+                        case "category" -> {
+                            String id = xml.getAttributeValue(null, "id");
+                            String parent = xml.getAttributeValue(null, "parentId");
+                            db.category(id, xml.getElementText().strip(), parent);
+                        }
+                        case "offer" -> {
+                            FeedOffer offer = readOffer(xml);
+                            db.offer(offer);
+                            index.offer(offer, db.categoryPath(offer.get("categoryId")));
+                            if (++count % 25000 == 0)
+                                System.out.println("Indexed " + count + " offers");
+                        }
+                        default -> {}
+                    }
+                }
+            } finally {
+                xml.close();
+            }
+            if (count == 0) throw new IOException("YML contains no offers");
+            if (!hash.equals(HexFormat.of().formatHex(md.digest())))
+                throw new IOException("XML changed during import");
+            db.finish();
+            index.entities(con);
+            int vectors = profile == null ? 0 : index.writeVectors(client, profile);
+            if (profile != null && vectors == 0)
+                throw new IOException("No indexable semantic documents");
+            manifest.put("index_version", version);
+            manifest.put("source_sha256", hash);
+            manifest.put("schema_version", 1);
+            manifest.put("rules_version", RECIPE);
+            manifest.put("offer_count", count);
+            manifest.put("family_count", db.families.size());
+            manifest.put("vector_count", vectors);
+            manifest.put("profile_id", profile);
+            Map<String, String> metadata = new LinkedHashMap<>();
+            metadata.put("index_version", version);
+            if (profile != null) metadata.put("profile_id", profile);
+            writer.setLiveCommitData(metadata.entrySet());
+            writer.commit();
+        }
+        Files.writeString(
+                staging.resolve("manifest.json"), FeedOffer.JSON.writeValueAsString(manifest));
+        verifySnapshot(staging, version, hash, profile);
+        System.out.println(FeedOffer.JSON.writeValueAsString(manifest));
+    }
+
+    private static FeedOffer readOffer(XMLStreamReader xml) throws XMLStreamException {
+        var offer =
+                new FeedOffer(
+                        xml.getAttributeValue(null, "id"),
+                        xml.getAttributeValue(null, "group_id"),
+                        "true".equalsIgnoreCase(xml.getAttributeValue(null, "available")));
+        while (xml.hasNext()) {
+            int event = xml.next();
+            if (event == XMLStreamConstants.END_ELEMENT && "offer".equals(xml.getLocalName()))
+                break;
+            if (event != XMLStreamConstants.START_ELEMENT) continue;
+            String tag = xml.getLocalName();
+            if ("param".equals(tag)) {
+                String name = xml.getAttributeValue(null, "name");
+                offer.params.add(new FeedOffer.Param(name, xml.getElementText().strip()));
+            } else {
+                switch (tag) {
+                    case "url",
+                            "price",
+                            "oldprice",
+                            "currencyId",
+                            "categoryId",
+                            "name",
+                            "vendor",
+                            "vendorUrl",
+                            "vendorCode",
+                            "description",
+                            "sales_notes" -> {
+                        String value = FeedOffer.empty(xml.getElementText());
+                        if (value != null) offer.fields.put(tag, value);
+                    }
+                    default -> {
+                        int depth = 1;
+                        while (depth > 0) {
+                            int nested = xml.next();
+                            if (nested == XMLStreamConstants.START_ELEMENT) depth++;
+                            if (nested == XMLStreamConstants.END_ELEMENT) depth--;
+                        }
+                    }
+                }
+            }
+        }
+        offer.finish();
+        return offer;
+    }
+
+    private static MessageDigest digest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new AssertionError(impossible);
+        }
+    }
+}

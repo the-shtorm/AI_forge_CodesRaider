@@ -5,6 +5,13 @@ services:
       target: app
     environment:
       MODEL_BASE_URL: http://model:8000
+      SNAPSHOTS_DIR: /data/snapshots
+      CATALOG_PATH: /input/catalog.xml
+      EVENTS_DB: /data/events/events.db
+      SEMANTIC_MODE: ${SEMANTIC_MODE:-auto}
+    volumes:
+      - search-data:/data
+      - search-events:/data/events
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:
@@ -59,3 +66,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 8
+
+volumes:
+  search-data:
+  search-events:

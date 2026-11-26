@@ -1,6 +1,9 @@
 *
 !backend/
 !backend/**
+!contracts/
+!contracts/sql/
+!contracts/sql/*.sql
 !frontend/
 !frontend/**
 **/node_modules/
