@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 
 import ru.codesraider.smartsearch.analytics.SearchJournal;
 import ru.codesraider.smartsearch.search.SearchCatalog.Row;
+import ru.codesraider.smartsearch.search.SearchCatalog.Selection;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -53,6 +54,7 @@ public class SearchController {
         Row target = null;
         String reason = "LEXICAL_MATCH", mode = "lexical";
         List<String> ids = null, families = null;
+        boolean includeServerSoftware = false;
         String missingModel = null;
         if (!input.target().isEmpty()) {
             target =
@@ -72,9 +74,11 @@ public class SearchController {
                 target = db.alias(q, (String) input.context().get("category_id"));
             }
         }
-        var filters = new LinkedHashMap<>(db.scope(target));
-        boolean conflict = merge(filters, input.inferredFilters());
-        conflict |= merge(filters, input.filters());
+        var required = new LinkedHashMap<>(db.scope(target));
+        boolean requiredConflict = merge(required, input.inferredFilters());
+        var filters = new LinkedHashMap<>(required);
+        boolean conflict = merge(filters, input.filters()) || requiredConflict;
+        SearchIndex.QueryRanking ranking = null;
 
         // A model code embedded in a request for a device must match the device's SKU,
         // even if the same code occurs in the description of a cartridge.
@@ -108,36 +112,39 @@ public class SearchController {
         } else if (ids == null && !conflict && input.requestsCompleteServer()) {
             ids = db.serverOfferIds();
             reason = "PRODUCT_TYPE_MATCH";
+            // Only the bare term is ambiguous. "Готовый сервер" still requests a device.
+            includeServerSoftware = (q.equals("сервер") || q.equals("серверы"))
+                    && ("software_admin".equals(input.context().get("profile_id"))
+                        || "369".equals(filters.get("category_id"))
+                        || "369".equals(input.context().get("category_id")));
         } else if (ids == null
                 && (MODEL_CODE.matcher(q).matches() || CATALOG_CODE.matcher(q).matches())) {
             // A cartridge may mention an absent printer model. It cannot satisfy an exact model
             // lookup.
             ids = List.of();
-        } else if (ids == null && !conflict) {
+        } else if (ids == null) {
             boolean task = q.contains(" ") && !MODEL_CODE.matcher(q).find();
-            var ranked =
-                    index.rank(
-                            input.query(),
-                            (String) filters.get("vendor_id"),
-                            (String) filters.get("category_id"),
-                            task);
-            families = ranked.families();
-            mode = ranked.mode();
-            if (mode.equals("hybrid")) reason = "HYBRID_MATCH";
+            ranking = index.prepareRanking(input.query(), task);
+            if (!conflict) {
+                var ranked = ranking.in((String) filters.get("vendor_id"), (String) filters.get("category_id"));
+                families = ranked.families();
+                mode = ranked.mode();
+                if (mode.equals("hybrid")) reason = "HYBRID_MATCH";
+            }
         }
         boolean fileRecovery = target == null && ids == null && input.requestsFileRecovery();
-        List<Row> direct =
-                conflict
-                        ? List.of()
-                        : db.representatives(
-                                filters,
-                                target,
-                                families,
-                                ids,
-                                q.contains("поддержк")
-                                        || q.contains("сопровожден")
-                                        || q.contains("support"),
-                                fileRecovery);
+        var selection = new Selection(target, ids,
+                q.contains("поддержк") || q.contains("сопровожден") || q.contains("support"),
+                fileRecovery, includeServerSoftware);
+        List<Row> direct = conflict ? List.of() : db.representatives(filters, selection, families);
+        if (includeServerSoftware && direct.size() > 1 && input.sort().equals("relevance"))
+            direct.sort(Comparator.comparing(row -> !"369".equals(row.str("category_id"))));
+        if (direct.size() > 1 && !input.sort().equals("relevance")) {
+            Comparator<Long> byPrice = input.sort().equals("price_asc")
+                    ? Comparator.naturalOrder() : Comparator.reverseOrder();
+            direct.sort(Comparator.comparing(row -> Row.positive(row.get("price_minor")),
+                    Comparator.nullsLast(byPrice)));
+        }
         List<Row> anchors = direct.subList(0, Math.min(4, direct.size()));
         List<Map<String, Object>> top = new ArrayList<>(),
                 more = new ArrayList<>(),
@@ -145,6 +152,9 @@ public class SearchController {
         for (int i = 0; i < Math.min(input.limit(), direct.size()); i++) {
             var row = direct.get(i);
             var card = row.card("direct", reason);
+            if (includeServerSoftware && "369".equals(row.str("category_id"))
+                    && "software_admin".equals(input.context().get("profile_id")))
+                card.put("reason_codes", List.of(reason, "PROFILE_MATCH"));
             if (fileRecovery) {
                 String evidence =
                         "14574".equals(row.str("category_id"))
@@ -185,6 +195,29 @@ public class SearchController {
         result.put("top4", top);
         result.put("more_results", more);
         result.put("alternatives", alternatives);
+        Map<String, List<Row>> facets = new LinkedHashMap<>();
+        for (String field : List.of("vendor_id", "category_id")) {
+            var explicit = new LinkedHashMap<>(input.filters());
+            explicit.remove(field);
+            var facetFilters = new LinkedHashMap<>(required);
+            List<Row> options = List.of();
+            if (!merge(facetFilters, explicit) && !requiredConflict) {
+                List<String> facetFamilies = families;
+                if (ranking != null && !fileRecovery && (conflict || !facetFilters.equals(filters))) {
+                    facetFamilies = ranking.in((String) facetFilters.get("vendor_id"),
+                            (String) facetFilters.get("category_id")).families();
+                }
+                options = db.facet(field, facetFilters, selection, facetFamilies);
+            }
+            facets.put(field.equals("vendor_id") ? "vendors" : "categories", options);
+        }
+        result.put("facets", facets);
+        result.put("llm_applied", false);
+        if (input.strategy().equals("llm")) {
+            result.put("assistant_message", direct.isEmpty()
+                    ? "По текущей фразе каталог не нашёл товаров. Введите название, артикул или уточните задачу."
+                    : "Показаны совпадения каталога по текущей фразе. Для уточнения примените фильтры.");
+        }
         result.put(
                 "shortfall_reason",
                 top.size() == 4
@@ -205,12 +238,14 @@ public class SearchController {
     @GetMapping("/suggest")
     public List<Map<String, Object>> suggest(
             @RequestParam String q,
-            @RequestParam(name = "category_id", required = false) String category)
+            @RequestParam(name = "category_id", required = false) String category,
+            @RequestParam(name = "profile_id", required = false) String profile)
             throws SQLException, IOException {
         String prefix = SearchInput.normalize(SearchInput.text(q, "q"));
         if (category != null) SearchInput.text(category, "category_id");
+        if (profile != null) SearchInput.text(profile, "profile_id");
         try (var db = open()) {
-            return db.suggest(prefix, category, index.suggestNames(prefix));
+            return db.suggest(prefix, category, profile, index.suggestNames(prefix));
         }
     }
 
@@ -245,7 +280,7 @@ public class SearchController {
                     if (db.variants(family, scope).size() > 1) children.add(family.destination());
                 }
             } else {
-                for (var rep : db.representatives(scope, target, null, null, false, false)) {
+                for (var rep : db.representatives(scope, new Selection(target, null, false, false), null)) {
                     // Link to the verified offer, preserving membership even for a mixed-category
                     // family.
                     children.add(

@@ -151,9 +151,23 @@ public class SearchIndex implements AutoCloseable {
     }
 
     public Ranked rank(String query, String vendorId, String categoryId, boolean allowSemantic) throws IOException {
+        return prepareRanking(query, allowSemantic).in(vendorId, categoryId);
+    }
+
+    interface QueryRanking {
+        Ranked in(String vendorId, String categoryId) throws IOException;
+    }
+
+    /** Reuse the same embedding when the storefront removes a filter for a facet. */
+    QueryRanking prepareRanking(String query, boolean allowSemantic) throws IOException {
         if (!ready()) throw new IOException("No active catalog snapshot");
         CompletableFuture<float[]> vector = allowSemantic && semanticReady()
                 ? encoder.encodeQuery(profile, query) : null;
+        return (vendorId, categoryId) -> rank(query, vendorId, categoryId, vector);
+    }
+
+    private Ranked rank(String query, String vendorId, String categoryId, CompletableFuture<float[]> vector)
+            throws IOException {
         List<String> lexical = lexical(query, vendorId, categoryId);
         if (vector != null) {
             try {
@@ -172,12 +186,22 @@ public class SearchIndex implements AutoCloseable {
         if (!ready()) throw new IOException("No active catalog snapshot");
         String normalized = normalize(prefix);
         if (normalized.isEmpty()) return List.of();
+        var names = new BooleanQuery.Builder()
+                .add(new PrefixQuery(new Term("name_norm", normalized)), Occur.SHOULD);
+        // Entity titles often begin with a brand or a form factor, e.g. «Rack-серверы».
+        // Raw SKU punctuation and multi-word phrases retain whole-prefix semantics.
+        if (normalized.length() >= 2 && normalized.codePoints().allMatch(Character::isLetter))
+            names.add(new PrefixQuery(new Term("name", normalized)), Occur.SHOULD);
         var query = new BooleanQuery.Builder()
                 .add(term("doc_type", "entity"), Occur.FILTER)
-                .add(new PrefixQuery(new Term("name_norm", normalized)), Occur.MUST).build();
+                .add(names.build(), Occur.MUST).build();
+        // Filtering and profile ranking happen in the catalog. Truncating here can
+        // discard every entity from the selected category on a common prefix.
+        int count = searcher.count(query);
+        if (count == 0) return List.of();
         var keys = new LinkedHashSet<String>();
         var stored = searcher.storedFields();
-        for (var hit : searcher.search(query, 32).scoreDocs) {
+        for (var hit : searcher.search(query, count).scoreDocs) {
             String key = stored.document(hit.doc, Set.of("entity_key")).get("entity_key");
             if (key != null) keys.add(key);
         }

@@ -479,6 +479,20 @@ paths:
           description: Ограничить подсказки текущим разделом.
           title: Category Id
         description: Ограничить подсказки текущим разделом.
+      - name: profile_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: hardware_buyer — закупщик оборудования, software_admin — администратор ПО. Без известного
+            профиля используется обычный порядок.
+          title: Profile Id
+        description: hardware_buyer — закупщик оборудования, software_admin — администратор ПО. Без известного профиля
+          используется обычный порядок.
       responses:
         '200':
           description: До шести подсказок, пустой массив при отсутствии вариантов.
@@ -1227,6 +1241,14 @@ components:
           pattern: ^(https?://|/)
           title: Url
           description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        image_url:
+          anyOf:
+          - type: string
+            pattern: ^(https?://|/)
+            description: Абсолютный HTTP(S) URL или путь от корня витрины.
+          - type: 'null'
+          title: Image Url
+          description: Фотография предложения из каталога, если доступна.
         available:
           type: boolean
           title: Available
@@ -1369,6 +1391,26 @@ components:
       - conversion_rate
       - failures
       title: AnalyticsResponse
+    AssistantTurn:
+      properties:
+        role:
+          type: string
+          enum:
+          - user
+          - assistant
+          title: Role
+        text:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          pattern: \S
+          title: Text
+      additionalProperties: false
+      type: object
+      required:
+      - role
+      - text
+      title: AssistantTurn
     CardClick:
       properties:
         event_id:
@@ -1517,6 +1559,14 @@ components:
           pattern: ^(https?://|/)
           title: Url
           description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        image_url:
+          anyOf:
+          - type: string
+            pattern: ^(https?://|/)
+            description: Абсолютный HTTP(S) URL или путь от корня витрины.
+          - type: 'null'
+          title: Image Url
+          description: Фотография предложения из каталога, если доступна.
         available:
           type: boolean
           title: Available
@@ -1629,7 +1679,8 @@ components:
             pattern: \S
           - type: 'null'
           title: Profile Id
-          description: ID демонстрационного профиля. Историю сессии сервер находит по session_id.
+          description: Демонстрационный профиль hardware_buyer или software_admin. Для нового или отсутствующего
+            ID действует обычный порядок.
       additionalProperties: false
       type: object
       title: Context
@@ -1726,6 +1777,14 @@ components:
           pattern: ^(https?://|/)
           title: Url
           description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        image_url:
+          anyOf:
+          - type: string
+            pattern: ^(https?://|/)
+            description: Абсолютный HTTP(S) URL или путь от корня витрины.
+          - type: 'null'
+          title: Image Url
+          description: Фотография предложения из каталога, если доступна.
         available:
           type: boolean
           title: Available
@@ -2168,6 +2227,14 @@ components:
           pattern: ^(https?://|/)
           title: Url
           description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        image_url:
+          anyOf:
+          - type: string
+            pattern: ^(https?://|/)
+            description: Абсолютный HTTP(S) URL или путь от корня витрины.
+          - type: 'null'
+          title: Image Url
+          description: Фотография предложения из каталога, если доступна.
         available:
           type: boolean
           title: Available
@@ -2354,6 +2421,48 @@ components:
       - search_id
       - next_search_id
       title: Reformulation
+    SearchFacet:
+      properties:
+        id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Id
+        label:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Label
+        count:
+          type: integer
+          minimum: 0.0
+          title: Count
+          description: Число подходящих прямых семейств.
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - label
+      - count
+      title: SearchFacet
+    SearchFacets:
+      properties:
+        vendors:
+          items:
+            $ref: '#/components/schemas/SearchFacet'
+          type: array
+          title: Vendors
+        categories:
+          items:
+            $ref: '#/components/schemas/SearchFacet'
+          type: array
+          title: Categories
+      additionalProperties: false
+      type: object
+      required:
+      - vendors
+      - categories
+      title: SearchFacets
     SearchRequest:
       properties:
         q:
@@ -2381,6 +2490,32 @@ components:
           - $ref: '#/components/schemas/SelectedTarget'
           - type: 'null'
           description: Выбранная подсказка. Сервер проверяет её ID и тип в текущем снимке.
+        strategy:
+          type: string
+          enum:
+          - standard
+          - llm
+          title: Strategy
+          description: llm запрашивает интерпретацию намерения. Явные фильтры всегда обязательны.
+          default: standard
+        assistant_history:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/AssistantTurn'
+            type: array
+            maxItems: 8
+          - type: 'null'
+          title: Assistant History
+          description: Предыдущие сообщения чата от старых к новым. Текущий вопрос находится в q.
+        sort:
+          type: string
+          enum:
+          - relevance
+          - price_asc
+          - price_desc
+          title: Sort
+          description: Порядок прямых результатов. Точный SKU сохраняет приоритет, товары без цены идут в конце.
+          default: relevance
         limit:
           type: integer
           maximum: 50.0
@@ -2468,6 +2603,27 @@ components:
           title: Shortfall Reason
           description: null при полной четвёрке. При нуле прямых совпадений — NO_DIRECT_MATCH, при недоборе проверенных
             семейств — NOT_ENOUGH_VERIFIED_FAMILIES.
+        facets:
+          anyOf:
+          - $ref: '#/components/schemas/SearchFacets'
+          - type: 'null'
+          description: Варианты фильтров по прямым совпадениям. Для каждой группы учитывать все явные ограничения,
+            кроме собственного фильтра.
+        llm_applied:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Llm Applied
+          description: true, когда интерпретация LLM участвовала в поиске, false при деградации.
+        assistant_message:
+          anyOf:
+          - type: string
+            maxLength: 2000
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Assistant Message
+          description: Ответ чата на основе найденных сведений или уточняющий вопрос.
       additionalProperties: false
       type: object
       required:

@@ -2,6 +2,7 @@ package ru.codesraider.smartsearch.search;
 
 import java.math.BigInteger;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -11,6 +12,8 @@ record SearchInput(
         String query,
         String normalized,
         int limit,
+        String sort,
+        String strategy,
         Map<String, Object> context,
         Map<String, Object> filters,
         Map<String, Object> target) {
@@ -48,9 +51,16 @@ record SearchInput(
 
     static SearchInput parse(Map<String, Object> body) {
         verifyKeys(
-                body, Set.of("q", "session_id", "context", "filters", "selected_target", "limit"));
+                body, Set.of("q", "session_id", "context", "filters", "selected_target", "limit",
+                        "strategy", "assistant_history", "sort"));
         String q = text(body.get("q"), "q");
         int limit = (int) integer(body.getOrDefault("limit", 4), 4, 50, "limit");
+        String sort = text(body.getOrDefault("sort", "relevance"), "sort");
+        if (!Set.of("relevance", "price_asc", "price_desc").contains(sort))
+            throw SearchFailure.invalid("sort");
+        String strategy = text(body.getOrDefault("strategy", "standard"), "strategy");
+        if (!Set.of("standard", "llm").contains(strategy)) throw SearchFailure.invalid("strategy");
+        validateHistory(body.get("assistant_history"));
         if (body.get("session_id") != null) text(body.get("session_id"), "session_id");
         var context = object(body.get("context"), "context");
         verifyKeys(context, Set.of("category_id", "segment", "profile_id"));
@@ -71,9 +81,25 @@ record SearchInput(
                 q,
                 normalize(q),
                 limit,
+                sort,
+                strategy,
                 context,
                 filters(object(body.get("filters"), "filters"), false),
                 target);
+    }
+
+    private static void validateHistory(Object value) {
+        if (value == null) return;
+        if (!(value instanceof List<?> history) || history.size() > 8)
+            throw SearchFailure.invalid("assistant_history");
+        for (Object entry : history) {
+            var turn = object(entry, "assistant_history");
+            verifyKeys(turn, Set.of("role", "text"));
+            if (!Set.of("user", "assistant").contains(text(turn.get("role"), "role")))
+                throw SearchFailure.invalid("role");
+            String message = text(turn.get("text"), "text");
+            if (message.codePointCount(0, message.length()) > 2000) throw SearchFailure.invalid("text");
+        }
     }
 
     Map<String, Object> inferredFilters() {

@@ -85,7 +85,7 @@ final class SearchCatalog implements AutoCloseable {
             return out;
         }
 
-        private static Long positive(Object n) {
+        static Long positive(Object n) {
             return n instanceof Number amount && amount.longValue() > 0 ? amount.longValue() : null;
         }
     }
@@ -152,53 +152,60 @@ final class SearchCatalog implements AutoCloseable {
         return matches.isEmpty() ? null : matches.getFirst();
     }
 
-    List<Map<String, Object>> suggest(String q, String category, List<String> matchingNames)
+    List<Map<String, Object>> suggest(String q, String category, String profile, List<String> matchingNames)
             throws SQLException {
-        // Prefix scans use binary range bounds on stored normalized keys.
-        String hi = q + Character.toString(Character.MAX_CODE_POINT);
-        var clauses = new ArrayList<Object>(List.of(q, hi, "category/" + category, q, hi));
-        String names = "";
-        if (!matchingNames.isEmpty()) {
-            names =
-                    " UNION ALL SELECT entity_key,2 FROM entity WHERE entity_key IN ("
-                            + String.join(",", Collections.nCopies(matchingNames.size(), "?"))
-                            + ")";
-            clauses.addAll(matchingNames);
-        }
-        String membership = "";
-        if (category != null) {
-            membership =
-                    """
-                     WHERE (e.kind='category' AND e.id=?) OR EXISTS(
-                     SELECT 1 FROM offer o WHERE o.category_id=? AND
-                     (o.entity_key=e.entity_key OR o.family_key=e.entity_key OR (e.kind='vendor' AND o.vendor_id=e.id)))
-                     OR EXISTS(SELECT 1 FROM collection_scope c WHERE c.entity_key=e.entity_key AND c.category_id=?)
-                    """;
-            clauses.addAll(List.of(category, category, category));
-        }
-        var hits =
-                rows(
-                        """
-                        WITH candidate(entity_key,priority) AS (
-                          SELECT entity_key,0 FROM alias WHERE term>=? AND term<? AND scope IN ('*',?)
-                          UNION ALL SELECT entity_key,1 FROM offer WHERE sku_norm>=? AND sku_norm<?
-                        """
-                                + names
-                                + ") SELECT e.*,min(c.priority) AS priority FROM candidate c JOIN"
-                                + " entity e USING(entity_key) "
-                                + membership
-                                + " GROUP BY e.entity_key ORDER BY priority,e.name,e.id LIMIT 6",
-                        clauses);
-        return hits.stream()
-                .map(
-                        r ->
-                                Map.<String, Object>of(
-                                        "kind",
-                                        r.str("kind"),
-                                        "target_id",
-                                        r.str("id"),
-                                        "label",
-                                        r.str("name")))
+        String preferredType = switch (Objects.toString(profile, "")) {
+            case "hardware_buyer" -> "электроника";
+            case "software_admin" -> "софт";
+            default -> null;
+        };
+        // Lookup-only role signals: a mixed family/vendor can fit either role. If a category
+        // was selected, the evidence for the preference must come from an offer in that category.
+        String membership = category == null ? "1" : """
+                (CASE e.kind
+                   WHEN 'category' THEN e.id=?5
+                   WHEN 'collection' THEN EXISTS (SELECT 1 FROM collection_scope c
+                                           WHERE c.entity_key=e.entity_key AND c.category_id=?5)
+                   WHEN 'family' THEN EXISTS (SELECT 1 FROM offer o WHERE o.family_key=e.entity_key AND o.category_id=?5)
+                   WHEN 'vendor' THEN EXISTS (SELECT 1 FROM offer o WHERE o.vendor_id=e.id AND o.category_id=?5)
+                   ELSE EXISTS (SELECT 1 FROM offer o WHERE o.offer_id=e.id AND o.category_id=?5)
+                 END)
+                """;
+        String preferred = preferredType == null ? "0" : """
+                (CASE e.kind
+                   WHEN 'category' THEN EXISTS (SELECT 1 FROM offer o WHERE o.category_id=e.id AND o.product_type=?8)
+                   WHEN 'collection' THEN EXISTS (SELECT 1 FROM collection_scope c JOIN offer o
+                     ON o.vendor_id=c.vendor_id AND o.category_id=c.category_id
+                     WHERE c.entity_key=e.entity_key AND o.product_type=?8)
+                   WHEN 'offer' THEN EXISTS (SELECT 1 FROM offer o WHERE o.offer_id=e.id AND o.product_type=?8)
+                   WHEN 'family' THEN EXISTS (SELECT 1 FROM offer o WHERE o.family_key=e.entity_key
+                     AND o.product_type=?8 AND (?5 IS NULL OR o.category_id=?5))
+                   WHEN 'vendor' THEN EXISTS (SELECT 1 FROM offer o WHERE o.vendor_id=e.id
+                     AND o.product_type=?8 AND (?5 IS NULL OR o.category_id=?5))
+                 END)
+                """;
+        String sql = """
+                WITH matches(entity_key,priority) AS (
+                  SELECT entity_key,1 FROM alias WHERE term>=?1 AND term<?2 AND scope IN ('*',?3)
+                  UNION ALL SELECT entity_key,CASE WHEN sku_norm=?4 THEN 0 ELSE 2 END
+                    FROM offer WHERE sku_norm>=?4 AND sku_norm<?6
+                  UNION ALL SELECT value,3 FROM json_each(?7)
+                ), candidates AS (SELECT entity_key,min(priority) AS priority FROM matches GROUP BY entity_key)
+                SELECT e.kind,e.id,e.name,%s AS preferred FROM candidates c JOIN entity e USING(entity_key)
+                WHERE %s AND (e.kind<>'category' OR EXISTS (
+                    SELECT 1 FROM offer o WHERE o.category_id=e.id AND o.family_key IS NOT NULL))
+                ORDER BY c.priority,preferred DESC,
+                  CASE WHEN c.priority=3 AND e.kind='category' THEN 0 ELSE 1 END,
+                  CASE WHEN c.priority=3 THEN length(e.name) ELSE 0 END,e.name,e.id,e.kind LIMIT 6
+                """.formatted(preferred, membership);
+        String end = Character.toString(Character.MAX_CODE_POINT);
+        String sku = SearchIndex.normalizeSku(q);
+        // JSON binds the entire Lucene result as a single parameter, including common prefixes.
+        var args = new ArrayList<Object>(Arrays.asList(q, q + end, "category/" + category,
+                sku, category, sku + end, JSON.writeValueAsString(matchingNames)));
+        if (preferredType != null) args.add(preferredType);
+        return rows(sql, args).stream()
+                .map(r -> Map.<String, Object>of("kind", r.str("kind"), "target_id", r.str("id"), "label", r.str("name")))
                 .toList();
     }
 
@@ -284,17 +291,17 @@ final class SearchCatalog implements AutoCloseable {
         return w;
     }
 
-    /** Distinct families from the highest nonempty price/availability tier. */
-    List<Row> representatives(
-            Map<String, Object> filters,
-            Row target,
-            List<String> families,
-            List<String> offerIds,
-            boolean support,
-            boolean fileRecovery)
-            throws SQLException {
+    record Selection(Row target, List<String> offerIds, boolean support, boolean fileRecovery,
+                     boolean includeServerSoftware) {
+        Selection(Row target, List<String> offerIds, boolean support, boolean fileRecovery) {
+            this(target, offerIds, support, fileRecovery, false);
+        }
+    }
+
+    private Where candidateWhere(Map<String, Object> filters, Selection selection, List<String> families) {
         Where w = where(filters);
-        if (fileRecovery) {
+        Row target = selection.target();
+        if (selection.fileRecovery()) {
             // Rank relevant families first; a category match also supplies candidates when a
             // paraphrase has no useful lexical hits. Explicit filters stay on this same SKU.
             // Snapshot 2026-11-25 classifies Recoverit as a file manager. Verify vendor AND
@@ -307,14 +314,55 @@ final class SearchCatalog implements AutoCloseable {
                     "lower(o.name) NOT LIKE '%sql%' AND lower(o.name) NOT LIKE '%oracle%'"
                             + " AND lower(o.name) NOT LIKE '%exchange%'");
         } else if (families != null) w.oneOf("o.family_key", families);
-        if (offerIds != null) w.oneOf("o.offer_id", offerIds);
+        if (selection.offerIds() != null) {
+            if (selection.includeServerSoftware()) {
+                // Category 369 is the catalog's server software section. Keep the verified
+                // hardware candidates eligible for explicit filters and sparse snapshots.
+                var hardware = new Where();
+                hardware.oneOf("o.offer_id", selection.offerIds());
+                w.add("(o.category_id='369' OR " + hardware.sql() + ")", hardware.args.toArray());
+            } else {
+                w.oneOf("o.offer_id", selection.offerIds());
+            }
+        }
         if (target != null && "family".equals(target.str("kind")))
             w.add("o.family_key=?", target.str("entity_key"));
         if (target != null && "offer".equals(target.str("kind")))
             w.add("o.offer_id=?", target.str("id"));
         w.add("o.family_key IS NOT NULL");
-        if (support && offerIds == null && (target == null || !"offer".equals(target.str("kind"))))
+        if (selection.support() && selection.offerIds() == null && (target == null || !"offer".equals(target.str("kind"))))
             w.add(SUPPORT_TITLE);
+        return w;
+    }
+
+    /** Count families as they would appear after selecting each individual facet value. */
+    List<Row> facet(String field, Map<String, Object> filters, Selection selection, List<String> families)
+            throws SQLException {
+        String kind = switch (field) {
+            case "vendor_id" -> "vendor";
+            case "category_id" -> "category";
+            default -> throw new IllegalArgumentException("Unknown facet " + field);
+        };
+        Where w = candidateWhere(filters, selection, families);
+        String sql = """
+                WITH eligible AS (
+                    SELECT o.%s AS id,o.family_key,min(%s) AS tier FROM offer o
+                    WHERE %s GROUP BY o.%s,o.family_key
+                ), ranked AS (
+                    SELECT id,tier,min(tier) OVER (PARTITION BY id) AS best FROM eligible
+                )
+                SELECT r.id,e.name AS label,count(*) AS count FROM ranked r
+                JOIN entity e ON e.kind=? AND e.id=r.id WHERE r.tier=r.best
+                GROUP BY r.id,e.name ORDER BY count DESC,e.name,r.id
+                """.formatted(field, TIER, w.sql(), field);
+        w.args.add(kind);
+        return rows(sql, w.args);
+    }
+
+    /** Distinct families from the highest nonempty price/availability tier. */
+    List<Row> representatives(Map<String, Object> filters, Selection selection, List<String> families)
+            throws SQLException {
+        Where w = candidateWhere(filters, selection, families);
         // Select one SKU per family in SQL before reading the result across JDBC.
         var hits =
                 rows(
@@ -338,7 +386,7 @@ final class SearchCatalog implements AutoCloseable {
             Comparator<Row> byRank =
                     Comparator.comparingInt(
                             row -> order.getOrDefault(row.str("family_key"), Integer.MAX_VALUE));
-            if (fileRecovery) {
+            if (selection.fileRecovery()) {
                 // A recovery tool can help after the loss. A backup suite can recover an
                 // existing copy, so offer it after products with a direct recovery purpose.
                 byRank =

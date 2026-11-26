@@ -122,6 +122,10 @@ def suggest_targets(
     category_id: Annotated[
         Text | None, Query(description="Ограничить подсказки текущим разделом.")
     ] = None,
+    profile_id: Annotated[
+        Text | None,
+        Query(description="hardware_buyer — закупщик оборудования, software_admin — администратор ПО. Без известного профиля используется обычный порядок."),
+    ] = None,
 ):
     """Выбор мышью или Enter передаёт kind и target_id в selected_target обычного поиска.
     Клиент сохраняет исходный q. Вызов подсказок не создаёт отправленный поиск."""
