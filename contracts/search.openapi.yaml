@@ -70,10 +70,25 @@ paths:
                 summary: Два устройства и два дополнения
                 value:
                   q: Покажи устройства Pantum P2500W или BM1800W
+              backup:
+                summary: Поиск подборки по названию
+                value:
+                  q: кибер бэкап
+              selected_backup:
+                summary: Выбор подборки по префиксу
+                value:
+                  q: кибер бэ
+                  selected_target:
+                    kind: collection
+                    target_id: cyberprotect-1033
               mts:
                 summary: Навигация к вендору
                 value:
                   q: мтс
+              analog:
+                summary: Отсутствующая модель с известным назначением
+                value:
+                  q: Нужен монохромный лазерный принтер A4 Pantum P2507
               absent:
                 summary: Пустая выдача
                 value:
@@ -197,6 +212,80 @@ paths:
                     more_results: []
                     alternatives: []
                     shortfall_reason: null
+                backup:
+                  summary: Четыре семейства вендора в категории 1033
+                  value:
+                    search_id: example-search-1
+                    index_version: 2026-11-25T14:12
+                    mode: lexical
+                    normalized_q: кибер бэкап
+                    applied_filters:
+                      vendor_id: cyberprotect
+                      category_id: '1033'
+                    primary_target:
+                      kind: collection
+                      id: cyberprotect-1033
+                      url: https://store.softline.ru/cyberprotect/?filter%5Bcategory%5D%5B%5D=1033
+                    direct_count: 4
+                    top4:
+                    - offer_id: '418697'
+                      name: Киберпротект Кибер Бэкап Стандартная редакция (лицензия для коммерческих организаций),
+                        для физического сервера
+                      sku: PSCNL
+                      vendor: Киберпротект
+                      price_minor: 7925000
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/cyberprotect/ps16nl-418697/
+                      family_key: family/173614
+                      role: direct
+                      reason_codes:
+                      - COLLECTION_MATCH
+                    - offer_id: '418698'
+                      name: Киберпротект Кибер Бэкап Расширенная редакция (бессрочная лицензия для коммерческих
+                        организаций), для физического
+                      sku: PACNL
+                      vendor: Киберпротект
+                      price_minor: 18716900
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/cyberprotect/pa16nl-418698/
+                      family_key: family/173615
+                      role: direct
+                      reason_codes:
+                      - COLLECTION_MATCH
+                    - offer_id: '536456'
+                      name: Киберпротект Кибер Бэкап Облачный (лицензия), Лицензия для физического сервера
+                      sku: SPEAM1
+                      vendor: Киберпротект
+                      price_minor: 117200
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/cyberprotect/speam1-536456/
+                      family_key: family/442025
+                      role: direct
+                      reason_codes:
+                      - COLLECTION_MATCH
+                    - offer_id: '539763'
+                      name: Киберпротект Кибер Бэкап Старт (подписка на 1 год, включая услугу по технической поддержке),
+                        1 ПК
+                      sku: СBSS1PC0GB-1Y-SUB
+                      vendor: Киберпротект
+                      price_minor: 137000
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/cyberprotect/bss1pc0gb-1y-sub-539763/
+                      family_key: family/444870
+                      role: direct
+                      reason_codes:
+                      - COLLECTION_MATCH
+                    more_results: []
+                    alternatives: []
+                    shortfall_reason: null
                 mts:
                   summary: Три прямых семейства и отдельный переход
                   value:
@@ -253,6 +342,35 @@ paths:
                     more_results: []
                     alternatives: []
                     shortfall_reason: NOT_ENOUGH_VERIFIED_FAMILIES
+                analog:
+                  summary: Искомая модель отсутствует в тестовом снимке, есть подходящий аналог
+                  value:
+                    search_id: example-search-1
+                    index_version: 2026-11-25T14:12
+                    mode: lexical
+                    normalized_q: нужен монохромный лазерный принтер a4 pantum p2507
+                    applied_filters: {}
+                    primary_target: null
+                    direct_count: 0
+                    top4: []
+                    more_results: []
+                    alternatives:
+                    - offer_id: '363882'
+                      name: Pantum P2500W
+                      sku: P2500W
+                      vendor: Pantum
+                      price_minor: 1036800
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/pantum/p2500w-363882/
+                      family_key: hardware/pantum/p2500w
+                      role: alternative
+                      reason_codes:
+                      - FUNCTIONAL_ALTERNATIVE
+                      differences:
+                      - 'Другая модель принтера: P2500W вместо P2507.'
+                    shortfall_reason: NO_DIRECT_MATCH
                 absent:
                   summary: Совпадений нет
                   value:
@@ -372,6 +490,12 @@ paths:
                   - kind: offer
                     target_id: '473582'
                     label: Microsoft Office 2024 · EP2-06605
+                backup:
+                  summary: Префикс кибер бэ
+                  value:
+                  - kind: collection
+                    target_id: cyberprotect-1033
+                    label: Кибер Бэкап
         default:
           description: Другие ошибки используют тот же формат Problem Details.
           content:
@@ -439,6 +563,7 @@ paths:
           - family
           - vendor
           - category
+          - collection
           type: string
           title: Kind
       - name: id
@@ -602,6 +727,27 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/microsoft/ep2-06605-473582/
                     children: []
+                backup:
+                  summary: Подборка Кибер Бэкап
+                  value:
+                    kind: collection
+                    id: cyberprotect-1033
+                    url: https://store.softline.ru/cyberprotect/?filter%5Bcategory%5D%5B%5D=1033
+                    name: Кибер Бэкап
+                    offers: []
+                    children:
+                    - kind: offer
+                      id: '418697'
+                      url: https://store.softline.ru/cyberprotect/ps16nl-418697/
+                    - kind: offer
+                      id: '418698'
+                      url: https://store.softline.ru/cyberprotect/pa16nl-418698/
+                    - kind: offer
+                      id: '536456'
+                      url: https://store.softline.ru/cyberprotect/speam1-536456/
+                    - kind: offer
+                      id: '539763'
+                      url: https://store.softline.ru/cyberprotect/bss1pc0gb-1y-sub-539763/
                 reserve:
                   summary: Резерв без цены
                   value:
@@ -1655,6 +1801,7 @@ components:
           - family
           - vendor
           - category
+          - collection
           title: Kind
         id:
           type: string
@@ -1682,7 +1829,7 @@ components:
             $ref: '#/components/schemas/Target'
           type: array
           title: Children
-          description: Для вендора и категории — доступные переходы по подборке.
+          description: Для вендора, категории и collection — переходы внутри выбранной области.
       additionalProperties: false
       type: object
       required:
@@ -1964,6 +2111,7 @@ components:
           - family
           - vendor
           - category
+          - collection
           title: Target Kind
         target_id:
           type: string
@@ -2269,12 +2417,13 @@ components:
           anyOf:
           - $ref: '#/components/schemas/Target'
           - type: 'null'
-          description: Переход к SKU, семейству, вендору или категории. Учитывается отдельно от товарных мест.
+          description: Переход к SKU, семейству, вендору, категории или подборке. Учитывается отдельно от товарных
+            мест.
         direct_count:
           type: integer
           minimum: 0.0
           title: Direct Count
-          description: Число различных прямых семейств в рассмотренном пуле до обрезки по limit.
+          description: Число различных прямых семейств после фильтров и выбора очереди цены, до обрезки по limit.
         top4:
           items:
             oneOf:
@@ -2336,6 +2485,7 @@ components:
           - family
           - vendor
           - category
+          - collection
           title: Kind
         target_id:
           type: string
@@ -2358,6 +2508,7 @@ components:
           - family
           - vendor
           - category
+          - collection
           title: Kind
         target_id:
           type: string
@@ -2386,6 +2537,7 @@ components:
           - family
           - vendor
           - category
+          - collection
           title: Kind
         id:
           type: string

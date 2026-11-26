@@ -87,7 +87,51 @@ MTS = [
     ),
 ]
 
+BACKUP_ID = "cyberprotect-1033"
+BACKUP_FILTERS = {"vendor_id": "cyberprotect", "category_id": "1033"}
+BACKUP_TARGET = {
+    "kind": "collection",
+    "id": BACKUP_ID,
+    "url": STORE + "/cyberprotect/?filter%5Bcategory%5D%5B%5D=1033",
+}
+BACKUP_SUGGESTION = {"kind": "collection", "target_id": BACKUP_ID, "label": "Кибер Бэкап"}
+# Представители разных семейств из снимка. Порядок равнозначных редакций иллюстративный.
+BACKUP_CARDS = [
+    direct(offer(oid, name, sku, "Киберпротект", price, path), "family/" + group, "COLLECTION_MATCH")
+    for oid, group, name, sku, price, path in (
+        (
+            "418697", "173614",
+            "Киберпротект Кибер Бэкап Стандартная редакция (лицензия для коммерческих организаций), для физического сервера",
+            "PSCNL", 7925000, "/cyberprotect/ps16nl-418697/",
+        ),
+        (
+            "418698", "173615",
+            "Киберпротект Кибер Бэкап Расширенная редакция (бессрочная лицензия для коммерческих организаций), для физического",
+            "PACNL", 18716900, "/cyberprotect/pa16nl-418698/",
+        ),
+        (
+            "536456", "442025",
+            "Киберпротект Кибер Бэкап Облачный (лицензия), Лицензия для физического сервера",
+            "SPEAM1", 117200, "/cyberprotect/speam1-536456/",
+        ),
+        (
+            "539763", "444870",
+            "Киберпротект Кибер Бэкап Старт (подписка на 1 год, включая услугу по технической поддержке), 1 ПК",
+            "СBSS1PC0GB-1Y-SUB", 137000, "/cyberprotect/bss1pc0gb-1y-sub-539763/",
+        ),
+    )
+]
+BACKUP_ENTITY = {
+    **BACKUP_TARGET,
+    "name": "Кибер Бэкап",
+    "offers": [],
+    "children": [
+        {"kind": "offer", "id": card["offer_id"], "url": card["url"]} for card in BACKUP_CARDS
+    ],
+}
+
 PANTUM_Q = "Покажи устройства Pantum P2500W или BM1800W"
+ANALOG_Q = "Нужен монохромный лазерный принтер A4 Pantum P2507"
 SEARCH_REQUESTS = {
     "sku": example("Точный артикул", {"q": "EP2-06605", "session_id": SESSION}),
     "selected": example(
@@ -113,7 +157,13 @@ SEARCH_REQUESTS = {
     ),
     "task": example("Поиск по задаче", {"q": "Как восстановить файлы после сбоя?", "limit": 10}),
     "pantum": example("Два устройства и два дополнения", {"q": PANTUM_Q}),
+    "backup": example("Поиск подборки по названию", {"q": "кибер бэкап"}),
+    "selected_backup": example(
+        "Выбор подборки по префиксу",
+        {"q": "кибер бэ", "selected_target": {"kind": "collection", "target_id": BACKUP_ID}},
+    ),
     "mts": example("Навигация к вендору", {"q": "мтс"}),
+    "analog": example("Отсутствующая модель с известным назначением", {"q": ANALOG_Q}),
     "absent": example("Пустая выдача", {"q": "несуществующая-модель-000"}),
 }
 
@@ -167,6 +217,10 @@ SEARCH_RESULTS = {
             None,
         ),
     ),
+    "backup": example(
+        "Четыре семейства вендора в категории 1033",
+        {**result("кибер бэкап", BACKUP_CARDS, 4, None, BACKUP_TARGET), "applied_filters": BACKUP_FILTERS},
+    ),
     "mts": example(
         "Три прямых семейства и отдельный переход",
         result(
@@ -176,6 +230,19 @@ SEARCH_RESULTS = {
             "NOT_ENOUGH_VERIFIED_FAMILIES",
             {"kind": "vendor", "id": "webinar", "url": STORE + "/webinar/"},
         ),
+    ),
+    "analog": example(
+        "Искомая модель отсутствует в тестовом снимке, есть подходящий аналог",
+        {
+            **result(ANALOG_Q.lower(), [], 0, "NO_DIRECT_MATCH"),
+            "alternatives": [{
+                **PRINTER,
+                "family_key": "hardware/pantum/p2500w",
+                "role": "alternative",
+                "reason_codes": ["FUNCTIONAL_ALTERNATIVE"],
+                "differences": ["Другая модель принтера: P2500W вместо P2507."],
+            }],
+        },
     ),
     "absent": example(
         "Совпадений нет", result("несуществующая-модель-000", [], 0, "NO_DIRECT_MATCH")

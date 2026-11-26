@@ -2,7 +2,7 @@ import unittest
 
 from app import app as encoder
 from search_contract.api import app as search
-from search_contract.schemas import Entity, SearchResponse
+from search_contract.schemas import Entity, SearchRequest, SearchResponse, Suggestion
 
 
 def response_examples(app, path, method="get"):
@@ -22,6 +22,40 @@ class PublishedExamplesTest(unittest.TestCase):
                 for item in result.top4:
                     if item.role == "complement":
                         self.assertIn(item.anchor_offer_id, direct_ids)
+
+    def test_backup_navigation_uses_one_collection_across_operations(self):
+        op = search.openapi()["paths"]["/v1/search"]["post"]
+        requests = op["requestBody"]["content"]["application/json"]["examples"]
+        selected = SearchRequest.model_validate(requests["selected_backup"]["value"])
+        free_text = SearchRequest.model_validate(requests["backup"]["value"])
+        suggest = response_examples(search, "/v1/suggest")["backup"]["value"]
+        suggestion = Suggestion.model_validate(suggest[0])
+        result = SearchResponse.model_validate(response_examples(search, "/v1/search", "post")["backup"]["value"])
+        entity = Entity.model_validate(response_examples(search, "/v1/entities/{kind}/{id}")["backup"]["value"])
+
+        self.assertIsNone(free_text.selected_target)
+        for kind, target_id in (
+            (suggestion.kind, suggestion.target_id),
+            (selected.selected_target.kind, selected.selected_target.target_id),
+            (result.primary_target.kind, result.primary_target.id),
+            (entity.kind, entity.id),
+        ):
+            self.assertEqual((kind, target_id), ("collection", "cyberprotect-1033"))
+        self.assertEqual(result.primary_target.url, entity.url)
+        self.assertEqual(result.applied_filters.vendor_id, "cyberprotect")
+        self.assertEqual(result.applied_filters.category_id, "1033")
+        self.assertEqual(result.direct_count, 4)
+        self.assertEqual({c.family_key for c in result.top4 if c.role == "direct"},
+                         {"family/173614", "family/173615", "family/442025", "family/444870"})
+        self.assertEqual({(c.offer_id, c.url) for c in result.top4},
+                         {(c.id, c.url) for c in entity.children if c.kind == "offer"})
+
+    def test_absent_model_keeps_the_analog_outside_top4(self):
+        example = response_examples(search, "/v1/search", "post")["analog"]
+        result = SearchResponse.model_validate(example["value"])
+        self.assertEqual((result.direct_count, result.top4, result.shortfall_reason), (0, [], "NO_DIRECT_MATCH"))
+        self.assertEqual([c.offer_id for c in result.alternatives], ["363882"])
+        self.assertIn("P2507", result.alternatives[0].differences[0])
 
     def test_reserve_keeps_null_price_and_sku(self):
         example = response_examples(search, "/v1/entities/{kind}/{id}")["reserve"]

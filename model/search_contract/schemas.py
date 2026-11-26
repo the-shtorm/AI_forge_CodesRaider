@@ -4,7 +4,7 @@ from pydantic import AwareDatetime, Field, NonNegativeInt, PositiveInt, model_va
 
 from contract_http import DTO, Text
 
-Kind = Literal["offer", "family", "vendor", "category"]
+Kind = Literal["offer", "family", "vendor", "category", "collection"]
 Role = Literal["direct", "complement", "alternative"]
 Source = Literal["demo", "seed"]
 License = Literal["new", "renewal", "upgrade"]
@@ -172,10 +172,10 @@ class SearchResponse(DTO):
         description="Ограничения, фактически применённые к SKU после разбора запроса."
     )
     primary_target: Target | None = Field(
-        description="Переход к SKU, семейству, вендору или категории. Учитывается отдельно от товарных мест."
+        description="Переход к SKU, семейству, вендору, категории или подборке. Учитывается отдельно от товарных мест."
     )
     direct_count: NonNegativeInt = Field(
-        description="Число различных прямых семейств в рассмотренном пуле до обрезки по limit."
+        description="Число различных прямых семейств после фильтров и выбора очереди цены, до обрезки по limit."
     )
     top4: list[TopCard] = Field(
         max_length=4,
@@ -201,7 +201,7 @@ class Entity(DTO):
         description="Для семейства — варианты лицензий после фильтрации, для offer — выбранный SKU."
     )
     children: list[Target] = Field(
-        description="Для вендора и категории — доступные переходы по подборке."
+        description="Для вендора, категории и collection — переходы внутри выбранной области."
     )
 
 

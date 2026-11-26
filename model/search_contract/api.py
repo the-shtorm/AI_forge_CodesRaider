@@ -104,7 +104,10 @@ def search_products(body: Annotated[SearchRequest, Body(openapi_examples=ex.SEAR
     responses={
         200: success(
             "До шести подсказок, пустой массив при отсутствии вариантов.",
-            {"offer": ex.example("Префикс EP2-0", ex.SUGGESTIONS)},
+            {
+                "offer": ex.example("Префикс EP2-0", ex.SUGGESTIONS),
+                "backup": ex.example("Префикс кибер бэ", [ex.BACKUP_SUGGESTION]),
+            },
         ),
         400: INVALID,
         503: NO_CATALOG,
@@ -132,6 +135,7 @@ def suggest_targets(
             "Карточка, отфильтрованные SKU и дочерние переходы.",
             {
                 "family": ex.example("Семейство Office", ex.ENTITY),
+                "backup": ex.example("Подборка Кибер Бэкап", ex.BACKUP_ENTITY),
                 "reserve": ex.example("Резерв без цены", ex.RESERVE),
             },
         ),
