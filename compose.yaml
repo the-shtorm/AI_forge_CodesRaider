@@ -5,6 +5,15 @@ services:
       target: app
     environment:
       MODEL_BASE_URL: http://model:8000
+      EVENTS_PATH: /data/events.db
+      SEARCH_LLM_URL: ${SEARCH_LLM_URL:-}
+      SEARCH_LLM_MODEL: ${SEARCH_LLM_MODEL:-softline}
+      SEARCH_LLM_TIMEOUT_MS: ${SEARCH_LLM_TIMEOUT_MS:-3000}
+      SEARCH_LLM_KEY: ${SEARCH_LLM_KEY:-}
+      CATALOG_PATH: ${CATALOG_CONTAINER_PATH:-}
+    volumes:
+      - search-data:/data
+      - ${CATALOG_DIR:-./backend/src/main/resources/search}:/catalog:ro
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:
@@ -55,3 +64,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 8
+
+volumes:
+  search-data:

@@ -14,6 +14,8 @@ from search_contract.schemas import (
     AnalyticsPeriod,
     AnalyticsResponse,
     Entity,
+    ExplainRequest,
+    Explanation,
     EventBatch,
     Filters,
     Kind,
@@ -92,6 +94,13 @@ def search_products(body: Annotated[SearchRequest, Body(openapi_examples=ex.SEAR
 
     Отсутствие совпадений даёт 200 и пустой top4. При недоступности модели поиск переходит в lexical.
     Сервер регистрирует отправленный поиск один раз и возвращает search_id."""
+    return pending()
+
+
+@app.post("/v1/explain", operation_id="explainCard", tags=["Поиск"], response_model=Explanation,
+          responses={400: INVALID, 404: error_doc("Карточка отсутствует в этой выдаче")})
+def explain_card(body: ExplainRequest):
+    """Вернуть пояснение по сохранённым фактам конкретной показанной карточки."""
     return pending()
 
 

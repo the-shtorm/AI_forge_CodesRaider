@@ -1,0 +1,11 @@
+# kind	id	label	vendor path	aliases (|)
+family	121231	Astra Linux Special Edition	/astralinux/astra-linux-special-edition/	astra linux|астра линукс
+family	391338	Microsoft Office для дома и бизнеса 2024	/microsoft/microsoft-office-dlya-doma-i-biznesa-2024/	microsoft office для дома и бизнеса|офис для дома и бизнеса
+family	3761	Kaspersky Small Office Security	/kaspersky/kaspersky-small-office-security/	kaspersky small office security
+family	22268	КриптоПро CSP	/kripto-pro/cryptopro-csp/	крипто про csp|криптопро csp
+family	306539	AnyDesk	/anydesk/anydesk/	anydesk|энидеск
+family	46421	Эшелон СКАНЕР-ВС	/npo-echelon/eshelon-skaner-vs/	сканер-вс|сканер вс
+family	437421	MaxPatrol Endpoint Protection Platform	/positive-technologies/maxpatrol-endpoint-protection-platform/	max patrol|maxpatrol
+family	165034	Microsoft 365 для семьи	/microsoft/microsoft-365-for-family/	365|microsoft 365 family
+vendor	webinar	МТС Линк	/webinar/	мтс|мтс линк
+collection	cyberprotect-1033	Кибер Бэкап	/cyberprotect/?filter%5Bcategory%5D%5B%5D=1033	кибер бэкап|кибер бекап

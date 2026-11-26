@@ -6,3 +6,7 @@
 **/node_modules/
 **/dist/
 **/target/
+
+!contracts/
+!contracts/sql/
+!contracts/sql/events-v1.sql

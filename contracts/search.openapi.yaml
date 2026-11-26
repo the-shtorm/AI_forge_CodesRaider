@@ -440,6 +440,66 @@ paths:
                     status: 503
                     detail: Активный снимок каталога ещё не опубликован.
                     code: CATALOG_UNAVAILABLE
+  /v1/explain:
+    post:
+      tags:
+      - Поиск
+      summary: Explain Card
+      description: Вернуть пояснение по сохранённым фактам конкретной показанной карточки.
+      operationId: explainCard
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Explanation'
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '404':
+          description: Карточка отсутствует в этой выдаче
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/suggest:
     get:
       tags:
@@ -1258,6 +1318,14 @@ components:
           type: object
           title: Attributes
           description: Подтверждённые свойства этого SKU. Повторяющиеся параметры сохраняются массивом.
+        explanation:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Explanation
+          description: Основание выбора предложения по данным снимка.
         family_key:
           type: string
           minLength: 1
@@ -1548,6 +1616,14 @@ components:
           type: object
           title: Attributes
           description: Подтверждённые свойства этого SKU. Повторяющиеся параметры сохраняются массивом.
+        explanation:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Explanation
+          description: Основание выбора предложения по данным снимка.
         family_key:
           type: string
           minLength: 1
@@ -1757,6 +1833,14 @@ components:
           type: object
           title: Attributes
           description: Подтверждённые свойства этого SKU. Повторяющиеся параметры сохраняются массивом.
+        explanation:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Explanation
+          description: Основание выбора предложения по данным снимка.
         family_key:
           type: string
           minLength: 1
@@ -1840,6 +1924,64 @@ components:
       - offers
       - children
       title: Entity
+    ExplainRequest:
+      properties:
+        search_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Search Id
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+      additionalProperties: false
+      type: object
+      required:
+      - search_id
+      - offer_id
+      title: ExplainRequest
+    Explanation:
+      properties:
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+        source:
+          type: string
+          enum:
+          - llm
+          - template
+          title: Source
+        text:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Text
+        evidence:
+          items:
+            type: string
+            minLength: 1
+            pattern: \S
+          type: array
+          minItems: 1
+          title: Evidence
+        source_url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Source Url
+          description: Абсолютный HTTP(S) URL или путь от корня витрины.
+      additionalProperties: false
+      type: object
+      required:
+      - offer_id
+      - source
+      - text
+      - evidence
+      - source_url
+      title: Explanation
     FailureGroup:
       properties:
         reason:
@@ -2347,6 +2489,91 @@ components:
       - search_id
       - next_search_id
       title: Reformulation
+    SearchProgram:
+      properties:
+        compiler:
+          type: string
+          enum:
+          - rules
+          - llm
+          - llm_fallback
+          - llm_abstained
+          title: Compiler
+        purpose:
+          type: string
+          enum:
+          - WORDS
+          - BACKUP
+          - WEBINAR
+          - REMOTE_ACCESS
+          - ANTIVIRUS
+          - SERVER
+          - SERVER_SOFTWARE
+          - PRINTER
+          - UNKNOWN
+          title: Purpose
+        additional_purposes:
+          items:
+            type: string
+          type: array
+          maxItems: 1
+          title: Additional Purposes
+        join:
+          type: string
+          enum:
+          - all
+          - any
+          title: Join
+          default: all
+        terms:
+          type: string
+          title: Terms
+        scope:
+          anyOf:
+          - $ref: '#/components/schemas/Target'
+          - type: 'null'
+        models:
+          items:
+            type: string
+          type: array
+          title: Models
+        printer_features:
+          items:
+            type: string
+          type: array
+          title: Printer Features
+        filters:
+          $ref: '#/components/schemas/Filters'
+        excluded_versions:
+          items:
+            type: string
+          type: array
+          title: Excluded Versions
+        excluded_licenses:
+          items:
+            type: string
+            enum:
+            - new
+            - renewal
+            - upgrade
+          type: array
+          title: Excluded Licenses
+        conflict:
+          type: boolean
+          title: Conflict
+      additionalProperties: false
+      type: object
+      required:
+      - compiler
+      - purpose
+      - terms
+      - scope
+      - models
+      - printer_features
+      - filters
+      - excluded_licenses
+      - conflict
+      title: SearchProgram
     SearchRequest:
       properties:
         q:
@@ -2388,6 +2615,11 @@ components:
       title: SearchRequest
     SearchResponse:
       properties:
+        program:
+          anyOf:
+          - $ref: '#/components/schemas/SearchProgram'
+          - type: 'null'
+          description: Проверяемый план отбора SKU.
         search_id:
           type: string
           minLength: 1

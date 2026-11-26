@@ -122,6 +122,7 @@ class Offer(DTO):
 
 
 class Card(Offer):
+    explanation: Text | None = Field(None, description="Основание выбора предложения по данным снимка.")
     family_key: Text = Field(
         description="Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}."
     )
@@ -161,7 +162,37 @@ class AlternativeCard(Card):
 TopCard = Annotated[DirectCard | ComplementCard, Field(discriminator="role")]
 
 
+class SearchProgram(DTO):
+    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained"]
+    purpose: Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
+                     "SERVER", "SERVER_SOFTWARE", "PRINTER", "UNKNOWN"]
+    additional_purposes: list[str] = Field(default_factory=list, max_length=1)
+    join: Literal["all", "any"] = "all"
+    terms: str
+    scope: Target | None
+    models: list[str]
+    printer_features: list[str]
+    filters: Filters
+    excluded_versions: list[str] = Field(default_factory=list)
+    excluded_licenses: list[License]
+    conflict: bool
+
+
+class ExplainRequest(DTO):
+    search_id: Text
+    offer_id: Text
+
+
+class Explanation(DTO):
+    offer_id: Text
+    source: Literal["llm", "template"]
+    text: Text
+    evidence: list[Text] = Field(min_length=1)
+    source_url: Link
+
+
 class SearchResponse(DTO):
+    program: SearchProgram | None = Field(None, description="Проверяемый план отбора SKU.")
     search_id: Text = Field(description="ID этого поиска, включая поиск с пустым результатом.")
     index_version: Text = Field(description="Версия снимка каталога и поискового индекса.")
     mode: Literal["lexical", "hybrid"] = Field(

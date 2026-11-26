@@ -1,0 +1,61 @@
+# suite	query	acceptable offer IDs, comma separated (- = no direct result)
+sku	EP2-06605	473582
+sku	473582	473582
+sku	6gq-00084	demo-365
+sku	P2500W	363882,521380
+spelling	астра линукс	487935
+spelling	ьфчзфекщд	demo-max
+spelling	AnyDsek	demo-any
+spelling	Антивирь	demo-ks,demo-ks-ren,demo-max
+spelling	мтк линк	535950,541589,541591
+constraints	КриптоПро CSP 4.0	demo-csp-4.0
+constraints	КриптоПро CSP 9.9	-
+constraints	Kaspersky Small Office Security на 10 ПК	demo-ks-ren
+constraints	Kaspersky Small Office Security на 12 месяцев без продления	demo-ks
+constraints	продление Kaspersky Small Office Security до 500 рублей	demo-ks-ren
+constraints	Kaspersky Small Office Security для macOS	-
+constraints	AnyDesk до 500 рублей	-
+constraints	Astra Linux 1.8	487935
+constraints	сервер до 85000 рублей	438239,467607,467610,482054
+intent	сервер	438239,467607,467610,482054
+intent	ПО для сервера	418697,536456,demo-srv
+intent	резервное копирование	418697,418698,536456,539763,477550
+intent	удаленный доступ	demo-any
+task	Как вернуть документы после отказа жесткого диска	418697,418698,536456,539763,477550
+task	Нужно сохранить вторую копию рабочих файлов	418697,418698,536456,539763,477550
+task	Хочу показать презентацию слушателям через интернет	535950,541589,541591,demo-web
+task	Как собрать коллег на видеовстречу	535950,541589,541591,demo-web
+task	Хочу управлять рабочим компьютером из дома	demo-any
+task	Как помочь сотруднику подключившись к его рабочему столу	demo-any
+task	Чем защитить ноутбуки от вредоносных программ	demo-ks,demo-ks-ren,demo-max
+task	Подобрать защиту от заражения компьютеров	demo-ks,demo-ks-ren,demo-max
+task	Нужна машина для установки в серверную стойку	438239,467607,467610,482054
+task	Хочу печатать счета на бумаге	363882,521380,521379
+absent	Фрезерный станок ZX-9841	-
+absent	Ищу холодильник для кухни	-
+absent	Max Patrol 999	-
+absent	Нужен монохромный лазерный принтер A4 Pantum P2507	-
+probe	Нужны вебинары или удаленный доступ	535950,541589,541591,demo-web,demo-any
+probe	Ищу средство восстановления фотографий	418697,418698,536456,539763,477550
+probe	КриптоПро CSP версии 5.0	demo-csp-5.0
+probe	EP2 06605	473582
+probe	Енидеск	demo-any
+probe	мне нужен офис для дома и бизнеса	473582
+probe	Ищу платформу для онлайн лекций	535950,541589,541591,demo-web
+probe	Нужно исправить неполадку на чужом ПК по сети	demo-any
+probe	AnyDesk для Windows	-
+probe	Покажи резиновую лодку	-
+probe	КриптоПро CSP без версии 5.0	demo-csp-4.0
+probe	сервер до 83 999 рублей	-
+challenge	Наш бухгалтер хочет купить EP2-06605	473582
+challenge	дубликат документов на случай сбоя	418697,418698,536456,539763,477550
+challenge	надо разослать приглашения и провести видеоконференцию с клиентами	535950,541589,541591,demo-web
+challenge	хочу работать с экраном другого сотрудника через сеть	demo-any
+challenge	Как обезопасить машины от троянов	demo-ks,demo-ks-ren,demo-max
+challenge	Pantum PC-211P	526683
+challenge	продлить Kaspersky Small Office Security на год	demo-ks-ren
+challenge	КриптоПро CSP версии 3.6	-
+challenge	Кибер Бэкап версии 17.2	-
+challenge	мicrosoft 365 для семьи	demo-365
+challenge	нужен вертикальный пылесос	-
+challenge	ищу железо в серверную стойку	438239,467607,467610,482054

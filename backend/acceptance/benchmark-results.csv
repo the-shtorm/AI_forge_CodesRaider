@@ -1,0 +1,211 @@
+suite,query,mode,expected,direct,family_hit,top1,compiler,variants,hit,correct_empty,ndcg,url_hit,latency_ms
+excel,astra linux,BM25,487935,demo-astra-app|487935,1,0,,1,1,,0.63093,0,0.20
+excel,astra linux,rules,487935,487935,1,1,rules|rules|rules,1,1,,1.0,1,97.31|14.40|8.73
+excel,astra linux,model,487935,487935,1,1,rules|rules|rules,1,1,,1.0,1,134.60|20.32|16.63
+excel,Microsoft Office для дома и бизнеса,BM25,473582,473582|demo-365|demo-ks|demo-srv,1,1,,1,1,,1.0,0,0.13
+excel,Microsoft Office для дома и бизнеса,rules,473582,473582,1,1,rules|rules|rules,1,1,,1.0,1,15.83|10.82|18.40
+excel,Microsoft Office для дома и бизнеса,model,473582,473582,1,1,rules|rules|rules,1,1,,1.0,1,22.78|13.50|11.58
+excel,kaspersky small office security,BM25,demo-ks|demo-ks-ren,demo-ks|473582,1,1,,1,1,,1.0,0,0.08
+excel,kaspersky small office security,rules,demo-ks|demo-ks-ren,demo-ks,1,1,rules|rules|rules,1,1,,1.0,1,10.89|10.11|16.19
+excel,kaspersky small office security,model,demo-ks|demo-ks-ren,demo-ks,1,1,rules|rules|rules,1,1,,1.0,1,11.64|15.27|11.50
+excel,крипто про csp 5.0,BM25,demo-csp-5.0,demo-csp-5.0|demo-tsp|541591,1,1,,1,1,,1.0,0,0.11
+excel,крипто про csp 5.0,rules,demo-csp-5.0,demo-csp-5.0,1,1,rules|rules|rules,1,1,,1.0,1,11.83|9.04|13.57
+excel,крипто про csp 5.0,model,demo-csp-5.0,demo-csp-5.0,1,1,rules|rules|rules,1,1,,1.0,1,14.17|8.03|9.00
+excel,anydesk,BM25,demo-any,demo-any,1,1,,1,1,,1.0,0,0.05
+excel,anydesk,rules,demo-any,demo-any,1,1,rules|rules|rules,1,1,,1.0,1,12.57|10.79|9.63
+excel,anydesk,model,demo-any,demo-any,1,1,rules|rules|rules,1,1,,1.0,1,7.53|8.26|7.88
+excel,кибер бэкап,BM25,418697|418698|536456|539763,536456|418697|418698|539763,,1,,1,1,,1.0,0,0.07
+excel,кибер бэкап,rules,418697|418698|536456|539763,418697|418698|536456|539763,,1,rules|rules|rules,1,1,,1.0,1,8.70|7.39|7.99
+excel,кибер бэкап,model,418697|418698|536456|539763,418697|418698|536456|539763,,1,rules|rules|rules,1,1,,1.0,1,9.46|7.56|7.33
+excel,сканер-вс,BM25,demo-scan,demo-scan,1,1,,1,1,,1.0,0,0.06
+excel,сканер-вс,rules,demo-scan,demo-scan,1,1,rules|rules|rules,1,1,,1.0,1,8.99|6.52|7.30
+excel,сканер-вс,model,demo-scan,demo-scan,1,1,rules|rules|rules,1,1,,1.0,1,10.37|9.41|8.66
+excel,мтс,BM25,535950|541589|541591,541589|541591|535950,,1,,1,1,,1.0,0,0.05
+excel,мтс,rules,535950|541589|541591,535950|541589|541591,,1,rules|rules|rules,1,1,,1.0,1,9.84|7.34|7.99
+excel,мтс,model,535950|541589|541591,535950|541589|541591,,1,rules|rules|rules,1,1,,1.0,1,17.79|8.42|8.34
+excel,max patrol,BM25,demo-max,,0,0,,1,0,,0.0,0,0.03
+excel,max patrol,rules,demo-max,demo-max,1,1,rules|rules|rules,1,1,,1.0,1,7.13|9.13|7.08
+excel,max patrol,model,demo-max,demo-max,1,1,rules|rules|rules,1,1,,1.0,1,6.17|7.97|14.42
+excel,365,BM25,demo-365,demo-365|demo-mouse,1,1,,1,1,,1.0,0,0.04
+excel,365,rules,demo-365,demo-365,1,1,rules|rules|rules,1,1,,1.0,1,6.70|6.96|7.60
+excel,365,model,demo-365,demo-365,1,1,rules|rules|rules,1,1,,1.0,1,7.61|6.82|7.62
+sku,EP2-06605,BM25,473582,,,0,,1,0,,0.0,,0.03
+sku,EP2-06605,rules,473582,473582,,1,rules|rules|rules,1,1,,1.0,,8.59|8.65|6.72
+sku,EP2-06605,model,473582,473582,,1,rules|rules|rules,1,1,,1.0,,10.09|7.26|7.08
+sku,473582,BM25,473582,,,0,,1,0,,0.0,,0.02
+sku,473582,rules,473582,473582,,1,rules|rules|rules,1,1,,1.0,,7.86|9.06|17.94
+sku,473582,model,473582,473582,,1,rules|rules|rules,1,1,,1.0,,8.54|6.59|6.94
+sku,6gq-00084,BM25,demo-365,,,0,,1,0,,0.0,,0.02
+sku,6gq-00084,rules,demo-365,demo-365,,1,rules|rules|rules,1,1,,1.0,,7.06|6.99|7.95
+sku,6gq-00084,model,demo-365,demo-365,,1,rules|rules|rules,1,1,,1.0,,6.75|9.33|9.17
+sku,P2500W,BM25,363882|521380,363882,,1,,1,1,,1.0,,0.05
+sku,P2500W,rules,363882|521380,363882,,1,rules|rules|rules,1,1,,1.0,,10.60|12.62|8.20
+sku,P2500W,model,363882|521380,363882,,1,rules|rules|rules,1,1,,1.0,,12.30|11.99|7.32
+spelling,астра линукс,BM25,487935,,,0,,1,0,,0.0,,0.03
+spelling,астра линукс,rules,487935,487935,,1,rules|rules|rules,1,1,,1.0,,6.93|8.50|11.46
+spelling,астра линукс,model,487935,487935,,1,rules|rules|rules,1,1,,1.0,,11.10|13.39|8.30
+spelling,ьфчзфекщд,BM25,demo-max,,,0,,1,0,,0.0,,0.02
+spelling,ьфчзфекщд,rules,demo-max,demo-max,,1,rules|rules|rules,1,1,,1.0,,6.51|9.48|7.46
+spelling,ьфчзфекщд,model,demo-max,demo-max,,1,rules|rules|rules,1,1,,1.0,,11.98|6.85|8.04
+spelling,AnyDsek,BM25,demo-any,,,0,,1,0,,0.0,,0.02
+spelling,AnyDsek,rules,demo-any,demo-any,,1,rules|rules|rules,1,1,,1.0,,6.98|6.75|8.08
+spelling,AnyDsek,model,demo-any,demo-any,,1,rules|rules|rules,1,1,,1.0,,8.13|6.82|7.42
+spelling,Антивирь,BM25,demo-ks|demo-ks-ren|demo-max,,,0,,1,0,,0.0,,0.02
+spelling,Антивирь,rules,demo-ks|demo-ks-ren|demo-max,demo-ks|demo-max,,1,rules|rules|rules,1,1,,1.0,,8.41|6.94|7.53
+spelling,Антивирь,model,demo-ks|demo-ks-ren|demo-max,demo-ks|demo-max,,1,rules|rules|rules,1,1,,1.0,,6.93|9.43|8.70
+spelling,мтк линк,BM25,535950|541589|541591,541589|541591|535950,,1,,1,1,,1.0,,0.04
+spelling,мтк линк,rules,535950|541589|541591,535950|541589|541591,,1,rules|rules|rules,1,1,,1.0,,10.66|5.64|5.81
+spelling,мтк линк,model,535950|541589|541591,535950|541589|541591,,1,rules|rules|rules,1,1,,1.0,,7.55|7.31|7.70
+constraints,КриптоПро CSP 4.0,BM25,demo-csp-4.0,demo-csp-4.0|demo-tsp,,1,,1,1,,1.0,,0.05
+constraints,КриптоПро CSP 4.0,rules,demo-csp-4.0,demo-csp-4.0,,1,rules|rules|rules,1,1,,1.0,,6.26|6.15|13.29
+constraints,КриптоПро CSP 4.0,model,demo-csp-4.0,demo-csp-4.0,,1,rules|rules|rules,1,1,,1.0,,7.66|6.84|10.59
+constraints,КриптоПро CSP 9.9,BM25,,demo-csp-4.0|demo-tsp,,,,1,,0,,,0.06
+constraints,КриптоПро CSP 9.9,rules,,,,,rules|rules|rules,1,,1,,,7.70|9.63|7.47
+constraints,КриптоПро CSP 9.9,model,,,,,rules|rules|rules,1,,1,,,7.49|7.75|9.56
+constraints,Kaspersky Small Office Security на 10 ПК,BM25,demo-ks-ren,demo-ks|539763|473582,,0,,1,0,,0.0,,0.08
+constraints,Kaspersky Small Office Security на 10 ПК,rules,demo-ks-ren,demo-ks-ren,,1,rules|rules|rules,1,1,,1.0,,9.63|11.94|8.89
+constraints,Kaspersky Small Office Security на 10 ПК,model,demo-ks-ren,demo-ks-ren,,1,rules|rules|rules,1,1,,1.0,,9.63|11.26|6.58
+constraints,Kaspersky Small Office Security на 12 месяцев без продления,BM25,demo-ks,demo-ks|473582|539763,,1,,1,1,,1.0,,0.09
+constraints,Kaspersky Small Office Security на 12 месяцев без продления,rules,demo-ks,demo-ks,,1,rules|rules|rules,1,1,,1.0,,9.26|7.84|10.98
+constraints,Kaspersky Small Office Security на 12 месяцев без продления,model,demo-ks,demo-ks,,1,rules|rules|rules,1,1,,1.0,,10.20|11.06|8.11
+constraints,продление Kaspersky Small Office Security до 500 рублей,BM25,demo-ks-ren,demo-ks-ren|473582,,1,,1,1,,1.0,,0.08
+constraints,продление Kaspersky Small Office Security до 500 рублей,rules,demo-ks-ren,demo-ks-ren,,1,rules|rules|rules,1,1,,1.0,,11.77|10.70|13.24
+constraints,продление Kaspersky Small Office Security до 500 рублей,model,demo-ks-ren,demo-ks-ren,,1,rules|rules|rules,1,1,,1.0,,16.08|6.12|6.78
+constraints,Kaspersky Small Office Security для macOS,BM25,,demo-ks|473582|demo-srv|demo-365,,,,1,,0,,,0.09
+constraints,Kaspersky Small Office Security для macOS,rules,,,,,rules|rules|rules,1,,1,,,8.60|6.79|6.31
+constraints,Kaspersky Small Office Security для macOS,model,,,,,rules|rules|rules,1,,1,,,10.35|6.58|7.64
+constraints,AnyDesk до 500 рублей,BM25,,demo-any,,,,1,,0,,,0.06
+constraints,AnyDesk до 500 рублей,rules,,,,,rules|rules|rules,1,,1,,,12.43|6.67|9.09
+constraints,AnyDesk до 500 рублей,model,,,,,rules|rules|rules,1,,1,,,7.35|11.69|11.39
+constraints,Astra Linux 1.8,BM25,487935,487935|demo-astra-app|539763,,1,,1,1,,1.0,,0.08
+constraints,Astra Linux 1.8,rules,487935,487935,,1,rules|rules|rules,1,1,,1.0,,6.50|5.48|10.58
+constraints,Astra Linux 1.8,model,487935,487935,,1,rules|rules|rules,1,1,,1.0,,10.42|10.33|9.66
+constraints,сервер до 85000 рублей,BM25,438239|467607|467610|482054,demo-srv,,0,,1,0,,0.0,,0.06
+constraints,сервер до 85000 рублей,rules,438239|467607|467610|482054,438239|467607|467610|482054,,1,rules|rules|rules,1,1,,1.0,,12.36|8.37|7.90
+constraints,сервер до 85000 рублей,model,438239|467607|467610|482054,438239|467607|467610|482054,,1,rules|rules|rules,1,1,,1.0,,13.64|11.45|10.94
+intent,сервер,BM25,438239|467607|467610|482054,demo-srv,,0,,1,0,,0.0,,0.04
+intent,сервер,rules,438239|467607|467610|482054,438239|467607|467610|482054,,1,rules|rules|rules,1,1,,1.0,,7.72|10.70|9.06
+intent,сервер,model,438239|467607|467610|482054,438239|467607|467610|482054,,1,rules|rules|rules,1,1,,1.0,,10.33|12.86|7.49
+intent,ПО для сервера,BM25,418697|536456|demo-srv,demo-srv|418697|536456|539763,,1,,1,1,,1.0,,0.07
+intent,ПО для сервера,rules,418697|536456|demo-srv,418697|536456|demo-srv,,1,rules|rules|rules,1,1,,1.0,,6.70|10.07|13.38
+intent,ПО для сервера,model,418697|536456|demo-srv,418697|536456|demo-srv,,1,rules|rules|rules,1,1,,1.0,,6.52|6.88|11.73
+intent,резервное копирование,BM25,418697|418698|536456|539763|477550,,,0,,1,0,,0.0,,0.03
+intent,резервное копирование,rules,418697|418698|536456|539763|477550,418697|418698|536456|539763,,1,rules|rules|rules,1,1,,1.0,,7.44|7.24|7.02
+intent,резервное копирование,model,418697|418698|536456|539763|477550,418697|418698|536456|539763,,1,rules|rules|rules,1,1,,1.0,,9.84|9.20|8.43
+intent,удаленный доступ,BM25,demo-any,,,0,,1,0,,0.0,,0.03
+intent,удаленный доступ,rules,demo-any,demo-any,,1,rules|rules|rules,1,1,,1.0,,13.34|6.83|8.60
+intent,удаленный доступ,model,demo-any,demo-any,,1,rules|rules|rules,1,1,,1.0,,11.89|10.21|11.66
+task,Как вернуть документы после отказа жесткого диска,BM25,418697|418698|536456|539763|477550,,,0,,1,0,,0.0,,0.05
+task,Как вернуть документы после отказа жесткого диска,rules,418697|418698|536456|539763|477550,,,0,rules|rules|rules,1,0,,0.0,,31.58|14.16|8.55
+task,Как вернуть документы после отказа жесткого диска,model,418697|418698|536456|539763|477550,418697|418698|536456|539763,,1,llm|llm|llm,1,1,,1.0,,1022.36|661.60|647.22
+task,Нужно сохранить вторую копию рабочих файлов,BM25,418697|418698|536456|539763|477550,,,0,,1,0,,0.0,,0.07
+task,Нужно сохранить вторую копию рабочих файлов,rules,418697|418698|536456|539763|477550,418697|418698|536456|539763,,1,rules|rules|rules,1,1,,1.0,,13.17|11.26|11.72
+task,Нужно сохранить вторую копию рабочих файлов,model,418697|418698|536456|539763|477550,418697|418698|536456|539763,,1,rules|rules|rules,1,1,,1.0,,9.83|10.39|27.86
+task,Хочу показать презентацию слушателям через интернет,BM25,535950|541589|541591|demo-web,,,0,,1,0,,0.0,,0.06
+task,Хочу показать презентацию слушателям через интернет,rules,535950|541589|541591|demo-web,,,0,rules|rules|rules,1,0,,0.0,,11.96|11.88|16.61
+task,Хочу показать презентацию слушателям через интернет,model,535950|541589|541591|demo-web,535950|541589|541591|demo-web,,1,llm|llm|llm,1,1,,1.0,,930.68|704.72|718.06
+task,Как собрать коллег на видеовстречу,BM25,535950|541589|541591|demo-web,539763,,0,,1,0,,0.0,,0.28
+task,Как собрать коллег на видеовстречу,rules,535950|541589|541591|demo-web,535950|541589|541591|demo-web,,1,rules|rules|rules,1,1,,1.0,,14.46|8.43|10.19
+task,Как собрать коллег на видеовстречу,model,535950|541589|541591|demo-web,535950|541589|541591|demo-web,,1,rules|rules|rules,1,1,,1.0,,8.33|7.79|6.81
+task,Хочу управлять рабочим компьютером из дома,BM25,demo-any,473582,,0,,1,0,,0.0,,0.08
+task,Хочу управлять рабочим компьютером из дома,rules,demo-any,,,0,rules|rules|rules,1,0,,0.0,,12.30|8.50|8.74
+task,Хочу управлять рабочим компьютером из дома,model,demo-any,demo-any,,1,llm|llm|llm,1,1,,1.0,,864.41|667.56|680.19
+task,Как помочь сотруднику подключившись к его рабочему столу,BM25,demo-any,,,0,,1,0,,0.0,,0.10
+task,Как помочь сотруднику подключившись к его рабочему столу,rules,demo-any,demo-any,,1,rules|rules|rules,1,1,,1.0,,11.46|8.40|7.32
+task,Как помочь сотруднику подключившись к его рабочему столу,model,demo-any,demo-any,,1,rules|rules|rules,1,1,,1.0,,8.96|7.27|7.55
+task,Чем защитить ноутбуки от вредоносных программ,BM25,demo-ks|demo-ks-ren|demo-max,,,0,,1,0,,0.0,,0.06
+task,Чем защитить ноутбуки от вредоносных программ,rules,demo-ks|demo-ks-ren|demo-max,demo-ks|demo-max,,1,rules|rules|rules,1,1,,1.0,,7.82|6.69|11.18
+task,Чем защитить ноутбуки от вредоносных программ,model,demo-ks|demo-ks-ren|demo-max,demo-ks|demo-max,,1,rules|rules|rules,1,1,,1.0,,8.14|9.94|7.72
+task,Подобрать защиту от заражения компьютеров,BM25,demo-ks|demo-ks-ren|demo-max,,,0,,1,0,,0.0,,0.04
+task,Подобрать защиту от заражения компьютеров,rules,demo-ks|demo-ks-ren|demo-max,demo-ks|demo-max,,1,rules|rules|rules,1,1,,1.0,,7.07|9.67|6.67
+task,Подобрать защиту от заражения компьютеров,model,demo-ks|demo-ks-ren|demo-max,demo-ks|demo-max,,1,rules|rules|rules,1,1,,1.0,,10.01|7.14|11.73
+task,Нужна машина для установки в серверную стойку,BM25,438239|467607|467610|482054,demo-srv|demo-365|418697|418698,,0,,1,0,,0.0,,0.13
+task,Нужна машина для установки в серверную стойку,rules,438239|467607|467610|482054,438239|467607|467610|482054,,1,rules|rules|rules,1,1,,1.0,,9.67|7.42|7.27
+task,Нужна машина для установки в серверную стойку,model,438239|467607|467610|482054,438239|467607|467610|482054,,1,rules|rules|rules,1,1,,1.0,,7.25|8.21|7.96
+task,Хочу печатать счета на бумаге,BM25,363882|521380|521379,539763,,0,,1,0,,0.0,,0.10
+task,Хочу печатать счета на бумаге,rules,363882|521380|521379,363882|521379,,1,rules|rules|rules,1,1,,1.0,,7.88|16.27|8.15
+task,Хочу печатать счета на бумаге,model,363882|521380|521379,363882|521379,,1,rules|rules|rules,1,1,,1.0,,9.03|8.51|9.17
+absent,Фрезерный станок ZX-9841,BM25,,,,,,1,,1,,,0.03
+absent,Фрезерный станок ZX-9841,rules,,,,,rules|rules|rules,1,,1,,,9.49|8.65|8.84
+absent,Фрезерный станок ZX-9841,model,,,,,rules|rules|rules,1,,1,,,47.26|14.03|15.41
+absent,Ищу холодильник для кухни,BM25,,demo-srv|demo-365|418697|418698,,,,1,,0,,,0.07
+absent,Ищу холодильник для кухни,rules,,,,,rules|rules|rules,1,,1,,,9.76|10.80|17.25
+absent,Ищу холодильник для кухни,model,,,,,rules|rules|rules,1,,1,,,23.77|23.84|21.23
+absent,Max Patrol 999,BM25,,,,,,1,,1,,,0.05
+absent,Max Patrol 999,rules,,,,,rules|rules|rules,1,,1,,,13.91|10.46|7.84
+absent,Max Patrol 999,model,,,,,rules|rules|rules,1,,1,,,9.27|8.60|7.93
+absent,Нужен монохромный лазерный принтер A4 Pantum P2507,BM25,,363882|521379|513625|526683,,,,1,,0,,,0.08
+absent,Нужен монохромный лазерный принтер A4 Pantum P2507,rules,,,,,rules|rules|rules,1,,1,,,8.80|9.04|7.56
+absent,Нужен монохромный лазерный принтер A4 Pantum P2507,model,,,,,rules|rules|rules,1,,1,,,9.49|8.19|10.36
+probe,Нужны вебинары или удаленный доступ,BM25,535950|541589|541591|demo-web|demo-any,demo-web,,1,,1,1,,0.39038,,0.05
+probe,Нужны вебинары или удаленный доступ,rules,535950|541589|541591|demo-web|demo-any,,,0,rules|rules|rules,1,0,,0.0,,10.83|10.58|10.15
+probe,Нужны вебинары или удаленный доступ,model,535950|541589|541591|demo-web|demo-any,535950|541589|541591|demo-web,,1,llm|llm|llm,1,1,,1.0,,2162.75|1572.00|1512.43
+probe,Ищу средство восстановления фотографий,BM25,418697|418698|536456|539763|477550,,,0,,1,0,,0.0,,0.15
+probe,Ищу средство восстановления фотографий,rules,418697|418698|536456|539763|477550,418697|418698|536456|539763,,1,rules|rules|rules,1,1,,1.0,,12.10|7.43|11.04
+probe,Ищу средство восстановления фотографий,model,418697|418698|536456|539763|477550,418697|418698|536456|539763,,1,rules|rules|rules,1,1,,1.0,,8.25|10.65|6.84
+probe,КриптоПро CSP версии 5.0,BM25,demo-csp-5.0,demo-csp-5.0|demo-tsp,,1,,1,1,,1.0,,0.10
+probe,КриптоПро CSP версии 5.0,rules,demo-csp-5.0,demo-csp-5.0,,1,rules|rules|rules,1,1,,1.0,,7.29|6.82|10.70
+probe,КриптоПро CSP версии 5.0,model,demo-csp-5.0,demo-csp-5.0,,1,rules|rules|rules,1,1,,1.0,,6.56|6.88|11.21
+probe,EP2 06605,BM25,473582,,,0,,1,0,,0.0,,0.05
+probe,EP2 06605,rules,473582,473582,,1,rules|rules|rules,1,1,,1.0,,6.32|5.99|7.64
+probe,EP2 06605,model,473582,473582,,1,rules|rules|rules,1,1,,1.0,,64.77|11.93|9.44
+probe,Енидеск,BM25,demo-any,,,0,,1,0,,0.0,,0.27
+probe,Енидеск,rules,demo-any,demo-any,,1,rules|rules|rules,1,1,,1.0,,22.10|6.07|6.24
+probe,Енидеск,model,demo-any,demo-any,,1,rules|rules|rules,1,1,,1.0,,7.13|7.84|6.46
+probe,мне нужен офис для дома и бизнеса,BM25,473582,473582|demo-srv|demo-365|418697,,1,,1,1,,1.0,,0.14
+probe,мне нужен офис для дома и бизнеса,rules,473582,473582,,1,rules|rules|rules,1,1,,1.0,,6.63|8.32|6.88
+probe,мне нужен офис для дома и бизнеса,model,473582,473582,,1,rules|rules|rules,1,1,,1.0,,12.71|9.84|7.45
+probe,Ищу платформу для онлайн лекций,BM25,535950|541589|541591|demo-web,demo-srv|demo-365|418697|418698,,0,,1,0,,0.0,,0.09
+probe,Ищу платформу для онлайн лекций,rules,535950|541589|541591|demo-web,535950|541589|541591|demo-web,,1,rules|rules|rules,1,1,,1.0,,9.22|5.88|9.20
+probe,Ищу платформу для онлайн лекций,model,535950|541589|541591|demo-web,535950|541589|541591|demo-web,,1,rules|rules|rules,1,1,,1.0,,7.22|6.82|8.78
+probe,Нужно исправить неполадку на чужом ПК по сети,BM25,demo-any,539763|demo-srv,,0,,1,0,,0.0,,0.08
+probe,Нужно исправить неполадку на чужом ПК по сети,rules,demo-any,,,0,rules|rules|rules,1,0,,0.0,,10.44|8.13|7.79
+probe,Нужно исправить неполадку на чужом ПК по сети,model,demo-any,demo-any,,1,llm|llm|llm,1,1,,1.0,,991.31|694.25|768.21
+probe,AnyDesk для Windows,BM25,,demo-any|demo-srv|demo-365|418697,,,,1,,0,,,0.15
+probe,AnyDesk для Windows,rules,,,,,rules|rules|rules,1,,1,,,8.46|6.03|6.17
+probe,AnyDesk для Windows,model,,,,,rules|rules|rules,1,,1,,,7.68|5.77|7.38
+probe,Покажи резиновую лодку,BM25,,,,,,1,,1,,,0.07
+probe,Покажи резиновую лодку,rules,,,,,rules|rules|rules,1,,1,,,8.52|7.29|6.99
+probe,Покажи резиновую лодку,model,,,,,rules|rules|rules,1,,1,,,9.49|8.13|6.94
+probe,КриптоПро CSP без версии 5.0,BM25,demo-csp-4.0,demo-csp-5.0|demo-tsp,,0,,1,0,,0.0,,0.11
+probe,КриптоПро CSP без версии 5.0,rules,demo-csp-4.0,demo-csp-4.0,,1,rules|rules|rules,1,1,,1.0,,13.90|7.51|7.58
+probe,КриптоПро CSP без версии 5.0,model,demo-csp-4.0,demo-csp-4.0,,1,rules|rules|rules,1,1,,1.0,,7.17|6.21|6.40
+probe,сервер до 83 999 рублей,BM25,,demo-srv,,,,1,,0,,,0.07
+probe,сервер до 83 999 рублей,rules,,,,,rules|rules|rules,1,,1,,,6.97|7.20|6.13
+probe,сервер до 83 999 рублей,model,,,,,rules|rules|rules,1,,1,,,7.47|7.36|6.82
+challenge,Наш бухгалтер хочет купить EP2-06605,BM25,473582,,,0,,1,0,,0.0,,0.05
+challenge,Наш бухгалтер хочет купить EP2-06605,rules,473582,,,0,rules|rules|rules,1,0,,0.0,,9.58|7.21|6.94
+challenge,Наш бухгалтер хочет купить EP2-06605,model,473582,,,0,rules|rules|rules,1,0,,0.0,,12.79|7.28|6.62
+challenge,дубликат документов на случай сбоя,BM25,418697|418698|536456|539763|477550,539763,,1,,1,1,,0.39038,,0.07
+challenge,дубликат документов на случай сбоя,rules,418697|418698|536456|539763|477550,,,0,rules|rules|rules,1,0,,0.0,,9.02|7.81|7.02
+challenge,дубликат документов на случай сбоя,model,418697|418698|536456|539763|477550,418697|418698|536456|539763,,1,llm|llm|llm,1,1,,1.0,,829.29|691.94|724.16
+challenge,надо разослать приглашения и провести видеоконференцию с клиентами,BM25,535950|541589|541591|demo-web,473582,,0,,1,0,,0.0,,0.13
+challenge,надо разослать приглашения и провести видеоконференцию с клиентами,rules,535950|541589|541591|demo-web,,,0,rules|rules|rules,1,0,,0.0,,9.91|10.80|7.71
+challenge,надо разослать приглашения и провести видеоконференцию с клиентами,model,535950|541589|541591|demo-web,,,0,llm_fallback|llm_fallback|llm_fallback,1,0,,0.0,,1866.05|1527.91|1517.51
+challenge,хочу работать с экраном другого сотрудника через сеть,BM25,demo-any,,,0,,1,0,,0.0,,0.08
+challenge,хочу работать с экраном другого сотрудника через сеть,rules,demo-any,,,0,rules|rules|rules,1,0,,0.0,,9.77|7.88|9.88
+challenge,хочу работать с экраном другого сотрудника через сеть,model,demo-any,,,0,rules|rules|rules,1,0,,0.0,,13.37|12.96|7.55
+challenge,Как обезопасить машины от троянов,BM25,demo-ks|demo-ks-ren|demo-max,,,0,,1,0,,0.0,,0.08
+challenge,Как обезопасить машины от троянов,rules,demo-ks|demo-ks-ren|demo-max,,,0,rules|rules|rules,1,0,,0.0,,7.30|6.86|6.87
+challenge,Как обезопасить машины от троянов,model,demo-ks|demo-ks-ren|demo-max,,,0,llm_abstained|llm_abstained|llm_abstained,1,0,,0.0,,875.39|645.65|627.50
+challenge,Pantum PC-211P,BM25,526683,526683|363882|521379|513625,,1,,1,1,,1.0,,0.14
+challenge,Pantum PC-211P,rules,526683,526683,,1,rules|rules|rules,1,1,,1.0,,10.78|7.57|14.05
+challenge,Pantum PC-211P,model,526683,526683,,1,rules|rules|rules,1,1,,1.0,,7.62|6.97|7.75
+challenge,продлить Kaspersky Small Office Security на год,BM25,demo-ks-ren,demo-ks|539763|473582,,0,,1,0,,0.0,,0.12
+challenge,продлить Kaspersky Small Office Security на год,rules,demo-ks-ren,demo-ks-ren,,1,rules|rules|rules,1,1,,1.0,,7.09|7.14|6.67
+challenge,продлить Kaspersky Small Office Security на год,model,demo-ks-ren,demo-ks-ren,,1,rules|rules|rules,1,1,,1.0,,6.60|6.63|5.90
+challenge,КриптоПро CSP версии 3.6,BM25,,demo-csp-4.0|demo-tsp,,,,1,,0,,,0.08
+challenge,КриптоПро CSP версии 3.6,rules,,,,,rules|rules|rules,1,,1,,,5.98|8.72|5.89
+challenge,КриптоПро CSP версии 3.6,model,,,,,rules|rules|rules,1,,1,,,6.47|6.03|6.38
+challenge,Кибер Бэкап версии 17.2,BM25,,536456|418697|418698|539763,,,,1,,0,,,0.09
+challenge,Кибер Бэкап версии 17.2,rules,,,,,rules|rules|rules,1,,1,,,6.39|5.97|6.15
+challenge,Кибер Бэкап версии 17.2,model,,,,,rules|rules|rules,1,,1,,,7.22|10.11|10.15
+challenge,мicrosoft 365 для семьи,BM25,demo-365,demo-365|demo-mouse|demo-srv|418697,,1,,1,1,,1.0,,0.09
+challenge,мicrosoft 365 для семьи,rules,demo-365,,,0,rules|rules|rules,1,0,,0.0,,8.89|7.92|7.83
+challenge,мicrosoft 365 для семьи,model,demo-365,,,0,rules|rules|rules,1,0,,0.0,,10.14|7.10|8.29
+challenge,нужен вертикальный пылесос,BM25,,,,,,1,,1,,,0.03
+challenge,нужен вертикальный пылесос,rules,,,,,rules|rules|rules,1,,1,,,24.68|6.12|9.43
+challenge,нужен вертикальный пылесос,model,,,,,rules|rules|rules,1,,1,,,8.38|10.47|8.69
+challenge,ищу железо в серверную стойку,BM25,438239|467607|467610|482054,,,0,,1,0,,0.0,,0.03
+challenge,ищу железо в серверную стойку,rules,438239|467607|467610|482054,438239|467607|467610|482054,,1,rules|rules|rules,1,1,,1.0,,6.21|6.61|10.22
+challenge,ищу железо в серверную стойку,model,438239|467607|467610|482054,438239|467607|467610|482054,,1,rules|rules|rules,1,1,,1.0,,8.36|7.31|7.73

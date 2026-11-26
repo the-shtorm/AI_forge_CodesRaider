@@ -1,0 +1,419 @@
+<?xml version='1.0' encoding='utf-8'?>
+<yml_catalog date="demo">
+  <shop>
+    <name>Демонстрационный каталог</name>
+    <company>Softline Smart Search demo</company>
+    <url>https://store.softline.ru</url>
+    <currencies>
+      <currency id="RUR" rate="1" />
+    </currencies>
+    <categories>
+      <category id="1033">Резервное копирование</category>
+      <category id="p">Принтеры и МФУ</category>
+      <category id="s">Расходные материалы</category>
+      <category id="sw">Программное обеспечение</category>
+      <category id="web">Вебинары и конференции</category>
+      <category id="86563">Rack-серверы</category>
+      <category id="av">Антивирусы</category>
+      <category id="r">Удаленный доступ</category>
+      <category id="687">Операционные системы</category>
+      <category id="mouse">Мыши</category>
+    </categories>
+    <offers>
+      <offer id="473582" available="true" group_id="391338">
+        <name>Microsoft Office для дома и бизнеса 2024</name>
+        <vendor>Программы и лицензии Microsoft Corporation</vendor>
+        <vendorUrl>https://store.softline.ru/microsoft/</vendorUrl>
+        <vendorCode>EP2-06605</vendorCode>
+        <url>https://store.softline.ru/microsoft/ep2-06605-473582/</url>
+        <categoryId>sw</categoryId>
+        <price>36584.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="418697" available="true" group_id="173614">
+        <name>Киберпротект Кибер Бэкап Стандартная редакция (лицензия для коммерческих организаций), для физического сервера</name>
+        <vendor>Киберпротект</vendor>
+        <vendorUrl>https://store.softline.ru/cyberprotect/</vendorUrl>
+        <vendorCode>PSCNL</vendorCode>
+        <url>https://store.softline.ru/cyberprotect/ps16nl-418697/</url>
+        <categoryId>1033</categoryId>
+        <price>79250.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="418698" available="true" group_id="173615">
+        <name>Киберпротект Кибер Бэкап Расширенная редакция (бессрочная лицензия для коммерческих организаций), для физического</name>
+        <vendor>Киберпротект</vendor>
+        <vendorUrl>https://store.softline.ru/cyberprotect/</vendorUrl>
+        <vendorCode>PACNL</vendorCode>
+        <url>https://store.softline.ru/cyberprotect/pa16nl-418698/</url>
+        <categoryId>1033</categoryId>
+        <price>187169.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="536456" available="true" group_id="442025">
+        <name>Киберпротект Кибер Бэкап Облачный (лицензия), Лицензия для физического сервера</name>
+        <vendor>Киберпротект</vendor>
+        <vendorUrl>https://store.softline.ru/cyberprotect/</vendorUrl>
+        <vendorCode>SPEAM1</vendorCode>
+        <url>https://store.softline.ru/cyberprotect/speam1-536456/</url>
+        <categoryId>1033</categoryId>
+        <price>1172.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="539763" available="true" group_id="444870">
+        <name>Киберпротект Кибер Бэкап Старт (подписка на 1 год, включая услугу по технической поддержке), 1 ПК</name>
+        <vendor>Киберпротект</vendor>
+        <vendorUrl>https://store.softline.ru/cyberprotect/</vendorUrl>
+        <vendorCode>СBSS1PC0GB-1Y-SUB</vendorCode>
+        <url>https://store.softline.ru/cyberprotect/bss1pc0gb-1y-sub-539763/</url>
+        <categoryId>1033</categoryId>
+        <price>1370.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="421468" available="false" group_id="173614">
+        <name>Киберпротект Кибер Бэкап Стандартная редакция (лицензия для коммерческих организаций), для физического сервера</name>
+        <vendor>Киберпротект</vendor>
+        <vendorUrl>https://store.softline.ru/cyberprotect/</vendorUrl>
+        <vendorCode>PSCNL</vendorCode>
+        <url>/?kind=offer&amp;id=421468</url>
+        <categoryId>1033</categoryId>
+        <price>103236.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="421471" available="false" group_id="173614">
+        <name>Киберпротект Кибер Бэкап Стандартная редакция (лицензия для коммерческих организаций), для физического сервера</name>
+        <vendor>Киберпротект</vendor>
+        <vendorUrl>https://store.softline.ru/cyberprotect/</vendorUrl>
+        <vendorCode>PSCNL</vendorCode>
+        <url>/?kind=offer&amp;id=421471</url>
+        <categoryId>1033</categoryId>
+        <price>0.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="535950" available="true" group_id="414326">
+        <name>МТС Линк Optimum 30</name>
+        <vendor>МТС Линк</vendor>
+        <vendorUrl>https://store.softline.ru/webinar/</vendorUrl>
+        <url>https://store.softline.ru/webinar/-535950/</url>
+        <categoryId>web</categoryId>
+        <price>6620.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="541589" available="true" group_id="447242">
+        <name>МТС Линк Стандарт</name>
+        <vendor>МТС Линк</vendor>
+        <vendorUrl>https://store.softline.ru/webinar/</vendorUrl>
+        <url>https://store.softline.ru/webinar/-541589/</url>
+        <categoryId>web</categoryId>
+        <price>3600.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="541591" available="true" group_id="447243">
+        <name>МТС Линк Про</name>
+        <vendor>МТС Линк</vendor>
+        <vendorUrl>https://store.softline.ru/webinar/</vendorUrl>
+        <url>https://store.softline.ru/webinar/-541591/</url>
+        <categoryId>web</categoryId>
+        <price>4500.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="363882" available="true">
+        <name>Pantum P2500W</name>
+        <vendor>Pantum</vendor>
+        <vendorUrl>https://store.softline.ru/pantum/</vendorUrl>
+        <vendorCode>P2500W</vendorCode>
+        <url>https://store.softline.ru/pantum/p2500w-363882/</url>
+        <categoryId>p</categoryId>
+        <price>10368.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Технология печати">лазерная</param>
+        <param name="Цветность">монохромная</param>
+        <param name="Формат">A4</param>
+      </offer>
+      <offer id="521380" available="true">
+        <name>Pantum P2500W</name>
+        <vendor>Pantum</vendor>
+        <vendorUrl>https://store.softline.ru/pantum/</vendorUrl>
+        <vendorCode>P2500W</vendorCode>
+        <url>/?kind=offer&amp;id=521380</url>
+        <categoryId>p</categoryId>
+        <price>10368.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Технология печати">лазерная</param>
+        <param name="Цветность">монохромная</param>
+        <param name="Формат">A4</param>
+      </offer>
+      <offer id="521379" available="true">
+        <name>Pantum BM1800W</name>
+        <vendor>Pantum</vendor>
+        <vendorUrl>https://store.softline.ru/pantum/</vendorUrl>
+        <vendorCode>BM1800W</vendorCode>
+        <url>https://store.softline.ru/pantum/bm1800w-521379/</url>
+        <categoryId>p</categoryId>
+        <price>14491.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Технология печати">лазерная</param>
+        <param name="Цветность">монохромная</param>
+        <param name="Формат">A4</param>
+      </offer>
+      <offer id="526683" available="true">
+        <name>Картридж Pantum PC-211P</name>
+        <vendor>Pantum</vendor>
+        <vendorUrl>https://store.softline.ru/pantum/</vendorUrl>
+        <vendorCode>PC-211P</vendorCode>
+        <url>https://store.softline.ru/pantum/pc-211p-526683/</url>
+        <categoryId>s</categoryId>
+        <price>3975.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="513625" available="true">
+        <name>Картридж Pantum TL-C2318H</name>
+        <vendor>Pantum</vendor>
+        <vendorUrl>https://store.softline.ru/pantum/</vendorUrl>
+        <vendorCode>TL-C2318H</vendorCode>
+        <url>https://store.softline.ru/pantum/tl-c2318h-513625/</url>
+        <categoryId>s</categoryId>
+        <price>3456.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="438239" available="true">
+        <name>DEPO Storm 3470S2A</name>
+        <vendor>depo</vendor>
+        <vendorUrl>https://store.softline.ru/depo/</vendorUrl>
+        <url>/?kind=offer&amp;id=438239</url>
+        <categoryId>86563</categoryId>
+        <price>84000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Базовая модель">DEPO Storm 3470S2A</param>
+        <param name="Единица продажи">шт</param>
+      </offer>
+      <offer id="467607" available="true">
+        <name>DEPO Storm 3470E2A</name>
+        <vendor>depo</vendor>
+        <vendorUrl>https://store.softline.ru/depo/</vendorUrl>
+        <url>/?kind=offer&amp;id=467607</url>
+        <categoryId>86563</categoryId>
+        <price>84000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Базовая модель">DEPO Storm 3470E2A</param>
+        <param name="Единица продажи">шт</param>
+      </offer>
+      <offer id="467610" available="true">
+        <name>DEPO Storm 3470Z1A</name>
+        <vendor>depo</vendor>
+        <vendorUrl>https://store.softline.ru/depo/</vendorUrl>
+        <url>/?kind=offer&amp;id=467610</url>
+        <categoryId>86563</categoryId>
+        <price>84000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Базовая модель">DEPO Storm 3470Z1A</param>
+        <param name="Единица продажи">шт</param>
+      </offer>
+      <offer id="482054" available="true">
+        <name>Supermicro SuperServer 621P-TRT</name>
+        <vendor>supermicro</vendor>
+        <vendorUrl>https://store.softline.ru/supermicro/</vendorUrl>
+        <url>/?kind=offer&amp;id=482054</url>
+        <categoryId>86563</categoryId>
+        <price>84000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Базовая модель">Supermicro SuperServer 621P-TRT</param>
+        <param name="Единица продажи">шт</param>
+      </offer>
+      <offer id="487935" available="true" group_id="121231">
+        <name>Astra Linux Special Edition 1.8</name>
+        <vendor>Группа Астра</vendor>
+        <vendorUrl>https://store.softline.ru/astralinux/</vendorUrl>
+        <url>/?kind=offer&amp;id=487935</url>
+        <categoryId>687</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Версия">1.8</param>
+      </offer>
+      <offer id="demo-astra-app" available="true" group_id="viewer">
+        <name>Granulex Viewer для Astra Linux</name>
+        <vendor>Granulex</vendor>
+        <vendorUrl>https://store.softline.ru/granulex/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-astra-app</url>
+        <categoryId>sw</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description>Astra Linux</description>
+      </offer>
+      <offer id="demo-ks" available="true" group_id="3761">
+        <name>Kaspersky Small Office Security</name>
+        <vendor>Kaspersky</vendor>
+        <vendorUrl>https://store.softline.ru/kaspersky/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-ks</url>
+        <categoryId>av</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Тип лицензии">новая</param>
+        <param name="Количество устройств">5</param>
+        <param name="Срок (мес.)">12</param>
+        <param name="Единица продажи">пакет</param>
+        <param name="Платформа">Windows</param>
+      </offer>
+      <offer id="demo-ks-ren" available="true" group_id="3761">
+        <name>Продление Kaspersky Small Office Security</name>
+        <vendor>Kaspersky</vendor>
+        <vendorUrl>https://store.softline.ru/kaspersky/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-ks-ren</url>
+        <categoryId>av</categoryId>
+        <price>450.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Тип лицензии">продление</param>
+        <param name="Количество устройств">10</param>
+        <param name="Срок (мес.)">12</param>
+        <param name="Единица продажи">пакет</param>
+        <param name="Платформа">Windows</param>
+      </offer>
+      <offer id="demo-csp-4.0" available="true" group_id="22268">
+        <name>КриптоПро CSP 4.0</name>
+        <vendor>КриптоПро</vendor>
+        <vendorUrl>https://store.softline.ru/kripto-pro/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-csp-4.0</url>
+        <categoryId>sw</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Версия">4.0</param>
+      </offer>
+      <offer id="demo-csp-5.0" available="true" group_id="22268">
+        <name>КриптоПро CSP 5.0</name>
+        <vendor>КриптоПро</vendor>
+        <vendorUrl>https://store.softline.ru/kripto-pro/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-csp-5.0</url>
+        <categoryId>sw</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+        <param name="Версия">5.0</param>
+      </offer>
+      <offer id="demo-tsp" available="true" group_id="tsp">
+        <name>TSP Client</name>
+        <vendor>КриптоПро</vendor>
+        <vendorUrl>https://store.softline.ru/kripto-pro/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-tsp</url>
+        <categoryId>sw</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description>Для КриптоПро CSP 5.0</description>
+      </offer>
+      <offer id="demo-any" available="true" group_id="306539">
+        <name>AnyDesk Standard</name>
+        <vendor>AnyDesk</vendor>
+        <vendorUrl>https://store.softline.ru/anydesk/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-any</url>
+        <categoryId>r</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="demo-scan" available="true" group_id="46421">
+        <name>Эшелон СКАНЕР-ВС</name>
+        <vendor>Эшелон</vendor>
+        <vendorUrl>https://store.softline.ru/npo-echelon/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-scan</url>
+        <categoryId>sw</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="demo-max" available="true" group_id="437421">
+        <name>MaxPatrol Endpoint Protection Platform</name>
+        <vendor>Positive Technologies</vendor>
+        <vendorUrl>https://store.softline.ru/positive-technologies/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-max</url>
+        <categoryId>av</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="demo-365" available="true" group_id="165034">
+        <name>Microsoft 365 для семьи</name>
+        <vendor>Microsoft</vendor>
+        <vendorUrl>https://store.softline.ru/microsoft/</vendorUrl>
+        <vendorCode>6GQ-00084</vendorCode>
+        <url>/?kind=offer&amp;id=demo-365</url>
+        <categoryId>sw</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="demo-mouse" available="true" group_id="defender">
+        <name>Defender Accura MM-365</name>
+        <vendor>Defender</vendor>
+        <vendorUrl>https://store.softline.ru/defender/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-mouse</url>
+        <categoryId>mouse</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="477550" available="true" group_id="uranium">
+        <name>Uranium Backup</name>
+        <vendor>Uranium</vendor>
+        <vendorUrl>https://store.softline.ru/uranium-backup/</vendorUrl>
+        <url>/?kind=offer&amp;id=477550</url>
+        <categoryId>1033</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="53955" available="true" group_id="cyberos">
+        <name>Киберпротект ОС</name>
+        <vendor>Киберпротект</vendor>
+        <vendorUrl>https://store.softline.ru/cyberprotect/</vendorUrl>
+        <url>/?kind=offer&amp;id=53955</url>
+        <categoryId>687</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+      <offer id="demo-srv" available="true" group_id="win-srv">
+        <name>Лицензия для сервера Windows Server</name>
+        <vendor>Microsoft</vendor>
+        <vendorUrl>https://store.softline.ru/microsoft/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-srv</url>
+        <categoryId>sw</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description>Сервер. ПО для сервера.</description>
+        <param name="Платформа">Windows</param>
+      </offer>
+      <offer id="demo-web" available="true" group_id="eclass">
+        <name>eClass вебинары</name>
+        <vendor>ГиперМетод</vendor>
+        <vendorUrl>https://store.softline.ru/hypermethod-ibs/</vendorUrl>
+        <url>/?kind=offer&amp;id=demo-web</url>
+        <categoryId>web</categoryId>
+        <price>1000.0</price>
+        <currencyId>RUR</currencyId>
+        <description />
+      </offer>
+    </offers>
+  </shop>
+</yml_catalog>
