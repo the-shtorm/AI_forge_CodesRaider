@@ -12,7 +12,7 @@ Spring принимает `POST /v1/search` на порту 8080. Импортё
 $feed = (Resolve-Path "$env:USERPROFILE/Downloads/Mindbox.yml.gz.xml").Path
 docker compose --profile ml up -d --build --wait model
 docker compose build app
-docker compose run --rm --no-deps --volume "${feed}:/input/catalog.xml:ro" app import --embeddings
+docker compose run --rm --no-deps --volume "${feed}:/catalog.xml:ro" app import --embeddings
 docker compose up -d --force-recreate --wait app
 
 $body = [Text.Encoding]::UTF8.GetBytes((@{ q = 'Как восстановить файлы после сбоя?' } | ConvertTo-Json))
@@ -23,7 +23,7 @@ $result.top4 | Select-Object role,offer_id,sku,name,price_minor,currency
 
 Для проверки по артикулу используйте `EP2-06605`. На снимке от 25 ноября 2026 года ожидается предложение `473582` с ценой 36 584 ₽. Поле `price_minor` содержит копейки. Доступность индекса и совместимого энкодера видна в [состоянии Spring](http://localhost:8080/health).
 
-Для лексического запуска достаточно образа `app`: выполните импорт без `--embeddings` и запустите Spring. Новый снимок активируется после успешного импорта; уже запущенный Spring открывает его при перезапуске. Снимки сохраняются в томе `search-data`, журнал — в отдельном томе `search-events`. Каждая успешная выдача получает `search_id`, в том числе пустая. [Контракт поиска](docs/SEARCH_API.md)
+Для лексического запуска достаточно образа `app`. Выполните импорт без `--embeddings` и запустите Spring. Новый снимок активируется после успешного импорта, а запущенный Spring открывает его при перезапуске. Снимки сохраняются в томе `snapshots`, журнал — в отдельном томе `events`. Каждая успешная выдача получает `search_id`, в том числе пустая. [Контракт поиска](docs/SEARCH_API.md)
 
 На снимке с векторами `SEMANTIC_MODE=auto` включает смысловой поиск по задаче, когда профиль FastAPI совпадает с профилем индекса. Для сравнения на том же снимке задайте `SEMANTIC_MODE=lexical` и пересоздайте контейнер `app`. Поле `mode` в ответе показывает, какой путь выполнился для данного запроса.
 

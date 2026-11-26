@@ -1,8 +1,5 @@
 package ru.codesraider.smartsearch.catalog;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -10,6 +7,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import ru.codesraider.smartsearch.storage.Sqlite;
 
 final class CatalogDatabase {
     private final Connection db;
@@ -22,18 +20,12 @@ final class CatalogDatabase {
     private final PreparedStatement param;
     private int buffered;
 
-    CatalogDatabase(Connection db) throws SQLException, IOException {
+    CatalogDatabase(Connection db) throws SQLException {
         this.db = db;
-        try (var stmt = db.createStatement();
-                InputStream ddl = getClass().getResourceAsStream("/sql/catalog-v1.sql")) {
-            if (ddl == null) throw new IOException("Missing /sql/catalog-v1.sql");
-            // This database is private staging output until commit and atomic activation.
+        try (var stmt = db.createStatement()) {
             stmt.execute("PRAGMA cache_size=-32000");
-            String sql =
-                    new String(ddl.readAllBytes(), StandardCharsets.UTF_8)
-                            .replaceAll("(?m)--[^\\r\\n]*", "");
-            for (String command : sql.split(";")) if (!command.isBlank()) stmt.execute(command);
         }
+        Sqlite.createV1(db, "catalog");
         db.setAutoCommit(false);
         param =
                 prepared(
@@ -115,8 +107,8 @@ final class CatalogDatabase {
                 """
                 INSERT INTO offer(offer_id,entity_key,group_id,family_key,vendor_id,category_id,name,sku_raw,sku_norm,
                   url,description,sales_notes,available,currency,price_minor,old_price_minor,product_type,base_model,
-                  version,edition,license_type,term_months,device_count,seat_count,seat_max,price_unit,fact_sources_json)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)\
+                  version,edition,license_type,term_months,device_count,seat_count,seat_max,min_order_qty,price_unit,fact_sources_json)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)\
                 """,
                 o.id,
                 "offer/" + o.id,
@@ -143,6 +135,7 @@ final class CatalogDatabase {
                 o.deviceCount,
                 o.seatCount,
                 o.seatMax,
+                o.minOrder,
                 o.priceUnit,
                 FeedOffer.JSON.writeValueAsString(o.facts));
         int i = 0;
@@ -236,6 +229,7 @@ final class CatalogDatabase {
                 "positive-technologies/maxpatrol-endpoint-protection-platform/");
         familyAlias("165034", "Microsoft 365 Family", "365", "microsoft/microsoft-365-for-family/");
         if (vendors.contains("webinar")) alias("мтс", "vendor/webinar");
+        if (vendors.contains("microsoft")) alias("микрософт", "vendor/microsoft");
         if (vendors.contains("cyberprotect") && categories.containsKey("1033")) {
             String key = "collection/cyberprotect-1033";
             entity(
@@ -245,7 +239,9 @@ final class CatalogDatabase {
                     "Кибер Бэкап",
                     "https://store.softline.ru/cyberprotect/?filter%5Bcategory%5D%5B%5D=1033");
             update("INSERT INTO collection_scope VALUES(?,?,?)", key, "cyberprotect", "1033");
-            alias("кибер бэкап", key);
+            for (String term : java.util.List.of("кибер бэкап", "кибер бекап", "cyber backup", "кибер backup", "кибербэкап")) {
+                alias(term, key);
+            }
         }
         relation(
                 "P2500W",

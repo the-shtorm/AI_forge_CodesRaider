@@ -126,6 +126,25 @@ final class SearchCatalog implements AutoCloseable {
                 List.of(q, q));
     }
 
+    List<Row> printerModel(String sku) throws SQLException {
+        return rows("""
+                SELECT e.* FROM offer o JOIN entity e ON e.entity_key=o.entity_key
+                WHERE o.sku_norm=? AND o.vendor_id='pantum' AND o.category_id='93995'
+                ORDER BY o.offer_id
+                """, List.of(sku));
+    }
+
+    Row exactName(String name, List<String> keys) throws SQLException {
+        if (keys.isEmpty()) return null;
+        var where = new Where();
+        where.oneOf("entity_key", keys);
+        return rows("SELECT * FROM entity WHERE " + where.sql()
+                + " ORDER BY CASE kind WHEN 'collection' THEN 0 WHEN 'vendor' THEN 1"
+                + " WHEN 'family' THEN 2 WHEN 'category' THEN 3 ELSE 4 END,id", where.args)
+                .stream().filter(row -> !"offer".equals(row.str("kind"))
+                        && name.equals(SearchInput.normalize(row.str("name")))).findFirst().orElse(null);
+    }
+
     List<String> serverOfferIds() throws SQLException {
         // Even the Rack-server leaf in this feed contains DEPO Race workstations.
         return rows(
@@ -255,37 +274,42 @@ final class SearchCatalog implements AutoCloseable {
         var w = new Where();
         for (String k :
                 List.of("category_id", "vendor_id", "version", "license_type", "term_months"))
-            if (filters.containsKey(k)) w.add("o." + k + "=?", filters.get(k));
+            if (filters.containsKey(k)) w.add("o." + k + "=?",
+                    k.equals("version") ? SearchInput.normalize(filters.get(k).toString()) : filters.get(k));
         if (Boolean.TRUE.equals(filters.get("available_only"))) w.add("o.available=1");
-        if (filters.containsKey("platform"))
-            w.add(
-                    "EXISTS(SELECT 1 FROM offer_param p WHERE p.offer_id=o.offer_id"
-                            + " AND field_key='platform' AND value_norm=?)",
-                    SearchInput.normalize(filters.get("platform").toString()));
+        if (filters.containsKey("platform")) {
+            String platform = SearchInput.normalize(filters.get("platform").toString());
+            w.add("""
+                    (EXISTS(SELECT 1 FROM offer_param p WHERE p.offer_id=o.offer_id
+                            AND p.field_key='platform' AND p.value_norm=?)
+                        OR EXISTS(SELECT 1 FROM json_each(o.fact_sources_json,'$.platform.values') p WHERE p.value=?))
+                    """, platform, platform);
+        }
         for (String dim : List.of("seat", "device")) {
             Object count = filters.get(dim + "_count");
             if (count != null)
-                w.add(
-                        "(o."
-                                + dim
-                                + "_count>=? OR (? BETWEEN o."
-                                + dim
-                                + "_min AND o."
-                                + dim
-                                + "_max))",
-                        count,
-                        count);
+                w.add("""
+                        (o.%1$s_count>=? OR (o.price_unit='%1$s' AND o.%1$s_count>0
+                                AND o.%1$s_min IS NULL AND o.%1$s_max IS NULL)
+                         OR ((o.%1$s_min<=? OR (o.%1$s_min IS NULL
+                                    AND json_extract(o.fact_sources_json,'$.%1$s_min.open')=1))
+                             AND (o.%1$s_max>=? OR (o.%1$s_max IS NULL
+                                    AND json_extract(o.fact_sources_json,'$.%1$s_max.open')=1))))
+                        """.formatted(dim), count, count, count);
         }
         if (filters.containsKey("max_price_minor")) {
             w.add(
-                    "o.currency=? AND o.price_minor>0 AND (CASE o.price_unit WHEN 'package' THEN"
-                            + " CASE WHEN COALESCE(o.min_order_qty,1)=1 THEN o.price_minor END WHEN"
-                            + " 'seat' THEN o.price_minor * max(COALESCE(o.min_order_qty,1),?) WHEN"
-                            + " 'device' THEN o.price_minor * max(COALESCE(o.min_order_qty,1),?)"
-                            + " END)<=?",
+                    """
+                    o.currency=? AND o.price_minor>0 AND (CASE o.price_unit
+                        WHEN 'package' THEN CASE WHEN o.min_order_qty=1 OR (o.min_order_qty IS NULL
+                            AND json_extract(o.fact_sources_json,'$.price_unit.basis')='physical_unit') THEN 1 END
+                        WHEN 'seat' THEN max(o.min_order_qty,1 + (? - 1) / o.seat_count)
+                        WHEN 'device' THEN max(o.min_order_qty,1 + (? - 1) / o.device_count)
+                    END)<=? / o.price_minor
+                    """,
                     filters.getOrDefault("currency", "RUB"),
-                    filters.getOrDefault("seat_count", 1),
-                    filters.getOrDefault("device_count", 1),
+                    filters.get("seat_count"),
+                    filters.get("device_count"),
                     filters.get("max_price_minor"));
         }
         return w;
@@ -419,11 +443,17 @@ final class SearchCatalog implements AutoCloseable {
     }
 
     List<Map<String, Object>> detailedOffers(List<Row> rows) throws SQLException {
+        var offers = rows.stream().map(Row::offer).toList();
+        addAttributes(offers);
+        return offers;
+    }
+
+    void addAttributes(List<Map<String, Object>> offers) throws SQLException {
         Map<String, Map<String, List<String>>> byId = new HashMap<>();
-        for (int i = 0; i < rows.size(); i += 300) {
+        for (int i = 0; i < offers.size(); i += 300) {
             var ids =
-                    rows.subList(i, Math.min(i + 300, rows.size())).stream()
-                            .map(r -> r.str("offer_id"))
+                    offers.subList(i, Math.min(i + 300, offers.size())).stream()
+                            .map(r -> r.get("offer_id"))
                             .toList();
             for (var p :
                     rows(
@@ -436,18 +466,29 @@ final class SearchCatalog implements AutoCloseable {
                         .add(p.str("value"));
             }
         }
-        return rows.stream()
-                .map(
-                        r -> {
-                            var dto = r.offer();
-                            dto.put("attributes", byId.getOrDefault(r.str("offer_id"), Map.of()));
-                            return dto;
-                        })
-                .toList();
+        for (var offer : offers) {
+            var attributes = byId.get(offer.get("offer_id"));
+            if (attributes != null) offer.put("attributes", attributes);
+        }
+    }
+
+    Map<String, String> detailOffers(List<Map<String, Object>> shown, Map<String, Object> filters)
+            throws SQLException {
+        if (shown.isEmpty()) return Map.of();
+        var keys = shown.stream().map(card -> (String) card.get("family_key")).distinct().toList();
+        var where = where(filters);
+        where.oneOf("o.family_key", keys);
+        var detail = new LinkedHashMap<String, String>();
+        for (var row : rows("SELECT o.offer_id,o.family_key FROM offer o WHERE " + where.sql()
+                + " ORDER BY o.offer_id", where.args)) {
+            detail.put(row.str("offer_id"), row.str("family_key"));
+        }
+        return detail;
     }
 
     List<Map<String, Object>> complements(
-            List<Row> anchors, Map<String, Object> filters, int capacity) throws SQLException {
+            List<Row> anchors, Map<String, Object> filters, int capacity,
+            List<Map<String, Object>> evaluations) throws SQLException {
         Set<String> used =
                 anchors.stream().map(r -> r.str("family_key")).collect(Collectors.toSet());
         List<Map<String, Object>> cards = new ArrayList<>();
@@ -461,7 +502,7 @@ final class SearchCatalog implements AutoCloseable {
                 if (used.contains(family)) continue;
                 Row candidateFamily = byKey(family);
                 for (var candidate : variants(candidateFamily, filters)) {
-                    List<Map<String, Object>> checks = check(anchor, candidate, relation);
+                    List<Map<String, Object>> checks = check(anchor, candidate, relation, evaluations);
                     if (checks.isEmpty()) continue;
                     var card = candidate.card("complement", "COMPATIBLE_CONSUMABLE");
                     card.put("checks", checks);
@@ -473,58 +514,61 @@ final class SearchCatalog implements AutoCloseable {
             }
         }
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Row anchor : anchors) {
-            var available =
-                    cards.stream()
-                            .filter(c -> anchor.str("offer_id").equals(c.get("anchor_offer_id")))
-                            .filter(c -> !used.contains(c.get("family_key")))
-                            .sorted(Comparator.comparingInt(c -> (int) c.get("_tier")))
-                            .toList();
-            if (available.isEmpty()) continue;
-            int best = (int) available.getFirst().get("_tier");
-            for (var card : available) {
-                if ((int) card.get("_tier") != best || out.size() == capacity) break;
-                if (used.add((String) card.get("family_key"))) {
-                    card.remove("_tier");
-                    out.add(card);
-                }
+        int best = cards.stream().mapToInt(card -> (int) card.get("_tier")).min().orElse(-1);
+        for (var card : cards) {
+            if (out.size() == capacity) break;
+            if ((int) card.get("_tier") == best && used.add((String) card.get("family_key"))) {
+                card.remove("_tier");
+                out.add(card);
             }
         }
         return out;
     }
 
-    private List<Map<String, Object>> check(Row anchor, Row candidate, Row rule) {
+    private List<Map<String, Object>> check(Row anchor, Row candidate, Row rule,
+                                           List<Map<String, Object>> evaluations) {
         List<Map<String, Object>> checks = new ArrayList<>();
         JsonNode predicates = JSON.readTree(rule.str("predicates_json"));
         if (!predicates.isArray()) return List.of();
         for (JsonNode pred : predicates) {
             String field = pred.path("field").asString("");
             String a = null, b = null;
+            String result = "unknown";
             if ("supported_device".equals(field)) {
                 String vendor = pred.path("vendor_id").asString("");
-                if (!vendor.equals(anchor.str("vendor_id"))
-                        || !vendor.equals(candidate.str("vendor_id"))) return List.of();
                 a = anchor.str("sku");
                 b = candidate.str("sku");
-                if (a == null
-                        || b == null
-                        || !a.equalsIgnoreCase(pred.path("anchor_sku").asString(""))
-                        || !b.equalsIgnoreCase(pred.path("candidate_sku").asString("")))
-                    return List.of();
+                if (a != null && b != null && !vendor.isBlank()) {
+                    result = vendor.equals(anchor.str("vendor_id")) && vendor.equals(candidate.str("vendor_id"))
+                            && SearchIndex.normalizeSku(a).equals(SearchIndex.normalizeSku(pred.path("anchor_sku").asString("")))
+                            && SearchIndex.normalizeSku(b).equals(SearchIndex.normalizeSku(pred.path("candidate_sku").asString("")))
+                            ? "pass" : "fail";
+                }
             } else if ("compatible_versions".equals(field)) {
                 String ak = pred.path("anchor_field").asString(""),
                         bk = pred.path("candidate_field").asString("");
-                if (!Set.of("version", "edition", "license_type").contains(ak)
-                        || !Set.of("version", "edition", "license_type").contains(bk))
-                    return List.of();
-                a = anchor.str(ak);
-                b = candidate.str(bk);
-                if (a == null
-                        || b == null
-                        || !a.equalsIgnoreCase(pred.path("anchor_equals").asString(""))
-                        || !b.equalsIgnoreCase(pred.path("candidate_equals").asString("")))
-                    return List.of();
-            } else return List.of();
+                Set<String> fields = Set.of("version", "edition", "license_type");
+                if (fields.contains(ak) && fields.contains(bk)) {
+                    a = anchor.str(ak);
+                    b = candidate.str(bk);
+                    if (a != null && b != null) {
+                        result = a.equalsIgnoreCase(pred.path("anchor_equals").asString(""))
+                                && b.equalsIgnoreCase(pred.path("candidate_equals").asString("")) ? "pass" : "fail";
+                    }
+                }
+            }
+            var evaluation = new LinkedHashMap<String, Object>();
+            evaluation.put("field", field);
+            evaluation.put("anchor_offer_id", anchor.str("offer_id"));
+            evaluation.put("candidate_offer_id", candidate.str("offer_id"));
+            evaluation.put("rule_id", rule.str("rule_id"));
+            evaluation.put("rule_version", rule.str("rule_version"));
+            evaluation.put("source_url", rule.str("source_url"));
+            evaluation.put("anchor_value", a);
+            evaluation.put("candidate_value", b);
+            evaluation.put("result", result);
+            evaluations.add(evaluation);
+            if (!"pass".equals(result)) return List.of();
             checks.add(
                     Map.of(
                             "field",
@@ -567,7 +611,7 @@ final class SearchCatalog implements AutoCloseable {
                         "черно-белый",
                         "a4",
                         "а4",
-                        "pantum");
+                        "pantum", "пантум");
         for (String token : q.split("(?U)[^\\p{L}\\d-]+"))
             if (!token.isEmpty()
                     && !token.equalsIgnoreCase(requested)

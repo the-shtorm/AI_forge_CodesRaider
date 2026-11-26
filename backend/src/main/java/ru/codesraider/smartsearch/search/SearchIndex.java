@@ -36,6 +36,7 @@ import org.apache.lucene.search.KnnFloatVectorQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.PrefixQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TermInSetQuery;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.grouping.GroupingSearch;
@@ -47,6 +48,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import ru.codesraider.smartsearch.modelclient.EncoderClient;
+import ru.codesraider.smartsearch.storage.Sqlite;
 import tools.jackson.databind.json.JsonMapper;
 
 /** A reader pins one immutable SQLite/Lucene snapshot for the lifetime of this process. */
@@ -56,6 +58,8 @@ public class SearchIndex implements AutoCloseable {
     private static final Logger LOG = LoggerFactory.getLogger(SearchIndex.class);
     private static final Map<String, Float> FIELDS = Map.of("family_name", 8f, "name", 6f, "vendor", 4f,
             "category", 3f, "attributes", 2f, "description", 1f);
+    private static final Map<String, Float> LEGACY_FIELDS = Map.of("family", 8f, "name", 6f, "vendor", 4f,
+            "category", 3f, "facts", 2f, "description", 1f);
     private static final int LEXICAL_LIMIT = 100;
     private static final int VECTOR_LIMIT = 50;
     private static final Pattern DASHES = Pattern.compile("[‐‑‒–—−]");
@@ -70,10 +74,11 @@ public class SearchIndex implements AutoCloseable {
     private Path catalog;
     private String version;
     private String profile;
+    private boolean legacy;
     private ScheduledExecutorService monitor;
     private volatile boolean compatible;
 
-    public SearchIndex(@Value("${SNAPSHOTS_DIR:data/snapshots}") String snapshots,
+    public SearchIndex(@Value("${search.snapshots-dir:${SNAPSHOTS_DIR:data/snapshots}}") String snapshots,
                        @Value("${MODEL_BASE_URL:http://model:8000}") String baseUrl,
                        @Value("${SEMANTIC_MODE:auto}") String mode,
                        @Value("${MODEL_QUERY_TIMEOUT_MS:200}") int timeoutMillis) {
@@ -98,9 +103,18 @@ public class SearchIndex implements AutoCloseable {
             if (!Files.isRegularFile(db) || !Files.isDirectory(folder.resolve("lucene"))) {
                 throw new IOException("Incomplete snapshot");
             }
-            try (var conn = DriverManager.getConnection(sqliteUrl(db)); var stmt = conn.createStatement();
-                 var rs = stmt.executeQuery("SELECT 1 FROM offer LIMIT 1")) {
-                if (!rs.next()) throw new IOException("Catalog has no offers");
+            long declaredOffers = manifest.path("offer_count").asLong(-1);
+            boolean hasSchema = manifest.has("schema_version");
+            if (hasSchema && (manifest.path("schema_version").asInt(0) != 1 || declaredOffers <= 0)) {
+                throw new IOException("Unsupported catalog schema or missing offer count");
+            }
+            try (var conn = DriverManager.getConnection(sqliteUrl(db)); var stmt = conn.createStatement()) {
+                if (hasSchema && Sqlite.version(conn) != 1) throw new IOException("SQLite schema does not match the manifest");
+                try (var rs = stmt.executeQuery(declaredOffers < 0 ? "SELECT 1 FROM offer LIMIT 1" : "SELECT count(*) FROM offer")) {
+                    if (!rs.next() || (declaredOffers >= 0 && (declaredOffers <= 0 || rs.getLong(1) != declaredOffers))) {
+                        throw new IOException("Catalog offer count does not match the manifest");
+                    }
+                }
             }
             directory = FSDirectory.open(folder.resolve("lucene"));
             reader = DirectoryReader.open(directory);
@@ -108,7 +122,14 @@ public class SearchIndex implements AutoCloseable {
             if (!active.equals(metadata.get("index_version"))) {
                 throw new IOException("Lucene and SQLite snapshot versions disagree");
             }
-            if (useVectors && manifest.path("vector_count").asLong(0) > 0) {
+            var candidateSearcher = new IndexSearcher(reader);
+            int count = candidateSearcher.count(term("doc_type", "offer"));
+            legacy = count == 0;
+            if (legacy) count = candidateSearcher.count(term("type", "offer"));
+            if (count == 0 || (declaredOffers >= 0 && count != declaredOffers)) {
+                throw new IOException("Lucene offer count does not match the manifest");
+            }
+            if (!legacy && useVectors && manifest.path("vector_count").asLong(0) > 0) {
                 String candidate = manifest.path("profile_id").asString("");
                 if (!candidate.isBlank() && candidate.equals(metadata.get("profile_id"))) {
                     profile = candidate;
@@ -119,7 +140,7 @@ public class SearchIndex implements AutoCloseable {
             }
             catalog = db;
             version = active;
-            searcher = new IndexSearcher(reader);
+            searcher = candidateSearcher;
         } catch (IOException | SQLException | RuntimeException invalid) {
             LOG.warn("Search snapshot unavailable: {}", invalid.getMessage());
         }
@@ -186,6 +207,7 @@ public class SearchIndex implements AutoCloseable {
         if (!ready()) throw new IOException("No active catalog snapshot");
         String normalized = normalize(prefix);
         if (normalized.isEmpty()) return List.of();
+        if (legacy) return entityKeys(new PrefixQuery(new Term("prefix", normalized)), "key");
         var names = new BooleanQuery.Builder()
                 .add(new PrefixQuery(new Term("name_norm", normalized)), Occur.SHOULD);
         // Entity titles often begin with a brand or a form factor, e.g. «Rack-серверы».
@@ -197,12 +219,24 @@ public class SearchIndex implements AutoCloseable {
                 .add(names.build(), Occur.MUST).build();
         // Filtering and profile ranking happen in the catalog. Truncating here can
         // discard every entity from the selected category on a common prefix.
+        return entityKeys(query, "entity_key");
+    }
+
+    List<String> exactNames(String name) throws IOException {
+        if (!ready()) throw new IOException("No active catalog snapshot");
+        var query = new BooleanQuery.Builder()
+                .add(term(legacy ? "type" : "doc_type", "entity"), Occur.FILTER)
+                .add(term(legacy ? "prefix" : "name_norm", name), Occur.MUST).build();
+        return entityKeys(query, legacy ? "key" : "entity_key");
+    }
+
+    private List<String> entityKeys(Query query, String field) throws IOException {
         int count = searcher.count(query);
         if (count == 0) return List.of();
         var keys = new LinkedHashSet<String>();
         var stored = searcher.storedFields();
         for (var hit : searcher.search(query, count).scoreDocs) {
-            String key = stored.document(hit.doc, Set.of("entity_key")).get("entity_key");
+            String key = stored.document(hit.doc, Set.of(field)).get(field);
             if (key != null) keys.add(key);
         }
         return List.copyOf(keys);
@@ -211,9 +245,10 @@ public class SearchIndex implements AutoCloseable {
     private List<String> lexical(String text, String vendorId, String categoryId) throws IOException {
         Query content = words(normalize(text));
         var query = new BooleanQuery.Builder().add(content, Occur.MUST)
-                .add(term("doc_type", "offer"), Occur.FILTER);
+                .add(term(legacy ? "type" : "doc_type", "offer"), Occur.FILTER);
         if (vendorId != null) query.add(term("vendor_id", vendorId), Occur.FILTER);
         if (categoryId != null) query.add(term("category_id", categoryId), Occur.FILTER);
+        if (legacy) return legacyFamilies(query.build());
         var grouping = new GroupingSearch("family_key").setGroupDocsLimit(1).setIgnoreDocsWithoutGroupField(true);
         TopGroups<BytesRef> groups = grouping.search(searcher, query.build(), 0, LEXICAL_LIMIT);
         var result = new ArrayList<String>(groups.groups.length);
@@ -223,7 +258,31 @@ public class SearchIndex implements AutoCloseable {
         return result;
     }
 
+    private List<String> legacyFamilies(Query query) throws IOException {
+        var result = new LinkedHashSet<String>();
+        var stored = searcher.storedFields();
+        for (String tier : List.of("primary", "priced", "unpriced")) {
+            Query scoped = new BooleanQuery.Builder().add(query, Occur.MUST)
+                    .add(term("tier", tier), Occur.FILTER).build();
+            var groups = new LinkedHashSet<String>();
+            ScoreDoc after = null;
+            while (groups.size() < LEXICAL_LIMIT) {
+                var page = searcher.searchAfter(after, scoped, 128).scoreDocs;
+                if (page.length == 0) break;
+                for (var hit : page) {
+                    String family = stored.document(hit.doc, Set.of("family_key")).get("family_key");
+                    if (family != null) groups.add(family);
+                    if (groups.size() == LEXICAL_LIMIT) break;
+                }
+                after = page[page.length - 1];
+            }
+            result.addAll(groups);
+        }
+        return List.copyOf(result);
+    }
+
     private Query words(String text) throws IOException {
+        if (legacy) text = text.replaceAll("(?U)\\b(?:найди|найдите|подбери|покажи|нужен|нужна|купить)\\b", " ");
         Set<String> terms = new LinkedHashSet<>();
         try (var stream = analyzer.tokenStream("name", text)) {
             var token = stream.addAttribute(CharTermAttribute.class);
@@ -235,8 +294,9 @@ public class SearchIndex implements AutoCloseable {
         var result = new BooleanQuery.Builder();
         for (String word : terms) {
             var fields = new ArrayList<Query>();
-            FIELDS.forEach((field, weight) -> fields.add(new BoostQuery(term(field, word), weight)));
-            result.add(new DisjunctionMaxQuery(fields, 0.1f), Occur.SHOULD);
+            (legacy ? LEGACY_FIELDS : FIELDS)
+                    .forEach((field, weight) -> fields.add(new BoostQuery(term(field, word), weight)));
+            result.add(new DisjunctionMaxQuery(fields, 0.1f), legacy ? Occur.MUST : Occur.SHOULD);
         }
         return result.build();
     }

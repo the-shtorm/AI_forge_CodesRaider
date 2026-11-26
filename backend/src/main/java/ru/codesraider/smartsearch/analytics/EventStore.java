@@ -20,9 +20,6 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import ru.codesraider.smartsearch.search.SearchApi.Card;
-import ru.codesraider.smartsearch.search.SearchApi.SearchRequest;
-import ru.codesraider.smartsearch.search.SearchApi.SearchResponse;
 import ru.codesraider.smartsearch.storage.Sqlite;
 import ru.codesraider.smartsearch.web.ApiProblem;
 import tools.jackson.databind.JsonNode;
@@ -44,7 +41,7 @@ public class EventStore {
     private final JsonMapper json;
     private Database database;
 
-    EventStore(@Value("${search.events-db:data/events/events.db}") String path, JsonMapper json) {
+    public EventStore(@Value("${search.events-db:${EVENTS_DB:data/events/events.db}}") String path, JsonMapper json) {
         this.path = Path.of(path).toAbsolutePath();
         this.json = json;
     }
@@ -66,26 +63,27 @@ public class EventStore {
         }
     }
 
-    public void logSearch(SearchRequest request, SearchResponse response, Map<String, Object> diagnostics,
+    public void logSearch(Map<String, ?> request, Map<String, ?> response, Map<String, Object> diagnostics,
                           Map<String, String> detailOffers, Instant time, long elapsedMs) {
         var shown = new LinkedHashMap<String, Object>();
-        shown.put("primary_target", response.primaryTarget());
-        shown.put("top4", shownCards(response.top4()));
-        shown.put("more_results", shownCards(response.moreResults()));
-        shown.put("alternatives", shownCards(response.alternatives()));
+        shown.put("primary_target", response.get("primary_target"));
+        var top4 = (List<?>) response.get("top4");
+        shown.put("top4", shownCards(top4));
+        shown.put("more_results", shownCards((List<?>) response.get("more_results")));
+        shown.put("alternatives", shownCards((List<?>) response.get("alternatives")));
         shown.put("details", detailOffers);
-        var selected = request.selectedTarget();
+        var selected = request.get("selected_target") instanceof Map<?, ?> target ? target : Map.of();
         try {
             database().sql().update("""
                     INSERT INTO search_log(search_id,source,session_id,ts,q,normalized_q,selected_target_kind,selected_target_id,
                       context_json,applied_filters_json,direct_count,shown_family_count,shortfall_reason,mode,index_version,
                       elapsed_ms,shown_json,diagnostics_json)
                     VALUES (?,'demo',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    """, response.searchId(), request.sessionId(), Event.timestamp(time), request.q(), response.normalizedQ(),
-                    selected == null ? null : selected.kind(), selected == null ? null : selected.targetId(),
-                    json.writeValueAsString(request.context() == null ? Map.of() : request.context()),
-                    json.writeValueAsString(response.appliedFilters()), response.directCount(), response.top4().size(),
-                    response.shortfallReason(), response.mode(), response.indexVersion(), elapsedMs,
+                    """, response.get("search_id"), request.get("session_id"), Event.timestamp(time),
+                    request.get("q"), response.get("normalized_q"), selected.get("kind"), selected.get("target_id"),
+                    json.writeValueAsString(request.get("context") == null ? Map.of() : request.get("context")),
+                    json.writeValueAsString(response.get("applied_filters")), response.get("direct_count"), top4.size(),
+                    response.get("shortfall_reason"), response.get("mode"), response.get("index_version"), elapsedMs,
                     json.writeValueAsString(shown), json.writeValueAsString(diagnostics));
         } catch (DataAccessException exception) {
             throw ApiProblem.events(exception);
@@ -170,13 +168,13 @@ public class EventStore {
         return value.isString() && Objects.equals(value.asString(), expected);
     }
 
-    private static List<Map<String, Object>> shownCards(List<Card> cards) {
-        return cards.stream().map(card -> {
+    private static List<Map<String, Object>> shownCards(List<?> cards) {
+        return cards.stream().map(value -> {
+            var card = (Map<?, ?>) value;
             Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("offer_id", card.offer().offerId());
-            entry.put("family_key", card.familyKey());
-            entry.put("role", card.role());
-            if (card.anchorOfferId() != null) entry.put("anchor_offer_id", card.anchorOfferId());
+            for (String field : List.of("offer_id", "family_key", "role", "anchor_offer_id")) {
+                if (card.containsKey(field)) entry.put(field, card.get(field));
+            }
             return entry;
         }).toList();
     }

@@ -8,7 +8,6 @@ import java.time.format.DateTimeParseException;
 import java.util.HashSet;
 import java.util.Set;
 
-import ru.codesraider.smartsearch.search.SearchApi;
 import ru.codesraider.smartsearch.web.ApiProblem;
 import tools.jackson.databind.JsonNode;
 
@@ -16,6 +15,8 @@ record Event(String id, String source, String session, Instant time, String type
              String nextSearch, String offer, String family, String role, String block, Long position,
              String targetKind, String targetId) {
     private static final Set<String> SOURCES = Set.of("demo", "seed");
+    private static final Set<String> KINDS = Set.of("offer", "family", "vendor", "category", "collection");
+    static final String NON_BLANK = "(?Us).*\\S.*";
     private static final Set<String> COMMON = Set.of("event_id", "session_id", "ts", "source", "type");
     private static final Set<String> CARD_FIELDS = Set.of("block", "search_id", "offer_id", "family_key", "role", "position");
     private static final Set<String> CARD_BLOCKS = Set.of("top4", "more_results", "alternatives");
@@ -59,7 +60,7 @@ record Event(String id, String source, String session, Instant time, String type
             position = value.asLong();
         }
         String targetKind = extra.contains("target_kind") ? text(node, "target_kind") : null;
-        if (targetKind != null && !targetKind.matches(SearchApi.KINDS)) {
+        if (targetKind != null && !KINDS.contains(targetKind)) {
             throw ApiProblem.invalid("Некорректный вид цели клика.");
         }
         String search = null;
@@ -76,7 +77,7 @@ record Event(String id, String source, String session, Instant time, String type
 
     private static String text(JsonNode node, String key) {
         var value = node.path(key);
-        if (!value.isString() || !value.asString().matches(SearchApi.NON_BLANK)) {
+        if (!value.isString() || !value.asString().matches(NON_BLANK)) {
             throw ApiProblem.invalid("Укажите непустое текстовое поле " + key + ".");
         }
         return value.asString();

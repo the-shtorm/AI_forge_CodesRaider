@@ -2,7 +2,7 @@ package ru.codesraider.smartsearch.catalog;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import ru.codesraider.smartsearch.analytics.SearchJournal;
+import ru.codesraider.smartsearch.analytics.EventStore;
 import ru.codesraider.smartsearch.modelclient.EncoderClient;
 import ru.codesraider.smartsearch.search.SearchController;
 import ru.codesraider.smartsearch.search.SearchIndex;
@@ -11,9 +11,11 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.GZIPOutputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,6 +33,37 @@ class StorefrontSearchTest {
     }
 
     @Test
+    void compressedCatalogPreservesMasterPlatformCoverageAndBudgetFilters() throws Exception {
+        Path feed = temp.resolve("catalog.xml.gz"), snapshots = temp.resolve("snapshots");
+        try (var output = new GZIPOutputStream(Files.newOutputStream(feed))) {
+            output.write("""
+                    <yml_catalog><shop><categories><category id="1">Текст</category></categories><offers>
+                    <offer id="200" available="true">
+                    <name>Редактор, электронная лицензия на 1 ПК</name><group_id>12</group_id>
+                    <url>https://example.org/p/200</url><vendor>Example</vendor><vendorUrl>https://example.org/example/</vendorUrl>
+                    <vendorCode>SKU-200</vendorCode><categoryId>1</categoryId><price>20.15</price><currencyId>RUR</currencyId>
+                    <description>Платформа: Windows/Linux • Минимальная покупка: от 1 шт. • Срок действия: 12 мес.</description>
+                    </offer></offers></shop></yml_catalog>
+                    """.getBytes(StandardCharsets.UTF_8));
+        }
+        String offline = "http://127.0.0.1:1";
+        try (var encoder = new EncoderClient(offline);
+             var index = new SearchIndex(snapshots.toString(), offline, "lexical", 10)) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+            index.open();
+            var controller = new SearchController(index, new EventStore(temp.resolve("events.db").toString(), JSON));
+            var filters = new java.util.LinkedHashMap<String, Object>(Map.of("platform", "Windows",
+                    "device_count", 1, "term_months", 12, "max_price_minor", 2015));
+            assertEquals(1, controller.search(Map.of("q", "SKU-200", "filters", filters)).get("direct_count"));
+            filters.put("max_price_minor", 2014);
+            assertEquals(0, controller.search(Map.of("q", "SKU-200", "filters", filters)).get("direct_count"));
+            filters.put("max_price_minor", 2015);
+            filters.put("device_count", 2);
+            assertEquals(0, controller.search(Map.of("q", "SKU-200", "filters", filters)).get("direct_count"));
+        }
+    }
+
+    @Test
     void liveStorefrontSelectsSortedFamiliesAndOffersAlternativeFilterValues() throws Exception {
         Path feed = temp.resolve("feed.xml"), snapshots = temp.resolve("snapshots");
         Files.writeString(feed, """
@@ -45,8 +78,8 @@ class StorefrontSearchTest {
              var index = new SearchIndex(snapshots.toString(), offline, "off", 10)) {
             CatalogImporter.importSnapshot(feed, snapshots, false, client);
             index.open();
-            var journal = new SearchJournal(JSON, temp.resolve("events.db").toString());
-            var controller = new SearchController(index, journal);
+            var events = new EventStore(temp.resolve("events.db").toString(), JSON);
+            var controller = new SearchController(index, events);
             var result = JSON.valueToTree(controller.search(Map.of("q", "редактор",
                     "strategy", "standard", "sort", "price_asc")));
             assertEquals(5, result.get("direct_count").asInt());

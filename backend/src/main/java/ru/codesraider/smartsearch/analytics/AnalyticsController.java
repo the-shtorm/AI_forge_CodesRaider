@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import ru.codesraider.smartsearch.search.SearchApi;
 import ru.codesraider.smartsearch.web.ApiProblem;
 import tools.jackson.databind.JsonNode;
 
@@ -39,7 +38,7 @@ class AnalyticsController {
         var end = Event.instant(to);
         if (!start.isBefore(end)) throw ApiProblem.invalid("Начало периода должно быть раньше окончания.");
         if (source != null) Event.validateSource(source);
-        if (version != null && !version.matches(SearchApi.NON_BLANK)) {
+        if (version != null && !version.matches(Event.NON_BLANK)) {
             throw ApiProblem.invalid("Укажите непустую версию индекса.");
         }
         return analytics.report(start, end, source, version);

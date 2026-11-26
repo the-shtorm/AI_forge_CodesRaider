@@ -41,4 +41,9 @@ public final class ApiProblem extends RuntimeException {
         return new ApiProblem(HttpStatus.SERVICE_UNAVAILABLE, "EVENT_STORE_UNAVAILABLE",
                 "Журнал событий временно недоступен.", cause);
     }
+
+    public static ApiProblem searchJournal(Throwable cause) {
+        return new ApiProblem(HttpStatus.SERVICE_UNAVAILABLE, "JOURNAL_UNAVAILABLE",
+                "Журнал поиска временно недоступен.", cause);
+    }
 }

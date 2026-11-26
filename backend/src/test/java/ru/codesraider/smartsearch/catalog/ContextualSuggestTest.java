@@ -9,7 +9,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import ru.codesraider.smartsearch.analytics.SearchJournal;
+import ru.codesraider.smartsearch.analytics.EventStore;
 import ru.codesraider.smartsearch.modelclient.EncoderClient;
 import ru.codesraider.smartsearch.search.SearchController;
 import ru.codesraider.smartsearch.search.SearchIndex;
@@ -39,7 +39,7 @@ class ContextualSuggestTest {
         try (var index = new SearchIndex(snapshots.toString(), "http://127.0.0.1:1", "lexical", 100)) {
             index.open();
             var json = JsonMapper.builder().build();
-            var api = new SearchController(index, new SearchJournal(json, root.resolve("events.db").toString()));
+            var api = new SearchController(index, new EventStore(root.resolve("events.db").toString(), json));
             var hardware = api.suggest("сервер", null, "hardware_buyer");
             var software = api.suggest("сервер", null, "software_admin");
             assertEquals("86563", hardware.getFirst().get("target_id"));
