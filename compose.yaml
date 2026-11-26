@@ -1,0 +1,50 @@
+services:
+  app:
+    build:
+      context: .
+      target: app
+    environment:
+      MODEL_BASE_URL: http://model:8000
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      model:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+
+  model:
+    profiles: [ml, dev]
+    build: ./model
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 8
+
+  frontend:
+    profiles: [dev]
+    build:
+      context: .
+      target: frontend-dev
+    environment:
+      SPRING_BASE_URL: http://app:8080
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    volumes:
+      - ./frontend/src:/workspace/frontend/src:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 8
