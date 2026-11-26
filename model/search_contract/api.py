@@ -82,7 +82,11 @@ def success(description, examples):
             INVALID_REQUEST=(400, "Поле q должно содержать текст."),
             UNKNOWN_TARGET=(400, "Выбранная цель отсутствует в текущем снимке."),
         ),
-        503: NO_CATALOG,
+        503: error_doc(
+            "Хранилище временно недоступно",
+            CATALOG_UNAVAILABLE=(503, "Активный снимок каталога недоступен."),
+            JOURNAL_UNAVAILABLE=(503, "Не удалось записать поиск в журнал."),
+        ),
     },
 )
 def search_products(body: Annotated[SearchRequest, Body(openapi_examples=ex.SEARCH_REQUESTS)]):
