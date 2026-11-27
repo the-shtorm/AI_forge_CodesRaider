@@ -14,6 +14,8 @@ from search_contract.schemas import (
     AnalyticsPeriod,
     AnalyticsResponse,
     Entity,
+    ExplainRequest,
+    Explanation,
     EventBatch,
     Filters,
     Kind,
@@ -99,6 +101,13 @@ def search_products(body: Annotated[SearchRequest, Body(openapi_examples=ex.SEAR
     return pending()
 
 
+@app.post("/v1/explain", operation_id="explainCard", tags=["Поиск"], response_model=Explanation,
+          responses={400: INVALID, 404: error_doc("Карточка отсутствует в этой выдаче")})
+def explain_card(body: ExplainRequest):
+    """Вернуть пояснение по сохранённым фактам конкретной показанной карточки."""
+    return pending()
+
+
 @app.get(
     "/v1/suggest",
     operation_id="suggestTargets",
@@ -121,6 +130,10 @@ def suggest_targets(
     q: Annotated[Text, Query(description="Непустой префикс, например EP2-0.")],
     category_id: Annotated[
         Text | None, Query(description="Ограничить подсказки текущим разделом.")
+    ] = None,
+    profile_id: Annotated[
+        Text | None,
+        Query(description="hardware_buyer — закупщик оборудования, software_admin — администратор ПО. Без известного профиля используется обычный порядок."),
     ] = None,
 ):
     """Выбор мышью или Enter передаёт kind и target_id в selected_target обычного поиска.

@@ -142,7 +142,7 @@ export function demoEntity(target, filters) {
   };
 }
 
-export function demoSearch({ q, filters = {}, selected_target, sort = "relevance", limit = 4 }) {
+export function demoSearch({ q, filters = {}, selected_target, sort = "relevance", limit = 4, context }) {
   const query = normalize(q);
   const exact = !selected_target && products.find(item => item.sku && normalize(item.sku) === query);
   const family = !selected_target && products.find(item => groups[item.offer_id] && normalize(item.name) === query);
@@ -155,7 +155,8 @@ export function demoSearch({ q, filters = {}, selected_target, sort = "relevance
     if (primary) return primary.matches(item);
     if (analog || /почтовый сервер/.test(query)) return false;
     if (/по для сервера|серверное по/.test(query)) return ["software", "1033"].includes(item.category_id);
-    if (/^сервер(ы)?$/.test(query)) return item.category_id === "servers";
+    if (/^сервер(ы)?$/.test(query)) return item.category_id === "servers"
+      || (context?.profile_id === "software_admin" && item.category_id === "software");
     if (item.category_id === "supplies" && /p2500w|bm1800w/.test(query) && !/картридж|pc-211p|tl-c2318h/.test(query)) return false;
     const haystack = normalize([item.name, item.sku, item.vendor, categories[item.category_id], ...Object.values(item.attributes).flat()].filter(Boolean).join(" "));
     const words = query.split(/[\s,?]+/).filter(word => word.length > 2);
@@ -166,7 +167,9 @@ export function demoSearch({ q, filters = {}, selected_target, sort = "relevance
     categories: options(candidates.filter(item => matchesFilters(item, filters, "category_id")), "category_id", item => categories[item.category_id]),
   };
   candidates = candidates.filter(item => matchesFilters(item, filters));
-  if (sort !== "relevance" && primary?.kind !== "offer") {
+  if (sort === "relevance" && context?.profile_id === "software_admin" && /^сервер(ы)?$/.test(query)) {
+    candidates.sort((a, b) => Number(b.category_id === "software") - Number(a.category_id === "software"));
+  } else if (sort !== "relevance" && primary?.kind !== "offer") {
     const direction = sort === "price_asc" ? 1 : -1;
     candidates.sort((left, right) => {
       if (left.price_minor == null || right.price_minor == null) return Number(left.price_minor == null) - Number(right.price_minor == null);
@@ -197,7 +200,7 @@ export function demoSearch({ q, filters = {}, selected_target, sort = "relevance
   };
 }
 
-export function demoSuggestions(q, categoryId) {
+export function demoSuggestions(q, categoryId, profileId) {
   const prefix = normalize(q);
   const eligible = products.filter(item => !categoryId || item.category_id === categoryId);
   const targets = [
@@ -207,5 +210,13 @@ export function demoSuggestions(q, categoryId) {
     ...eligible.filter(item => normalize(item.name).startsWith(prefix) || normalize(item.sku ?? "").startsWith(prefix))
       .map(item => ({ ...offerTarget(item), label: item.sku ? `${item.name} · ${item.sku}` : item.name })),
   ];
+  const preferred = profileId === "software_admin" ? ["software", "office", "meetings", "1033"]
+    : profileId === "hardware_buyer" ? ["servers", "print", "supplies"] : [];
+  const rank = target => {
+    const offer = target.kind === "offer" && eligible.find(item => item.offer_id === target.id);
+    if (offer?.sku && normalize(offer.sku).startsWith(prefix)) return 0;
+    return preferred.includes(offer ? offer.category_id : target.id) ? 1 : 2;
+  };
+  targets.sort((a, b) => rank(a) - rank(b));
   return targets.slice(0, 6).map(({ kind, id, label }) => ({ kind, target_id: id, label }));
 }

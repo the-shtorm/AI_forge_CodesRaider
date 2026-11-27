@@ -94,6 +94,41 @@ class SearchIndexTest {
     }
 
     @Test
+    void stillReadsMasterSnapshotsWithLegacyLuceneFields() throws Exception {
+        Path version = Files.createDirectory(root.resolve("legacy"));
+        Files.writeString(root.resolve("active"), "legacy");
+        Files.writeString(version.resolve("manifest.json"),
+                "{\"index_version\":\"legacy\",\"offer_count\":1,\"vector_count\":0}");
+        try (var db = DriverManager.getConnection("jdbc:sqlite:" + version.resolve("catalog.db"));
+             var sql = db.createStatement()) {
+            sql.execute("CREATE TABLE offer(family_key TEXT)");
+            sql.execute("INSERT INTO offer VALUES ('family/9')");
+        }
+        try (var dir = FSDirectory.open(version.resolve("lucene")); var analyzer = new RussianAnalyzer();
+             var writer = new IndexWriter(dir, new IndexWriterConfig(analyzer))) {
+            var offer = new Document();
+            offer.add(new StringField("type", "offer", Field.Store.NO));
+            offer.add(new StringField("tier", "primary", Field.Store.NO));
+            offer.add(new StringField("family_key", "family/9", Field.Store.YES));
+            offer.add(new TextField("family", "редактор", Field.Store.NO));
+            writer.addDocument(offer);
+            var entity = new Document();
+            entity.add(new StringField("type", "entity", Field.Store.NO));
+            entity.add(new StringField("prefix", "редактор", Field.Store.NO));
+            entity.add(new StringField("key", "family/9", Field.Store.YES));
+            writer.addDocument(entity);
+            writer.setLiveCommitData(Map.of("index_version", "legacy").entrySet());
+        }
+        try (var index = new SearchIndex(root.toString(), "http://127.0.0.1:1", "auto", 10)) {
+            index.open();
+            assertTrue(index.ready());
+            assertFalse(index.semanticReady());
+            assertEquals(new SearchIndex.Ranked(List.of("family/9"), "lexical"), index.rank("редактор", null, null, true));
+            assertEquals(List.of("family/9"), index.suggestNames("ред"));
+        }
+    }
+
+    @Test
     void knnSearchHonorsScopeAndFallsBackToBm25WhenEncoderCannotAnswer() throws Exception {
         snapshot();
         var outcome = new AtomicReference<>("ok");

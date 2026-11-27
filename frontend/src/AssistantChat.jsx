@@ -9,7 +9,7 @@ const greeting = "Расскажите, для чего нужна програ�
 const suggestions = ["Офис без подписки", "Как восстановить файлы после сбоя?"];
 const chatDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
 
-export default function AssistantChat({ demo, navigate }) {
+export default function AssistantChat({ demo, navigate, profileId }) {
   const storageKey = `softline-assistant-chats-v1${demo ? "-demo" : ""}`;
   const [chats, setChats] = useState(() => loadChats(storageKey));
   const [activeId, setActiveId] = useState(chats[0]?.id ?? null);
@@ -80,13 +80,16 @@ export default function AssistantChat({ demo, navigate }) {
     setPending(true);
     input.current?.focus();
     try {
-      const answer = demo ? demoAssistant(question, history) : await requestAssistant(question, history, session, controller.signal);
+      const answer = demo ? demoAssistant(question, history) : await requestAssistant(question, history, session, controller.signal, profileId);
       if (!controller.signal.aborted) {
         const products = answer.products.map(({ offer_id, name, image_url, family_key, role, position }) =>
           ({ offer_id, name, image_url, family_key, role, position }));
         const search = answer.searchId
           ? { searchId: answer.searchId, session, filters: answer.appliedFilters, assistant: true, at: Date.now() }
           : undefined;
+        if (search && previous?.session === session) {
+          trackEvents(demo, session, [{ type: "reformulation", search_id: previous.searchId, next_search_id: search.searchId }]);
+        }
         setChats(current => appendMessage(current, id, { role: "assistant", text: answer.text, products, search }));
       }
     } catch {

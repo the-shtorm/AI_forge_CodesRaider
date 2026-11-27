@@ -69,8 +69,11 @@ export function demoAssistant(question, history) {
   return { text: topics[topic].text, products: items };
 }
 
-export async function requestAssistant(question, history, sessionId, signal) {
-  const result = await api("/v1/search", { signal, body: { q: question, strategy: "llm", session_id: sessionId, assistant_history: history } });
+export async function requestAssistant(question, history, sessionId, signal, profileId) {
+  const result = await api("/v1/search", { signal, body: {
+    q: question, strategy: "llm", session_id: sessionId, assistant_history: history,
+    context: profileId ? { profile_id: profileId } : undefined,
+  } });
   const products = result.top4.flatMap((item, index) => item.role === "direct" ? [{ ...item, position: index + 1 }] : []).slice(0, 3);
   const text = result.assistant_message || (products.length
     ? "В каталоге нашлись подходящие программы. Если уточните ОС, бюджет или число устройств, смогу сузить подборку."

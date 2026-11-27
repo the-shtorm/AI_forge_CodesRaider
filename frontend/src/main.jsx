@@ -33,6 +33,7 @@ function loadCart(key) {
 
 function App() {
   const [route, setRoute] = useState(readRoute);
+  const [profileId, setProfileId] = useState("");
   const cartKey = `softline-cart-v1${route.demo ? "-demo" : ""}`;
   const [cart, setCart] = useState(() => loadCart(cartKey));
   const routed = useRef(false);
@@ -90,13 +91,13 @@ function App() {
         {route.demo && <span className="demo-label">Демоданные</span>}
       </div>
     </header>
-    <CatalogPage demo={route.demo} active={route.view === "catalog"} navigate={navigate} />
+    <CatalogPage demo={route.demo} active={route.view === "catalog"} navigate={navigate} profileId={profileId} setProfileId={setProfileId} />
     {route.view === "entity" && <EntityPage key={route.key} target={route.entity} filters={route.filters}
       demo={route.demo} origin={route.origin} navigate={navigate} add={add} saved={saved} />}
     {route.view === "cart" && <CartPage items={cart} demo={route.demo} navigate={navigate}
       remove={id => setCart(current => current.filter(({ item }) => item.offer_id !== id))} />}
     {route.view === "analytics" && <AnalyticsPage demo={route.demo} />}
-    <div hidden={route.view === "analytics"}><AssistantChat demo={route.demo} navigate={navigate} /></div>
+    <div hidden={route.view === "analytics"}><AssistantChat demo={route.demo} navigate={navigate} profileId={profileId} /></div>
   </>;
 }
 

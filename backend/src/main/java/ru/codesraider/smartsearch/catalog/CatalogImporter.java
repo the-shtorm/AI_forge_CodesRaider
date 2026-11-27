@@ -4,11 +4,16 @@ import org.apache.lucene.analysis.ru.RussianAnalyzer;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.store.FSDirectory;
 
 import ru.codesraider.smartsearch.modelclient.EncoderClient;
+import ru.codesraider.smartsearch.storage.Sqlite;
 
 import java.io.BufferedInputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.FileChannel;
@@ -20,11 +25,11 @@ import java.nio.file.StandardOpenOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.DriverManager;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
@@ -32,18 +37,19 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 public final class CatalogImporter {
-    private static final String RECIPE = "catalog-v1.2";
+    private static final String RECIPE = "catalog-v1.4";
 
     private CatalogImporter() {}
 
     public static void run(String[] args) throws Exception {
         if (args.length > 2 || (args.length == 2 && !"--embeddings".equals(args[1]))) {
             throw new IllegalArgumentException(
-                    "Usage: import [--embeddings] (set CATALOG_PATH and SNAPSHOTS_DIR)");
+                    "Usage: import [--embeddings] (set CATALOG_PATH and optionally SEARCH_SNAPSHOTS_DIR)");
         }
         Path source = Path.of(System.getenv().getOrDefault("CATALOG_PATH", "Mindbox.yml.gz.xml"));
         Path root =
-                Path.of(System.getenv().getOrDefault("SNAPSHOTS_DIR", "data/snapshots"))
+                Path.of(System.getenv().getOrDefault("SEARCH_SNAPSHOTS_DIR",
+                                System.getenv().getOrDefault("SNAPSHOTS_DIR", "data/snapshots")))
                         .toAbsolutePath();
         try (var client =
                 new EncoderClient(
@@ -52,9 +58,10 @@ public final class CatalogImporter {
         }
     }
 
-    static void importSnapshot(Path source, Path root, boolean embeddings, EncoderClient client)
+    public static void importSnapshot(Path source, Path root, boolean embeddings, EncoderClient client)
             throws Exception {
         Files.createDirectories(root);
+        root = root.toRealPath();
         try (var channel =
                         FileChannel.open(
                                 root.resolve(".import.lock"),
@@ -88,7 +95,8 @@ public final class CatalogImporter {
                     build(source, staging, version, sourceHash, profile, client);
                     Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE);
                 } finally {
-                    if (Files.exists(staging)) {
+                    if (Files.isDirectory(staging, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                            && root.equals(staging.toRealPath().getParent())) {
                         try (var entries = Files.walk(staging)) {
                             for (Path item : entries.sorted(Comparator.reverseOrder()).toList())
                                 Files.delete(item);
@@ -137,20 +145,22 @@ public final class CatalogImporter {
                 || !java.util.Objects.equals(profile, manifest.path("profile_id").asString(null))
                 || !Files.isRegularFile(dir.resolve("catalog.db")))
             throw new IOException("Incomplete snapshot: " + dir);
-        try (var db =
-                        DriverManager.getConnection(
-                                "jdbc:sqlite:"
-                                        + dir.resolve("catalog.db").toUri().toASCIIString()
-                                        + "?mode=ro");
-                var stmt = db.createStatement();
-                var counts = stmt.executeQuery("SELECT count(*) FROM offer")) {
-            if (!counts.next() || counts.getLong(1) != manifest.path("offer_count").asLong()) {
-                throw new IOException("Catalog count does not match manifest: " + version);
+        long offerCount = manifest.path("offer_count").asLong();
+        try (var db = Sqlite.dataSource(dir.resolve("catalog.db"), true).getConnection();
+                var stmt = db.createStatement()) {
+            if (!Sqlite.checkCatalog(db)) throw new IOException("Catalog integrity check failed: " + version);
+            try (var counts = stmt.executeQuery("SELECT count(*) FROM offer")) {
+                if (!counts.next() || counts.getLong(1) != offerCount) {
+                    throw new IOException("Catalog count does not match manifest: " + version);
+                }
             }
         }
         try (var directory = FSDirectory.open(dir.resolve("lucene"));
                 var reader = DirectoryReader.open(directory)) {
-            if (!version.equals(reader.getIndexCommit().getUserData().get("index_version"))) {
+            var metadata = reader.getIndexCommit().getUserData();
+            if (!version.equals(metadata.get("index_version"))
+                    || !java.util.Objects.equals(profile, metadata.get("profile_id"))
+                    || new IndexSearcher(reader).count(new TermQuery(new Term("doc_type", "offer"))) != offerCount) {
                 throw new IOException("Lucene does not match snapshot " + version);
             }
         }
@@ -166,43 +176,50 @@ public final class CatalogImporter {
             throws Exception {
         var manifest = new LinkedHashMap<String, Object>();
         var md = digest();
-        try (var con = DriverManager.getConnection("jdbc:sqlite:" + staging.resolve("catalog.db"));
+        try (var con = Sqlite.dataSource(staging.resolve("catalog.db"), false).getConnection();
                 var analyzer = new RussianAnalyzer();
                 var lucene = FSDirectory.open(staging.resolve("lucene"));
                 var writer = new IndexWriter(lucene, new IndexWriterConfig(analyzer));
-                var input =
-                        new DigestInputStream(
-                                new BufferedInputStream(Files.newInputStream(source)), md)) {
+                var input = new BufferedInputStream(new DigestInputStream(Files.newInputStream(source), md))) {
             var db = new CatalogDatabase(con);
             var index = new CatalogIndex(writer, profile != null);
             XMLInputFactory factory = XMLInputFactory.newFactory();
             factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
             factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
-            var xml = factory.createXMLStreamReader(input);
+            input.mark(2);
+            boolean gzip = input.read() == 0x1f && input.read() == 0x8b;
+            input.reset();
             int count = 0;
-            try {
-                while (xml.hasNext()) {
-                    if (xml.next() != XMLStreamConstants.START_ELEMENT) continue;
-                    switch (xml.getLocalName()) {
-                        case "yml_catalog" ->
-                                manifest.put("date", xml.getAttributeValue(null, "date"));
-                        case "category" -> {
-                            String id = xml.getAttributeValue(null, "id");
-                            String parent = xml.getAttributeValue(null, "parentId");
-                            db.category(id, xml.getElementText().strip(), parent);
+            try (InputStream decoded = gzip ? new GZIPInputStream(input) : input) {
+                var xml = factory.createXMLStreamReader(new FilterInputStream(decoded) {
+                    @Override public void close() {} // StAX must leave the stream open for the source hash check.
+                });
+                try {
+                    while (xml.hasNext()) {
+                        if (xml.next() != XMLStreamConstants.START_ELEMENT) continue;
+                        switch (xml.getLocalName()) {
+                            case "yml_catalog" ->
+                                    manifest.put("date", xml.getAttributeValue(null, "date"));
+                            case "category" -> {
+                                String id = xml.getAttributeValue(null, "id");
+                                String parent = xml.getAttributeValue(null, "parentId");
+                                db.category(id, xml.getElementText().strip(), parent);
+                            }
+                            case "offer" -> {
+                                FeedOffer offer = readOffer(xml);
+                                db.offer(offer);
+                                index.offer(offer, db.categoryPath(offer.get("categoryId")));
+                                if (++count % 25000 == 0)
+                                    System.out.println("Indexed " + count + " offers");
+                            }
+                            default -> {}
                         }
-                        case "offer" -> {
-                            FeedOffer offer = readOffer(xml);
-                            db.offer(offer);
-                            index.offer(offer, db.categoryPath(offer.get("categoryId")));
-                            if (++count % 25000 == 0)
-                                System.out.println("Indexed " + count + " offers");
-                        }
-                        default -> {}
                     }
+                } finally {
+                    xml.close();
                 }
-            } finally {
-                xml.close();
+                decoded.transferTo(java.io.OutputStream.nullOutputStream());
+                if (gzip) input.transferTo(java.io.OutputStream.nullOutputStream());
             }
             if (count == 0) throw new IOException("YML contains no offers");
             if (!hash.equals(HexFormat.of().formatHex(md.digest())))
@@ -233,11 +250,15 @@ public final class CatalogImporter {
     }
 
     private static FeedOffer readOffer(XMLStreamReader xml) throws XMLStreamException {
+        String available = xml.getAttributeValue(null, "available");
+        if (!"true".equalsIgnoreCase(available) && !"false".equalsIgnoreCase(available)) {
+            throw new XMLStreamException("Invalid offer availability for " + xml.getAttributeValue(null, "id"));
+        }
         var offer =
                 new FeedOffer(
                         xml.getAttributeValue(null, "id"),
                         xml.getAttributeValue(null, "group_id"),
-                        "true".equalsIgnoreCase(xml.getAttributeValue(null, "available")));
+                        "true".equalsIgnoreCase(available));
         while (xml.hasNext()) {
             int event = xml.next();
             if (event == XMLStreamConstants.END_ELEMENT && "offer".equals(xml.getLocalName()))
@@ -259,6 +280,7 @@ public final class CatalogImporter {
                             "vendorUrl",
                             "vendorCode",
                             "description",
+                            "group_id",
                             "sales_notes" -> {
                         String value = FeedOffer.empty(xml.getElementText());
                         if (value != null) offer.fields.put(tag, value);

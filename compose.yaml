@@ -5,13 +5,14 @@ services:
       target: app
     environment:
       MODEL_BASE_URL: http://model:8000
-      SNAPSHOTS_DIR: /data/snapshots
-      CATALOG_PATH: /input/catalog.xml
-      EVENTS_DB: /data/events/events.db
+      SEARCH_SNAPSHOTS_DIR: /app/data/snapshots
+      SEARCH_EVENTS_DB: /app/data/events/events.db
+      CATALOG_PATH: /catalog.xml
       SEMANTIC_MODE: ${SEMANTIC_MODE:-auto}
+      MODEL_QUERY_TIMEOUT_MS: ${MODEL_QUERY_TIMEOUT_MS:-200}
     volumes:
-      - search-data:/data
-      - search-events:/data/events
+      - snapshots:/app/data/snapshots
+      - events:/app/data/events
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:
@@ -19,7 +20,7 @@ services:
         condition: service_healthy
         required: false
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
+      test: ["CMD", "wget", "-Y", "off", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -68,5 +69,5 @@ services:
       retries: 8
 
 volumes:
-  search-data:
-  search-events:
+  snapshots:
+  events:

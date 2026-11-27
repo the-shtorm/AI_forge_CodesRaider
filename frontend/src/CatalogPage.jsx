@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Filters from "./Filters";
 import ProductCard from "./ProductCard";
 import RelatedProducts from "./RelatedProducts";
+import ResultExplanation from "./ResultExplanation";
 import { api, entityHref, filterParams, sessionId, targetLabels } from "./api";
 import { demoSearch, demoSuggestions } from "./catalog";
 import { cardEvent, trackDemoSearch, trackEvents } from "./events";
@@ -15,19 +16,20 @@ const targetActions = {
 };
 const blockEntries = (items, block) => items.map((item, index) => ({ item, block, position: index + 1 }));
 
-function ResultGrid({ entries, visit, demo, applied }) {
+function ResultGrid({ entries, visit, demo, applied, searchId }) {
   return <div className="product-grid" data-size={entries.length}>
     {entries.map(entry => {
       const { item } = entry;
       const target = { kind: "offer", id: item.offer_id };
       const action = <a className="button secondary card-link" href={entityHref(target, applied, demo)}
         aria-label={`К товару ${item.name}`} onClick={event => visit(event, target, entry)}>К товару</a>;
-      return <ProductCard key={item.offer_id} item={item} action={action} />;
+      return <ProductCard key={item.offer_id} item={item} action={action}
+        explanation={!demo && <ResultExplanation key={searchId} searchId={searchId} offerId={item.offer_id} />} />;
     })}
   </div>;
 }
 
-export default function CatalogPage({ demo, active, navigate }) {
+export default function CatalogPage({ demo, active, navigate, profileId, setProfileId }) {
   const [query, setQuery] = useState(demo ? examples[1] : "");
   const [request, setRequest] = useState(null);
   const [response, setResponse] = useState(null);
@@ -62,16 +64,17 @@ export default function CatalogPage({ demo, active, navigate }) {
       try {
         const params = new URLSearchParams({ q: value });
         if (filters.category_id) params.set("category_id", filters.category_id);
-        const items = demo ? demoSuggestions(value, filters.category_id) : await api(`/v1/suggest?${params}`, { signal: controller.signal });
-        if (!controller.signal.aborted) setSuggestions({ value, category: filters.category_id, items });
+        if (profileId) params.set("profile_id", profileId);
+        const items = demo ? demoSuggestions(value, filters.category_id, profileId) : await api(`/v1/suggest?${params}`, { signal: controller.signal });
+        if (!controller.signal.aborted) setSuggestions({ value, category: filters.category_id, profileId, items });
       } catch {
         if (!controller.signal.aborted) setSuggestions(null);
       }
     }, 160);
     return () => { window.clearTimeout(timeout); controller.abort(); };
-  }, [active, activeInput, query, request?.q, error, demo, filters.category_id]);
+  }, [active, activeInput, query, request?.q, error, demo, filters.category_id, profileId]);
 
-  async function search(next) {
+  async function search(next, profile = profileId) {
     searchRequest.current?.abort();
     const controller = new AbortController();
     searchRequest.current = controller;
@@ -83,7 +86,9 @@ export default function CatalogPage({ demo, active, navigate }) {
     setResponse(null);
     const session = sessionId();
     try {
-      const result = demo ? demoSearch(next) : await api("/v1/search", { body: { ...next, session_id: session }, signal: controller.signal });
+      const category = next.filters.category_id;
+      const body = { ...next, context: profile || category ? { profile_id: profile || undefined, category_id: category } : undefined };
+      const result = demo ? demoSearch(body) : await api("/v1/search", { body: { ...body, session_id: session }, signal: controller.signal });
       if (controller.signal.aborted) return;
       if (demo) trackDemoSearch(result, next.q, session);
       const previous = lastSearch.current;
@@ -112,18 +117,25 @@ export default function CatalogPage({ demo, active, navigate }) {
     setTab("products");
     setActiveInput(false);
     search({ q: value, strategy: "standard", sort, filters,
-      context: filters.category_id ? { category_id: filters.category_id } : undefined,
       selected_target: suggestion && { kind: suggestion.kind, target_id: suggestion.target_id } });
   }
 
   function setAndSearch(nextFilters) {
     const clean = Object.fromEntries(Object.entries(nextFilters).filter(([, value]) => value != null && value !== ""));
     setFilters(clean);
-    if (request) search({ ...request, filters: clean, context: clean.category_id ? { category_id: clean.category_id } : undefined, limit: undefined });
+    if (request) search({ ...request, filters: clean, limit: undefined });
+  }
+
+  function changeProfile(profile) {
+    setProfileId(profile);
+    setSuggestions(null);
+    setActiveSuggestion(-1);
+    if (request && query.trim() === request.q) search(request, profile);
   }
 
   const result = response?.result;
-  const suggestionsMatch = suggestions?.value === query.trim() && suggestions.category === filters.category_id;
+  const suggestionsMatch = suggestions?.value === query.trim() && suggestions.category === filters.category_id
+    && suggestions.profileId === profileId;
   const suggestedItems = suggestionsMatch ? suggestions.items : [];
   const showSuggestions = activeInput && suggestedItems.length > 0;
   const facets = result?.facets ?? emptyFacets;
@@ -155,7 +167,8 @@ export default function CatalogPage({ demo, active, navigate }) {
 
   function visit(event, target, entry, selectedFilters = applied) {
     const session = sessionId();
-    const attributed = session === response.session;
+    const isPrimary = primary?.kind === target.kind && primary.id === target.id;
+    const attributed = session === response.session && (entry || isPrimary);
     const href = entityHref(target, selectedFilters, demo);
     if (attributed) {
       trackEvents(demo, session, [entry ? cardEvent("click", entry.item, entry.block, entry.position, result.search_id) : {
@@ -166,13 +179,20 @@ export default function CatalogPage({ demo, active, navigate }) {
     navigate(event, href, attributed ? { searchId: result.search_id, session, familyKey: entry?.item.family_key ?? (matchedOffer || null)?.family_key } : null);
   }
 
-  const gridProps = { visit, demo, applied };
+  const gridProps = { visit, demo, applied, searchId: result?.search_id };
   return (
     <main className="container page" tabIndex={-1} hidden={!active}>
       <form className="searchbar" role="search" onSubmit={event => {
         event.preventDefault();
         submit(query, showSuggestions ? suggestedItems[activeSuggestion] : undefined);
       }}>
+        <label className="profile-control">Профиль покупателя
+          <select value={profileId} onChange={event => changeProfile(event.target.value)}>
+            <option value="">Без профиля</option>
+            <option value="hardware_buyer">Закупщик оборудования</option>
+            <option value="software_admin">Администратор ПО</option>
+          </select>
+        </label>
         <div className="input-group" onBlur={event => {
           if (!event.currentTarget.contains(event.relatedTarget)) { setActiveInput(false); setActiveSuggestion(-1); }
         }}>
@@ -243,8 +263,8 @@ export default function CatalogPage({ demo, active, navigate }) {
               {result.direct_count > direct.length + more.length && (request.limit ?? 4) < 50 && <button type="button" className="button secondary more-button"
                 onClick={() => search({ ...request, limit: Math.min(50, (request.limit ?? 4) + 12) })}>Показать больше</button>}
               {alternatives.length > 0 && <section className="result-group"><h2>Альтернативы</h2><ResultGrid {...gridProps} entries={alternatives} /></section>}
-              <RelatedProducts items={related} demo={demo} onVisit={(event, target) =>
-                visit(event, target, complements.find(({ item }) => item.offer_id === target.id), {})} />
+              <RelatedProducts items={related} demo={demo} filters={demo ? {} : applied} onVisit={(event, target) =>
+                visit(event, target, complements.find(({ item }) => item.offer_id === target.id), demo ? {} : applied)} />
             </>}
             {result && tab !== "products" && (facetItems.length ? <ul className="facet-results">
               {facetItems.map(facet => <li key={facet.id}><button type="button" onClick={() => {

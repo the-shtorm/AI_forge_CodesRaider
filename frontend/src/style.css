@@ -39,6 +39,8 @@ h1, h2, h3, p, ul, dl, dd { margin: 0; }
 .page:focus { outline: none; }
 
 .searchbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.profile-control { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 5px 10px; margin-bottom: 4px; color: var(--muted); font-size: .875rem; }
+.profile-control select { width: auto; max-width: 100%; min-height: 34px; padding: 4px 8px; }
 .input-group { position: relative; min-width: 0; }
 .searchbar input, .assistant-form input, .filter-field input, select {
   width: 100%; border: 1px solid #d8cdd5; background: var(--surface); color: var(--ink); border-radius: 8px;

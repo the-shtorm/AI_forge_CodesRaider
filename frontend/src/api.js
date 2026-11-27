@@ -68,6 +68,7 @@ export function safeLink(url) {
 const errors = {
   UNKNOWN_TARGET: "Эта подсказка устарела. Выберите обновлённую подсказку или повторите поиск.",
   ENTITY_NOT_FOUND: "Карточка отсутствует в текущем каталоге.",
+  CARD_NOT_FOUND: "Для этой карточки нет сохранённых данных поиска.",
   CATALOG_UNAVAILABLE: "Каталог временно недоступен.",
   EVENT_STORE_UNAVAILABLE: "Журнал событий временно недоступен.",
   CONTRACT_ONLY: "Запущен справочный стенд API. Для работы нужен обработчик Spring Boot.",

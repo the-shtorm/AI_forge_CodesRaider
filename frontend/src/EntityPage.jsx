@@ -36,13 +36,12 @@ export default function EntityPage({ target, filters, demo, origin, navigate, ad
     const session = eventSession(origin);
     const attributed = origin?.session === session;
     const sameFamily = (entity.kind === "offer" && child.kind === "family") || (entity.kind === "family" && child.kind === "offer");
-    if (attributed) {
-      const selection = sameFamily && child.kind === "offer" && origin.familyKey;
-      trackEvents(demo, session, [selection
-        ? { type: "click", block: "details", search_id: origin.searchId, offer_id: child.id, family_key: origin.familyKey }
-        : { type: "click", block: "navigation", search_id: origin.searchId, target_kind: child.kind, target_id: child.id }]);
+    if (attributed && sameFamily && child.kind === "offer" && origin.familyKey) {
+      trackEvents(demo, session, [
+        { type: "click", block: "details", search_id: origin.searchId, offer_id: child.id, family_key: origin.familyKey },
+      ]);
     }
-    navigate(event, entityHref(child, selectedFilters, demo), attributed ? { ...origin, familyKey: sameFamily ? origin.familyKey : undefined } : null);
+    navigate(event, entityHref(child, selectedFilters, demo), attributed && sameFamily ? origin : null);
   }
 
   function trackOffer(offer) {

@@ -33,7 +33,7 @@ class HealthController {
         health.put("status", "up");
         health.put("model_service", modelUp ? "up" : "unavailable");
         health.put("search_ready", index.ready());
-        health.put("index_version", index.version());
+        if (index.ready()) health.put("index_version", index.version());
         health.put("semantic_ready", modelUp && index.semanticReady());
         return health;
     }

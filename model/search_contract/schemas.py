@@ -35,7 +35,7 @@ class Context(DTO):
     segment: Text | None = Field(None, description="Сегмент покупателя, например b2b.")
     profile_id: Text | None = Field(
         None,
-        description="ID демонстрационного профиля. Историю сессии сервер находит по session_id.",
+        description="Демонстрационный профиль hardware_buyer или software_admin. Для нового или отсутствующего ID действует обычный порядок.",
     )
 
 
@@ -187,7 +187,35 @@ class SearchFacets(DTO):
     categories: list[SearchFacet]
 
 
+Purpose = Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
+                  "SERVER", "SERVER_SOFTWARE", "PRINTER", "UNKNOWN"]
+
+
+class SearchProgram(DTO):
+    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained"]
+    purpose: Purpose
+    additional_purposes: list[Purpose] = Field(max_length=1)
+    join: Literal["all", "any"]
+    terms: str
+    excluded_versions: list[str]
+    excluded_licenses: list[License]
+
+
+class ExplainRequest(DTO):
+    search_id: Text
+    offer_id: Text
+
+
+class Explanation(DTO):
+    offer_id: Text
+    source: Literal["llm", "template"]
+    text: Text
+    evidence: list[Text] = Field(min_length=1)
+    source_url: Link
+
+
 class SearchResponse(DTO):
+    program: SearchProgram | None = Field(None, description="Исполненная программа и исключения по SKU.")
     search_id: Text = Field(description="ID этого поиска, включая поиск с пустым результатом.")
     index_version: Text = Field(description="Версия снимка каталога и поискового индекса.")
     mode: Literal["lexical", "hybrid"] = Field(

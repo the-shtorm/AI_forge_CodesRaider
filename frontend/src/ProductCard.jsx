@@ -9,7 +9,7 @@ export function priceLabel(amount, currency = "RUB") {
   return format.format(amount / 10 ** format.resolvedOptions().maximumFractionDigits);
 }
 
-export default function ProductCard({ item, action }) {
+export default function ProductCard({ item, action, explanation }) {
   const attributes = Object.entries(item.attributes ?? {}).map(([key, values]) => [
     key, key === "Тип лицензии" ? values.map(value => licenseTypes[value] ?? value) : values,
   ]);
@@ -49,6 +49,7 @@ export default function ProductCard({ item, action }) {
           return <li key={index}>{check.candidate_value} подходит к {check.anchor_value}. {source && <a href={source} target="_blank" rel="noreferrer">Источник проверки</a>}</li>;
         })}</ul>
       </details>}
+      {explanation}
     </article>
   );
 }

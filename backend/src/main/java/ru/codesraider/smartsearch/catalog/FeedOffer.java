@@ -6,12 +6,14 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.util.Currency;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -26,6 +28,8 @@ final class FeedOffer {
                     "(?iU)\\bкриптопро\\s+CSP\\s+(?:верси(?:я|и|ю)\\s+)?(\\d+(?:\\.\\d+)+)\\b");
     private static final Pattern NUMBERED_VERSION = Pattern.compile("(?U)\\b\\d+(?:\\.\\d+)+\\b");
     private static final Pattern TERM = Pattern.compile("(?iu)^(\\d{1,4})\\s*мес\\.?$");
+    private static final Pattern MIN_ORDER = Pattern.compile("от ([1-9]\\d{0,7})(?: до [1-9]\\d{0,7})? шт\\.?");
+    private static final Pattern MODEL = Pattern.compile("[a-z][a-z0-9]*\\d[a-z0-9-]*");
     private static final Pattern SEATS =
             Pattern.compile(
                     "(?iU)\\bна\\s+(\\d{1,6})\\s+(?:пользовател\\p{L}*|рабочи\\p{L}*\\s+мест\\p{L}*)\\b");
@@ -35,14 +39,14 @@ final class FeedOffer {
     static final JsonMapper JSON = JsonMapper.builder().build();
 
     final String id;
-    final String group;
+    String group;
     final boolean available;
     final Map<String, String> fields = new HashMap<>();
     final List<Param> params = new ArrayList<>();
     final Map<String, Object> facts = new LinkedHashMap<>();
     String vendorId, skuNorm, baseModel, family, familyId, familyName, currency;
     String version, edition, licenseType, productType, priceUnit;
-    Integer termMonths, deviceCount, seatCount, seatMax;
+    Integer termMonths, deviceCount, seatCount, seatMax, minOrder;
     Long price, oldPrice;
 
     FeedOffer(String id, String group, boolean available) {
@@ -79,6 +83,8 @@ final class FeedOffer {
             case "к-во узлов" -> "device_count";
             case "тип продукта" -> "product_type";
             case "редакция" -> "edition";
+            case "язык интерфейса" -> "language";
+            case "модель принтера" -> "base_model";
             default -> null;
         };
     }
@@ -112,6 +118,7 @@ final class FeedOffer {
     }
 
     void finish() {
+        if (group == null) group = get("group_id");
         for (String field :
                 List.of("name", "url", "vendor", "vendorUrl", "categoryId", "currencyId")) {
             if (get(field) == null)
@@ -127,8 +134,8 @@ final class FeedOffer {
                 get("currencyId").equalsIgnoreCase("RUR")
                         ? "RUB"
                         : get("currencyId").toUpperCase(Locale.ROOT);
-        price = money(get("price"));
-        oldPrice = money(get("oldprice"));
+        price = money(get("price"), currency);
+        oldPrice = money(get("oldprice"), currency);
         if (group != null) {
             familyId = group;
             family = "family/" + group;
@@ -137,6 +144,11 @@ final class FeedOffer {
             Matcher depo = DEPO.matcher(get("name"));
             if (depo.find() && vendorId.equals("depo")) {
                 baseModel = "Storm " + depo.group(1);
+            } else if ("pantum".equals(vendorId) && skuNorm != null
+                    && (("93995".equals(get("categoryId")) && Set.of("p2500w", "bm1800w").contains(skuNorm))
+                    || ("94694".equals(get("categoryId")) && Set.of("pc-211p", "tl-c2318h").contains(skuNorm)))) {
+                baseModel = sku;
+                facts.put("base_model", Map.of("field", "vendorCode"));
             } else if (sku != null
                     && sku.length() >= 3
                     && sku.codePoints().anyMatch(Character::isDigit)
@@ -147,6 +159,18 @@ final class FeedOffer {
                             .matcher(get("name"))
                             .find()) {
                 baseModel = sku;
+            } else if ("электроника".equalsIgnoreCase(productType)) {
+                String model = confirmedParam("Модель принтера", "base_model");
+                if (model != null) {
+                    String code = SearchIndex.normalize(model);
+                    code = code.substring(code.lastIndexOf(' ') + 1);
+                    if (MODEL.matcher(code).matches()) baseModel = code;
+                    else facts.remove("base_model");
+                }
+            }
+            if (baseModel == null && Set.of("86563", "87093", "87268", "87276").contains(get("categoryId"))) {
+                String declared = confirmedParam("Базовая модель", "base_model");
+                if (declared != null && SearchIndex.normalize(get("name")).contains(SearchIndex.normalize(declared))) baseModel = declared;
             }
             if (baseModel != null) {
                 String key =
@@ -156,7 +180,7 @@ final class FeedOffer {
                 familyName = get("vendor") + " " + baseModel;
             }
         }
-        version = confirmedParam("Версия", "version");
+        version = normalizedValue(confirmedParam("Версия", "version"));
         if ("22268".equals(group) && "kripto-pro".equals(vendorId)) {
             // A version mentioned for a platform, another product or an upgrade source
             // cannot establish the version of this supply.
@@ -185,34 +209,110 @@ final class FeedOffer {
             }
         }
         edition = confirmedParam("Редакция", "edition");
-        String license = confirmedParam("Тип лицензии", "license_type");
-        licenseType =
-                switch (license == null ? "" : SearchIndex.normalize(license)) {
-                    case "full", "полная версия", "новая лицензия" -> "new";
-                    case "продление", "renewal" -> "renewal";
-                    case "обновление", "перекрестное обновление", "upgrade", "upg" -> "upgrade";
-                    default -> null;
-                };
-        String term = confirmedParam("Срок действия", "term_months");
-        if (term != null) {
-            Matcher m = TERM.matcher(term);
-            if (m.matches()) termMonths = positive(m.group(1));
+        licenseType = license(confirmedParam("Тип лицензии", "license_type"));
+        termMonths = matchedQuantity(TERM, confirmedParam("Срок действия", "term_months"));
+        deviceCount = positive(confirmedParam("К-во узлов", "device_count"));
+        Integer namedDevices = positive(fromName(DEVICES, "device_count"));
+        if (namedDevices != null) {
+            if (deviceCount == null || deviceCount.equals(namedDevices)) {
+                deviceCount = namedDevices;
+                if (SearchIndex.normalize(get("name")).contains("лицензия на")) {
+                    priceUnit = "package";
+                    facts.put("price_unit", Map.of("field", "name"));
+                }
+            } else {
+                deviceCount = null;
+                facts.remove("device_count");
+            }
         }
-        deviceCount = positive(fromName(DEVICES, "device_count"));
         seatCount = positive(fromName(SEATS, "seat_count"));
         seatMax = positive(confirmedParam("К-во пользователей до", "seat_max"));
         if ("электроника".equalsIgnoreCase(productType)) {
             priceUnit = "package";
             facts.put("price_unit", Map.of("basis", "physical_unit"));
         }
+        termMonths = mergeParam("Срок (мес.)", "term_months", termMonths, FeedOffer::positive);
+        deviceCount = mergeParam("Количество устройств", "device_count", deviceCount, FeedOffer::positive);
+        seatCount = mergeParam("Количество мест", "seat_count", seatCount, FeedOffer::positive);
+        priceUnit = mergeParam("Единица продажи", "price_unit", priceUnit, value -> switch (normalizedValue(value)) {
+            case "шт", "пакет", "package" -> "package";
+            case "место", "seat" -> "seat";
+            case "устройство", "device" -> "device";
+            default -> null;
+        });
+        minOrder = positive(confirmedParam("Минимальное количество", "min_order_qty"));
+        addDescriptionFacts();
         if (licenseType == null) facts.remove("license_type");
         if (termMonths == null) facts.remove("term_months");
         if (seatMax == null) facts.remove("seat_max");
     }
 
-    private static Long money(String value) {
+    private <T> T mergeParam(String name, String field, T existing, java.util.function.Function<String, T> parse) {
+        var supplied = params.stream().filter(p -> p.name.equalsIgnoreCase(name))
+                .filter(p -> normalizedValue(p.value) != null).toList();
+        if (supplied.isEmpty()) return existing;
+        var values = supplied.stream().map(p -> parse.apply(p.value)).distinct().toList();
+        if (values.size() != 1 || values.getFirst() == null || (existing != null && !existing.equals(values.getFirst()))) {
+            facts.remove(field);
+            return null;
+        }
+        facts.put(field, Map.of("param_ordinal", params.indexOf(supplied.getFirst())));
+        return values.getFirst();
+    }
+
+    private void addDescriptionFacts() {
+        Map<String, Set<String>> labels = new HashMap<>();
+        for (String part : SearchIndex.normalize(get("description")).split("•")) {
+            String[] pair = part.strip().split(":", 2);
+            if (pair.length != 2 || normalizedValue(pair[1]) == null) continue;
+            labels.computeIfAbsent(pair[0].strip(), ignored -> new java.util.LinkedHashSet<>())
+                    .add(pair[1].strip());
+        }
+        var platforms = labels.getOrDefault("платформа", Set.of()).stream()
+                .flatMap(value -> java.util.Arrays.stream(value.split("[/,]")))
+                .map(FeedOffer::normalizedValue).filter(java.util.Objects::nonNull).distinct().toList();
+        if (!platforms.isEmpty()) facts.put("platform", Map.of("field", "description", "values", platforms));
+        minOrder = mergeDescription("min_order_qty", minOrder, labels.getOrDefault("минимальная покупка", Set.of()),
+                value -> matchedQuantity(MIN_ORDER, value));
+        seatCount = mergeDescription("seat_count", seatCount, labels.getOrDefault("к-во пользователей", Set.of()),
+                FeedOffer::positive);
+        termMonths = mergeDescription("term_months", termMonths, labels.getOrDefault("срок действия", Set.of()),
+                value -> matchedQuantity(TERM, value));
+        licenseType = mergeDescription("license_type", licenseType, labels.getOrDefault("тип лицензии", Set.of()),
+                FeedOffer::license);
+    }
+
+    private <T> T mergeDescription(String field, T existing, Set<String> descriptions,
+                                   java.util.function.Function<String, T> parse) {
+        var values = descriptions.stream().map(parse).filter(java.util.Objects::nonNull).distinct().toList();
+        if (values.isEmpty()) return existing;
+        if (values.size() > 1 || (existing != null && !existing.equals(values.getFirst()))) {
+            facts.remove(field);
+            return null;
+        }
+        facts.putIfAbsent(field, Map.of("field", "description"));
+        return values.getFirst();
+    }
+
+    private static Integer matchedQuantity(Pattern pattern, String text) {
+        if (text == null) return null;
+        var match = pattern.matcher(text);
+        return match.matches() ? positive(match.group(1)) : null;
+    }
+
+    private static String license(String value) {
+        return switch (SearchIndex.normalize(value)) {
+            case "new", "новая", "full", "полная версия", "новая лицензия" -> "new";
+            case "продление", "renewal" -> "renewal";
+            case "обновление", "перекрестное обновление", "upgrade", "upg" -> "upgrade";
+            default -> null;
+        };
+    }
+
+    private static Long money(String value, String currency) {
         return value == null
                 ? null
-                : new BigDecimal(value.replace(',', '.')).movePointRight(2).longValueExact();
+                : new BigDecimal(value.replace(',', '.'))
+                        .movePointRight(Currency.getInstance(currency).getDefaultFractionDigits()).longValueExact();
     }
 }

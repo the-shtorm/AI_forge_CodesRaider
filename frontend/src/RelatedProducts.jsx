@@ -3,7 +3,7 @@ import { entityHref } from "./api";
 import { priceLabel } from "./ProductCard";
 import ProductImage from "./ProductImage";
 
-export default function RelatedProducts({ items, demo, onVisit }) {
+export default function RelatedProducts({ items, demo, filters, onVisit }) {
   const title = useId();
   if (!items.length) return null;
   return <section className="result-group" aria-labelledby={title}>
@@ -11,7 +11,7 @@ export default function RelatedProducts({ items, demo, onVisit }) {
     <div className="related-grid">
       {items.slice(0, 4).map(item => {
         const target = { kind: "offer", id: item.offer_id };
-        return <a className="product-card related-product" key={item.offer_id} href={entityHref(target, {}, demo)}
+        return <a className="product-card related-product" key={item.offer_id} href={entityHref(target, filters, demo)}
           onClick={event => onVisit(event, target)}>
           <div className="product-photo"><ProductImage item={item} fallback={null} /></div>
           <h3>{item.name}</h3>
