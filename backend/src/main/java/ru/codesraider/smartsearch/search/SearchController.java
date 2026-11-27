@@ -193,15 +193,17 @@ public class SearchController {
                 fileRecovery, includeServerSoftware,
                 target == null && ids == null && !fileRecovery ? plan : null, constraints);
         List<Row> direct = conflict ? List.of() : db.representatives(filters, selection, families);
-        if (includeServerSoftware && direct.size() > 1 && input.sort().equals("relevance"))
-            direct.sort(Comparator.comparing(row -> !"369".equals(row.str("category_id"))));
-        else if (input.sort().equals("relevance") && input.context().get("category_id") instanceof String category)
-            direct.sort(Comparator.comparing(row -> !category.equals(row.str("category_id"))));
-        if (direct.size() > 1 && !input.sort().equals("relevance")) {
-            Comparator<Long> byPrice = input.sort().equals("price_asc")
-                    ? Comparator.naturalOrder() : Comparator.reverseOrder();
-            direct.sort(Comparator.comparing(row -> Row.positive(row.get("price_minor")),
-                    Comparator.nullsLast(byPrice)));
+        if (direct.size() > 1) {
+            if (!input.sort().equals("relevance")) {
+                Comparator<Long> byPrice = input.sort().equals("price_asc")
+                        ? Comparator.naturalOrder() : Comparator.reverseOrder();
+                direct.sort(Comparator.comparing(row -> Row.positive(row.get("price_minor")),
+                        Comparator.nullsLast(byPrice)));
+            } else if (includeServerSoftware) {
+                direct.sort(Comparator.comparing(row -> !"369".equals(row.str("category_id"))));
+            } else if (input.context().get("category_id") instanceof String category) {
+                direct.sort(Comparator.comparing(row -> !category.equals(row.str("category_id"))));
+            }
         }
         List<Row> anchors = direct.subList(0, Math.min(4, direct.size()));
         List<Map<String, Object>> top = new ArrayList<>(),

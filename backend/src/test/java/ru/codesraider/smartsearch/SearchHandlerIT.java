@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -179,6 +180,19 @@ class SearchHandlerIT {
             assertCollection(entity);
             assertEmptyList(entity, "offers");
             assertEmptyList(entity, "children");
+        }
+    }
+
+    @Test
+    void categoryConflictReturnsAnEmptySearchWithOrWithoutContext() throws Exception {
+        var wrongCategory = Map.of("category_id", "687");
+        for (Map<String, String> context : List.of(Map.<String, String>of(), wrongCategory)) {
+            var result = search(Map.of("q", "кибер бэкап", "selected_target", TARGET,
+                    "context", context, "filters", wrongCategory));
+            assertCollection(result.required("primary_target"));
+            assertEquals(0, result.required("direct_count").asInt());
+            assertEmptyList(result, "top4");
+            assertShortfall(result, 0);
         }
     }
 

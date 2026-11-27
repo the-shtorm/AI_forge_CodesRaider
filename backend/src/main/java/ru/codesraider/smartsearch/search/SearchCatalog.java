@@ -377,22 +377,25 @@ final class SearchCatalog implements AutoCloseable {
 
     // All SQL fragments come from this enum. The model supplies neither SQL nor product IDs.
     private static String predicate(QueryPlan.Purpose purpose) {
-        String category = switch (purpose) {
-            case BACKUP -> "id='1033' OR name LIKE '%езервное копирование%'";
-            case WEBINAR -> "name LIKE '%ебинар%' OR name LIKE '%идеоконференц%'";
-            case REMOTE_ACCESS -> "name LIKE '%даленный доступ%' OR name LIKE '%далённый доступ%' OR name LIKE '%даленное администрирование%'";
-            case ANTIVIRUS -> "name LIKE '%нтивирус%'";
-            case PRINTER -> "id='93995' OR name LIKE '%ринтер%' OR name LIKE '%МФУ%'";
-            default -> null;
-        };
-        if (category != null)
-            return "o.category_id IN (SELECT id FROM entity WHERE kind='category' AND (" + category + "))";
         return switch (purpose) {
             case WORDS -> "1";
+            case BACKUP -> inCategory("id='1033' OR name LIKE '%езервное копирование%'");
+            // Softline also lists these three MTS Link webinar plans in the general «Связь» section.
+            case WEBINAR -> "(" + inCategory("name LIKE '%ебинар%' OR name LIKE '%идеоконференц%'")
+                    + " OR (o.vendor_id='webinar' AND o.family_key IN"
+                    + " ('family/414326','family/447242','family/447243')))";
+            case REMOTE_ACCESS -> inCategory("id='327030' OR name LIKE '%даленный доступ%'"
+                    + " OR name LIKE '%далённый доступ%' OR name LIKE '%даленное администрирование%'");
+            case ANTIVIRUS -> inCategory("name LIKE '%нтивирус%'");
+            case PRINTER -> inCategory("id='93995' OR name LIKE '%ринтер%' OR name LIKE '%МФУ%'");
             case SERVER -> SERVER_OFFER;
             case SERVER_SOFTWARE -> "(o.category_id='369' OR (o.group_id IS NOT NULL AND (o.name LIKE '%ервер%' OR lower(o.name) LIKE '%server%')))";
-            default -> "0";
+            case UNKNOWN -> "0";
         };
+    }
+
+    private static String inCategory(String condition) {
+        return "o.category_id IN (SELECT id FROM entity WHERE kind='category' AND (" + condition + "))";
     }
 
     private Where candidateWhere(Map<String, Object> filters, Selection selection, List<String> families) {
