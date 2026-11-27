@@ -18,14 +18,15 @@ function SearchBox({ route, submit, update }) {
   const [list, setList] = useState(null);
   const listId = useId();
   const query = draft.trim();
+  const canSuggest = open && query.length >= 3;
   const params = new URLSearchParams({ q: query });
   if (route.profileId) params.set("profile_id", route.profileId);
   if (route.filters.category_id) params.set("category_id", route.filters.category_id);
   const key = params.toString();
-  const visible = open && !!query && list?.key === key && list.items.length > 0;
+  const visible = canSuggest && list?.key === key && list.items.length > 0;
 
   useEffect(() => {
-    if (!open || !query) return;
+    if (!canSuggest) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       api(`/v1/suggest?${key}`, { signal: controller.signal })
@@ -33,7 +34,7 @@ function SearchBox({ route, submit, update }) {
         .catch(() => { if (!controller.signal.aborted) setList(null); });
     }, 160);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [open, key, query]);
+  }, [canSuggest, key]);
 
   function close() {
     setOpen(false);
