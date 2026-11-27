@@ -139,6 +139,8 @@ record SearchInput(
                         || normalized.contains("возврат");
         boolean files =
                 normalized.contains("файл")
+                        || normalized.contains("фотограф")
+                        || normalized.contains("снимк")
                         || normalized.contains("документ")
                         || normalized.contains("данн");
         boolean negated =

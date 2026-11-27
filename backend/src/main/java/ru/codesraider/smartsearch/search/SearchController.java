@@ -26,6 +26,8 @@ public class SearchController {
             Pattern.compile("(?U)[\\p{L}\\d]+(?:-[\\p{L}\\d]+)*-\\d{3,}");
     private static final Pattern PANTUM_MODEL = Pattern.compile("\\b(?:p|bm|bp)\\d{4}[a-z]*\\b");
 
+    private static final Pattern IDENTIFIER = Pattern.compile("(?U)^(id|sku|артикул)[:# ]+([^ ]+)$");
+
     private final ModelClient model;
 
     public SearchController(SearchIndex index, EventStore events) {
@@ -85,11 +87,13 @@ public class SearchController {
                 throw new ApiProblem(
                         HttpStatus.BAD_REQUEST, "UNKNOWN_TARGET", "Подсказка отсутствует в активном снимке.");
         } else {
-            Row byId = db.entity("offer", q);
-            var exact = byId == null ? db.exact(SearchIndex.normalizeSku(q)) : List.of(byId);
+            var identifier = IDENTIFIER.matcher(q);
+            boolean qualified = identifier.matches();
+            var exact = qualified ? db.identifier(identifier.group(1), identifier.group(2))
+                    : db.exact(SearchIndex.normalizeSku(q));
             if (exact.isEmpty() && q.matches("(?iu)[a-z][a-z0-9]* \\d+"))
                 exact = db.exact(q.replace(' ', '-'));
-            if (!exact.isEmpty()) {
+            if (qualified || !exact.isEmpty()) {
                 ids = exact.stream().map(r -> r.str("id")).toList();
                 if (exact.size() == 1) target = exact.getFirst();
                 reason = "EXACT_SKU";
@@ -113,6 +117,11 @@ public class SearchController {
                 if (target == null) target = db.qualifiedSku(terms);
                 if (target == null && !input.requestsCompleteServer() && !input.requestsFileRecovery())
                     target = db.exactName(terms, index.exactNames(terms));
+                if (target == null && !terms.isEmpty() && !input.requestsFileRecovery()
+                        && !MODEL_CODE.matcher(terms).matches() && !CATALOG_CODE.matcher(terms).matches()) {
+                    String family = index.namedFamily(terms);
+                    if (family != null) target = db.byKey(family);
+                }
                 plan = target == null && !input.requestsFileRecovery()
                         ? QueryPlan.compile(terms, aliases, db, model) : QueryPlan.words(terms);
             }
@@ -178,8 +187,8 @@ public class SearchController {
         } else if (ids == null) {
             boolean task = q.contains(" ") && !MODEL_CODE.matcher(q).find();
             boolean failedProgram = plan.compiler().equals("llm_fallback");
-            boolean semantic = task && !failedProgram && (plan.hasEvidence() || input.requestsFileRecovery());
-            ranking = index.prepareRanking(terms, semantic, failedProgram || (task && !semantic));
+            boolean semantic = task && !failedProgram;
+            ranking = index.prepareRanking(terms, semantic, failedProgram || (task && !input.requestsFileRecovery()));
             if (!conflict) {
                 var ranked = ranking.in((String) filters.get("vendor_id"), (String) filters.get("category_id"));
                 families = ranked.families();
@@ -193,6 +202,25 @@ public class SearchController {
                 fileRecovery, includeServerSoftware,
                 target == null && ids == null && !fileRecovery ? plan : null, constraints);
         List<Row> direct = conflict ? List.of() : db.representatives(filters, selection, families);
+        if (direct.isEmpty() && !conflict && selection.program() != null && plan.isSinglePurpose()
+                && !db.hasPurpose(plan.purpose())) {
+            // Missing taxonomy in this snapshot. Keep every SKU constraint and require text evidence.
+            diagnostics.put("unavailable_purpose", plan.purpose().name());
+            plan = new QueryPlan("catalog_fallback", QueryPlan.Purpose.WORDS, terms, List.of(), "all");
+            selection = new Selection(null, null, selection.support(), false, false, plan, constraints);
+            ranking = index.prepareRanking(terms, true, true);
+            var ranked = ranking.in((String) filters.get("vendor_id"), (String) filters.get("category_id"));
+            families = ranked.families();
+            mode = ranked.mode();
+            reason = mode.equals("hybrid") ? "HYBRID_MATCH" : "LEXICAL_MATCH";
+            direct = db.representatives(filters, selection, families);
+        }
+        if (selection.program() != null && plan.isSinglePurpose() && direct.size() > 1
+                && input.sort().equals("relevance")) {
+            // The catalog decides eligibility. BM25 breaks ties inside the verified purpose.
+            var ranked = index.rank(terms, (String) filters.get("vendor_id"), (String) filters.get("category_id"), false);
+            SearchCatalog.orderByFamilies(direct, ranked.families(), false);
+        }
         if (includeServerSoftware && direct.size() > 1 && input.sort().equals("relevance"))
             direct.sort(Comparator.comparing(row -> !"369".equals(row.str("category_id"))));
         else if (input.sort().equals("relevance") && input.context().get("category_id") instanceof String category)
