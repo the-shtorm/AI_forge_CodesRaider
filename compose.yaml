@@ -58,7 +58,8 @@ services:
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     volumes:
-      - ./frontend/src:/workspace/frontend/src:ro
+      - ./frontend/index.html:/workspace/frontend/index.html:ro
+      - ./frontend/public:/workspace/frontend/public:ro
     depends_on:
       app:
         condition: service_healthy
