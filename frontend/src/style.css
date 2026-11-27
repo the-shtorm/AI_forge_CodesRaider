@@ -194,7 +194,7 @@ h1, h2, h3, p, ul, dl, dd { margin: 0; }
 .product-grid[data-size="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .result-main .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .related-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; }
-.related-product { color: var(--ink); text-decoration: none; }
+.related-product.card-link { display: flex; flex: 1; flex-direction: column; gap: inherit; width: auto; color: var(--ink); text-decoration: none; }
 .related-product .price { margin-top: auto; }
 .product-card {
   min-width: 0; display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 14px;
@@ -321,20 +321,20 @@ h1, h2, h3, p, ul, dl, dd { margin: 0; }
 }
 
 @media (hover: hover) and (pointer: fine) {
-  :is(.product-card:has(.card-link), .related-product):hover { border-color: #d4a3b3; box-shadow: var(--shadow-raised); }
+  .product-card:has(.card-link):hover { border-color: #d4a3b3; box-shadow: var(--shadow-raised); }
 }
 
 @media (prefers-reduced-motion: no-preference) {
   :is(.button, .site-nav a, .pagination a, .result-tabs button, .assistant-product-link) {
     transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
   }
-  :is(.product-card:has(.card-link), .related-product) { transition: transform 170ms ease, box-shadow 170ms ease, border-color 170ms ease; }
+  .product-card:has(.card-link) { transition: transform 170ms ease, box-shadow 170ms ease, border-color 170ms ease; }
   .assistant-panel:not([hidden]) { animation: panel-appear 190ms ease-out both; transform-origin: bottom right; }
   .suggestions, .license-filters[open] .license-fields { animation: controls-appear 145ms ease-out; }
 }
 
 @media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
-  :is(.product-card:has(.card-link), .related-product):hover { transform: translateY(-2px); }
+  .product-card:has(.card-link):hover { transform: translateY(-2px); }
 }
 
 @media (prefers-reduced-motion: no-preference) and (max-width: 740px) {

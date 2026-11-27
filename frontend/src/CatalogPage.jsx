@@ -130,7 +130,7 @@ export default function CatalogPage({ route, go, navigate }) {
   const data = load?.key === key ? load.data : undefined;
   const pending = load?.key !== key;
   const error = load?.key === key ? load.error : undefined;
-  const facets = load?.data?.facets ?? emptyFacets;
+  const facets = data?.facets ?? emptyFacets;
   const top = entries(data?.top4 ?? [], "top4");
   const direct = [...top.filter(({ item }) => item.role === "direct"), ...entries(data?.more_results ?? [], "more_results")];
   const recommendations = upsellCards(data);

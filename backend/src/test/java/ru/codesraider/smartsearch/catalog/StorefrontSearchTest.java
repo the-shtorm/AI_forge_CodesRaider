@@ -218,6 +218,38 @@ class StorefrontSearchTest {
     }
 
     @Test
+    void budgetDistinguishesOneListedOfferFromARequestForCapacity() throws Exception {
+        Path feed = temp.resolve("prices.xml"), snapshots = temp.resolve("snapshots");
+        String minOne = "<param name=\"Минимальное количество\">1</param>";
+        String devices = "<param name=\"Количество устройств\">1</param>";
+        String offers = offer(1, 1, "acme", 1, 500).replace("</offer>", minOne + devices + "</offer>")
+                + offer(2, 2, "acme", 1, 500)
+                + offer(3, 3, "acme", 1, 500).replace("</offer>", devices + "</offer>")
+                        .replace("available=\"true\"", "available=\"false\"")
+                + offer(4, 4, "acme", 1, 500).replace("</offer>",
+                        "<param name=\"Минимальное количество\">2</param>"
+                        + "<param name=\"Единица продажи\">устройство</param>" + devices + "</offer>");
+        Files.writeString(feed, "<yml_catalog><shop><categories><category id=\"1\">Разное</category></categories>"
+                + "<offers>" + offers + "</offers></shop></yml_catalog>");
+        String offline = "http://127.0.0.1:1";
+        try (var encoder = new EncoderClient(offline); var index = new SearchIndex(snapshots.toString(), offline, "lexical", 10)) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+            index.open();
+            var search = new SearchController(index, new EventStore(temp.resolve("events.db").toString(), JSON));
+            assertEquals(1, JSON.valueToTree(search.catalog(Map.of("max_price_minor", "50000"))).path("total").asInt());
+            assertEquals(1, search.search(Map.of("q", "SKU-1", "filters", Map.of("max_price_minor", 50000))).get("direct_count"));
+            for (var filters : List.of(Map.of("max_price_minor", 49999), Map.of("max_price_minor", 50000, "device_count", 1),
+                    Map.of("max_price_minor", 50000, "currency", "USD"))) {
+                assertEquals(0, search.search(Map.of("q", "SKU-1", "filters", filters)).get("direct_count"));
+            }
+            assertEquals(0, search.search(Map.of("q", "SKU-4", "filters",
+                    Map.of("max_price_minor", 149999, "device_count", 3))).get("direct_count"));
+            assertEquals(1, search.search(Map.of("q", "SKU-4", "filters",
+                    Map.of("max_price_minor", 150000, "device_count", 3))).get("direct_count"));
+        }
+    }
+
+    @Test
     void liveStorefrontSelectsSortedFamiliesAndOffersAlternativeFilterValues() throws Exception {
         Path feed = temp.resolve("feed.xml"), snapshots = temp.resolve("snapshots");
         Files.writeString(feed, """

@@ -1147,6 +1147,30 @@ paths:
           default: RUB
           title: Currency
         description: Валюта бюджета по ISO 4217. Для рублей сумма дана в копейках.
+      - name: origin_search_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: ID поиска, из которого открыта карточка.
+          title: Origin Search Id
+        description: ID поиска, из которого открыта карточка.
+      - name: origin_session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Сессия этого поиска. Передаётся вместе с origin_search_id.
+          title: Origin Session Id
+        description: Сессия этого поиска. Передаётся вместе с origin_search_id.
       responses:
         '200':
           description: Карточка, отфильтрованные SKU и дочерние переходы.
@@ -2690,6 +2714,15 @@ components:
           maxItems: 4
           title: Related Offers
           description: Для карточки товара — товары с подтверждённой совместимостью.
+        related_search_id:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Related Search Id
+          description: Подтверждённый поиск для показа и клика по related_offers. Используйте block=upsell и позицию
+            внутри related_offers, начиная с 1.
       additionalProperties: false
       type: object
       required:

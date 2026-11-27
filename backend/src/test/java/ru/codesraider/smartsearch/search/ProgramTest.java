@@ -364,6 +364,34 @@ class ProgramTest {
     }
 
     @Test
+    void firstExplicitMorePagesThroughUnseenCardsUntilExhausted() throws Exception {
+        instruction = "{\"op\":\"NEXT_MATCH\"}";
+        var request = new HashMap<String, Object>(Map.of("q", "сервер", "strategy", "llm",
+                "session_id", "next-page", "assistant_card_limit", 2, "sort", "price_asc"));
+        var first = json.valueToTree(search.search(request));
+        int total = first.get("direct_count").asInt();
+        assertTrue(total > 2);
+        var seen = new HashSet<String>();
+        var page = first;
+        request.put("q", "Покажи ещё");
+        while (seen.size() < total) {
+            int before = seen.size();
+            for (var card : page.get("top4").valueStream().limit(2).toList()) {
+                if (card.get("role").asString().equals("direct")) assertTrue(seen.add(card.get("offer_id").asString()));
+            }
+            assertTrue(seen.size() > before);
+            page = json.valueToTree(search.search(request));
+            assertEquals(first.get("direct_count"), page.get("direct_count"));
+            assertEquals(first.get("applied_filters"), page.get("applied_filters"));
+        }
+        assertTrue(page.get("top4").valueStream().filter(card -> "direct".equals(card.get("role").asString()))
+                .allMatch(card -> seen.contains(card.get("offer_id").asString())));
+        assertTrue(page.get("assistant_message").asString().contains("Других совпадений"));
+        request.put("q", "сервер");
+        assertEquals(first.get("top4"), json.valueToTree(search.search(request)).get("top4"));
+    }
+
+    @Test
     void exactOfferStaysFixedAndEmptyTurnBreaksTheStreak() throws Exception {
         String sku = "EP2-06605";
         var first = chat("alice", sku, List.of());

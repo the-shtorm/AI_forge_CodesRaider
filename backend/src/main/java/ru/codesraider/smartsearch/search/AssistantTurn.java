@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 import ru.codesraider.smartsearch.search.SearchCatalog.Row;
 
 /** State for a single assistant request. Only server-journaled card IDs participate in repetition. */
-record AssistantTurn(String session, List<Map<String, String>> history, int cardLimit) {
+record AssistantTurn(String session, List<Map<String, String>> history, int cardLimit, boolean wantsMore) {
     static final String CLARIFY = "Пока не понимаю, какой товар вам нужен. Опишите, пожалуйста, что вы хотите сделать и с чем работаете.";
     static final String FILTERED = "По этим условиям подходящих товаров не нашлось. Какие требования обязательны, а какие можно изменить?";
     private static final Pattern AGAIN = Pattern.compile(
@@ -23,7 +23,9 @@ record AssistantTurn(String session, List<Map<String, String>> history, int card
                 history.add(Map.of("role", (String) message.get("role"), "text", (String) message.get("text")));
             }
         }
-        return new AssistantTurn((String) request.get("session_id"), history, ((Number) request.getOrDefault("assistant_card_limit", 3)).intValue());
+        return new AssistantTurn((String) request.get("session_id"), history,
+                ((Number) request.getOrDefault("assistant_card_limit", 3)).intValue(),
+                request.get("selected_target") == null && "".equals(qualifier((String) request.get("q"))));
     }
 
     // A whole new shopping question starts a new topic. Pure filters and requests for more
@@ -114,16 +116,19 @@ record AssistantTurn(String session, List<Map<String, String>> history, int card
     }
 
     /** Each choice only reorders representatives which already passed the current SKU predicates. */
-    String diversify(List<Row> direct, String question, ModelClient model, Map<String, Object> diagnostics) {
-        if (direct.size() <= cardLimit) {
-            return "Вы снова видите те же товары. Других совпадений при этих условиях не нашлось. Что вы хотели бы изменить в подборе?";
+    int diversify(List<Row> direct, Set<String> seen, String question, boolean byRelevance,
+                  ModelClient model, Map<String, Object> diagnostics) {
+        var shown = new ArrayList<Row>();
+        var fresh = new ArrayList<Row>();
+        for (var row : direct) {
+            if (seen.contains(row.str("offer_id"))) shown.add(row);
+            else fresh.add(row);
         }
-        var shown = direct.subList(0, cardLimit);
-        var fresh = direct.subList(cardLimit, direct.size());
+        if (fresh.isEmpty() || shown.isEmpty()) return fresh.size();
         var options = List.of("NEXT_MATCH", "OTHER_VENDOR", "LOWER_PRICE");
-        String op = model.choose("Choose how to show other equally eligible catalog products. Use LOWER_PRICE if the buyer "
+        String op = byRelevance ? model.choose("Choose how to show other equally eligible catalog products. Use LOWER_PRICE if the buyer "
                         + "wants to spend less, OTHER_VENDOR for a different manufacturer, otherwise NEXT_MATCH.",
-                Map.of("question", question, "shown", shown.stream().map(r -> r.str("name")).toList()), options, 0.4);
+                Map.of("question", question, "shown", shown.stream().limit(cardLimit).map(r -> r.str("name")).toList()), options, 0.4) : null;
         diagnostics.put("chat_order", op == null ? "NEXT_MATCH" : op);
         if (op != null) diagnostics.put("chat_model_order", op);
         if ("OTHER_VENDOR".equals(op)) {
@@ -133,7 +138,9 @@ record AssistantTurn(String session, List<Map<String, String>> history, int card
             fresh.sort(Comparator.comparing(row -> Row.positive(row.get("price_minor")),
                     Comparator.nullsLast(Comparator.naturalOrder())));
         }
-        Collections.rotate(direct, -cardLimit);
-        return "Вот другие совпадения из каталога по тем же условиям.";
+        direct.clear();
+        direct.addAll(fresh);
+        direct.addAll(shown);
+        return fresh.size();
     }
 }

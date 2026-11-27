@@ -58,6 +58,45 @@ class EventStoreTest {
     }
 
     @Test
+    void attributesACompatibleSkuShownOnlyOnThePageOfASearchedFamilyVariant(@TempDir Path folder) {
+        Path db = folder.resolve("events.db");
+        var store = new EventStore(db.toString(), json);
+        var sql = new JdbcTemplate(Sqlite.dataSource(db, true));
+        var printer = Map.of("offer_id", "p1", "family_key", "printers", "role", "direct");
+        var response = Map.of("search_id", "s", "index_version", "v", "mode", "lexical", "normalized_q", "printer",
+                "applied_filters", Map.of(), "direct_count", 1, "top4", List.of(printer), "more_results", List.of(),
+                "alternatives", List.of(), "shortfall_reason", "NOT_ENOUGH_VERIFIED_FAMILIES");
+        store.logSearch(Map.of("q", "printer", "session_id", "buyer"), response, Map.of(),
+                Map.of("p1", "printers", "p2", "printers"), Instant.now(), 1);
+        List<Map<String, Object>> related = List.of(Map.of("offer_id", "toner", "family_key", "cartridges",
+                "role", "complement", "anchor_offer_id", "p2"));
+        String interaction = """
+                [{"event_id":"click","session_id":"buyer","ts":"2026-01-01T00:00:01Z","type":"click",
+                  "block":"upsell","search_id":"s","offer_id":"toner","family_key":"cartridges","role":"complement","position":1}]
+                """;
+        assertFalse(store.registerOfferUpsell("s", "different buyer", "v", "p2", related));
+        assertFalse(store.registerOfferUpsell("s", "buyer", "new index", "p2", related));
+        assertFalse(store.registerOfferUpsell("s", "buyer", "v", "unrelated printer", related));
+        assertThrows(ApiProblem.class, () -> store.ingest(json.readTree(interaction)));
+        assertTrue(store.registerOfferUpsell("s", "buyer", "v", "p2", related));
+        assertTrue(store.registerOfferUpsell("s", "buyer", "v", "p2", List.of(Map.of(
+                "offer_id", "other-toner", "family_key", "other-cartridges", "role", "complement", "anchor_offer_id", "p2"))));
+        assertThrows(ApiProblem.class, () -> store.ingest(json.readTree(interaction.replace("toner", "unseen sku"))));
+        assertThrows(ApiProblem.class, () -> store.ingest(json.readTree(interaction.replace("position\":1", "position\":2"))));
+        store.ingest(json.readTree(interaction.replace("click", "impression")));
+        store.ingest(json.readTree(interaction));
+        store.ingest(json.readTree(interaction));
+        store.ingest(json.readTree("""
+                [{"event_id":"cart","session_id":"buyer","ts":"2026-01-01T00:00:02Z","type":"add_to_cart",
+                  "search_id":"s","offer_id":"toner"},
+                 {"event_id":"order","session_id":"buyer","ts":"2026-01-01T00:00:03Z","type":"order","offer_id":"toner"},
+                 {"event_id":"other","session_id":"buyer","ts":"2026-01-01T00:00:04Z","type":"order","offer_id":"other sku"}]
+                """));
+        assertEquals(4, sql.queryForObject("SELECT count(*) FROM event WHERE offer_id='toner' AND search_id='s'", Integer.class));
+        assertNull(sql.queryForObject("SELECT search_id FROM event WHERE event_id='other'", String.class));
+    }
+
+    @Test
     void rollsBackInvalidBatchAndAttributesLateClicksByExactOffer(@TempDir Path folder) throws Exception {
         Path db = folder.resolve("events.db");
         var store = new EventStore(db.toString(), json);

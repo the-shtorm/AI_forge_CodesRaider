@@ -1,5 +1,5 @@
 import ProductImage from "./ProductImage";
-import { safeLink, targetLabels } from "./api.js";
+import { sourceLink, targetLabels } from "./api.js";
 
 const licenseTypes = { new: "Новая", renewal: "Продление", upgrade: "Обновление" };
 
@@ -11,6 +11,16 @@ export function priceLabel(amount, currency = "RUB") {
   if (amount == null) return "Цена не указана";
   const format = new Intl.NumberFormat("ru-RU", { style: "currency", currency, minimumFractionDigits: 0 });
   return format.format(amount / 10 ** format.resolvedOptions().maximumFractionDigits);
+}
+
+export function CompatibilityChecks({ checks }) {
+  if (!checks?.length) return null;
+  return <details className="proof"><summary>Почему подходит</summary>
+    <ul>{checks.map((check, index) => {
+      const source = sourceLink(check.source_url);
+      return <li key={index}>{check.candidate_value} подходит к {check.anchor_value}. {source && <a href={source} target="_blank" rel="noreferrer">Источник проверки</a>}</li>;
+    })}</ul>
+  </details>;
 }
 
 export default function ProductCard({ item, action, explanation }) {
@@ -48,12 +58,7 @@ export default function ProductCard({ item, action, explanation }) {
         </div>
         {action}
       </div>
-      {item.checks?.length > 0 && <details className="proof"><summary>Почему подходит</summary>
-        <ul>{item.checks.map((check, index) => {
-          const source = safeLink(check.source_url);
-          return <li key={index}>{check.candidate_value} подходит к {check.anchor_value}. {source && <a href={source} target="_blank" rel="noreferrer">Источник проверки</a>}</li>;
-        })}</ul>
-      </details>}
+      <CompatibilityChecks checks={item.checks} />
       {explanation}
     </article>
   );

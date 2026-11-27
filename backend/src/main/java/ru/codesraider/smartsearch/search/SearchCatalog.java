@@ -466,19 +466,26 @@ final class SearchCatalog implements AutoCloseable {
                         """.formatted(dim), count, count, count, count);
         }
         if (filters.containsKey("max_price_minor")) {
+            boolean singleOffer = !filters.containsKey("seat_count") && !filters.containsKey("device_count");
             w.add(
                     """
                     o.currency=? AND o.price_minor>0 AND (CASE o.price_unit
                         WHEN 'package' THEN coalesce(o.min_order_qty, CASE WHEN
                             json_extract(o.fact_sources_json,'$.price_unit.basis')='physical_unit'
                             OR json_type(o.fact_sources_json,'$.price_unit.param_ordinal')='integer' THEN 1 END)
-                        WHEN 'seat' THEN max(o.min_order_qty,1 + (? - 1) / o.seat_count)
-                        WHEN 'device' THEN max(o.min_order_qty,1 + (? - 1) / o.device_count)
+                        WHEN 'seat' THEN CASE WHEN ? THEN o.min_order_qty
+                            ELSE max(o.min_order_qty,1 + (? - 1) / o.seat_count) END
+                        WHEN 'device' THEN CASE WHEN ? THEN o.min_order_qty
+                            ELSE max(o.min_order_qty,1 + (? - 1) / o.device_count) END
+                        ELSE CASE WHEN ? AND o.available=1 AND o.min_order_qty=1 THEN 1 END
                     END)<=? / o.price_minor
                     """,
                     filters.getOrDefault("currency", "RUB"),
+                    singleOffer,
                     filters.get("seat_count"),
+                    singleOffer,
                     filters.get("device_count"),
+                    singleOffer,
                     filters.get("max_price_minor"));
         }
         return w;
@@ -614,23 +621,11 @@ final class SearchCatalog implements AutoCloseable {
                     .filter(e -> ProductTitle.sameRelease(requested, e.getValue()) == exactVersion)
                     .map(Map.Entry::getKey).toList());
         }
-        if (constraints.edition != null) w.add("has_edition(o.name,o.edition,?)", constraints.edition);
-        if (constraints.editionYear != null) w.add("(o.version=? OR has_edition(o.name,NULL,?))",
-                constraints.editionYear, constraints.editionYear);
+        constrainLicense(w, constraints);
         Row target = selection.target();
         if (selection.constraints().task != null) selection.constraints().task.constrain(w);
-        if (selection.constraints().boxed)
-            w.add("(o.name LIKE '%оробочн%' OR (' ' || lower(o.name) || ' ') LIKE '% box %')");
         if (constraints.pdfEditing && constraints.task != SoftwareIntent.PDF_EDITOR)
             SoftwareIntent.PDF_EDITOR.constrain(w);
-        if (selection.constraints().audience != null) {
-            w.add(predicate(QueryPlan.Purpose.WEBINAR));
-            w.add("max(audience_capacity(o.name), audience_capacity(o.description))>=?", selection.constraints().audience);
-        }
-        for (String excluded : selection.constraints().excludedVersions) w.add("o.version<>?", excluded);
-        for (String excluded : selection.constraints().excludedLicenses) w.add("o.license_type<>?", excluded);
-        if (selection.constraints().requireServerLicense) w.add(SERVER_LICENSE_TITLE);
-        if (selection.constraints().excludeServerLicense) w.add("NOT " + SERVER_LICENSE_TITLE);
         if (selection.program() != null) {
             var plan = selection.program();
             if (plan.purpose() == QueryPlan.Purpose.BACKUP && QueryPlan.requestsVmBackup(plan.text())
@@ -794,7 +789,10 @@ final class SearchCatalog implements AutoCloseable {
     }
 
     List<Row> variants(Row target, Map<String, Object> filters) throws SQLException {
-        var w = where(filters);
+        return variants(target, where(filters));
+    }
+
+    private List<Row> variants(Row target, Where w) throws SQLException {
         if ("family".equals(target.str("kind"))) w.add("o.family_key=?", target.str("entity_key"));
         else w.add("o.offer_id=?", target.str("id"));
         return rows(
@@ -807,12 +805,12 @@ final class SearchCatalog implements AutoCloseable {
                 w.args);
     }
 
-    List<Map<String, Object>> similarOffers(String category, Map<String, Object> filters,
+    List<Map<String, Object>> similarOffers(String category, Map<String, Object> filters, Requirements constraints,
             List<String> rankedFamilies, Set<String> excluded, int capacity) throws SQLException {
         var eligibleKeys = rankedFamilies.stream().filter(key -> !excluded.contains(key)).toList();
         if (eligibleKeys.isEmpty()) return List.of();
 
-        Where w = recommendationWhere(filters);
+        Where w = recommendationWhere(filters, constraints);
         w.add("o.category_id=?", category);
         w.oneOf(GROUP_KEY, eligibleKeys);
         var offers = rows(representativeSql(w, ""), w.args);
@@ -826,16 +824,48 @@ final class SearchCatalog implements AutoCloseable {
     private static final String SUGGESTION_FROM = " FROM offer o"
             + " JOIN entity v ON v.entity_key='vendor/'||o.vendor_id";
 
-    private Where recommendationWhere(Map<String, Object> filters) {
+    private static void constrainLicense(Where w, Requirements constraints) {
+        if (constraints.edition != null) w.add("has_edition(o.name,o.edition,?)", constraints.edition);
+        if (constraints.editionYear != null) w.add("(o.version=? OR has_edition(o.name,NULL,?))",
+                constraints.editionYear, constraints.editionYear);
+        if (constraints.boxed)
+            w.add("(o.name LIKE '%оробочн%' OR (' ' || lower(o.name) || ' ') LIKE '% box %')");
+        if (constraints.audience != null) {
+            w.add(predicate(QueryPlan.Purpose.WEBINAR));
+            w.add("max(audience_capacity(o.name), audience_capacity(o.description))>=?", constraints.audience);
+        }
+        for (String excluded : constraints.excludedVersions) w.add("o.version<>?", excluded);
+        for (String excluded : constraints.excludedLicenses) w.add("o.license_type<>?", excluded);
+        if (constraints.requireServerLicense) w.add(SERVER_LICENSE_TITLE);
+        if (constraints.excludeServerLicense) w.add("NOT " + SERVER_LICENSE_TITLE);
+    }
+
+    private Where recommendationWhere(Map<String, Object> filters, Requirements constraints) {
         Where w = where(filters);
+        constrainLicense(w, constraints);
         w.add("o.available=1 AND o.price_minor>0 AND o.currency=?", filters.getOrDefault("currency", "RUB"));
         return w;
     }
 
-    List<Map<String, Object>> curatedSuggestions(Map<String, Object> filters, Set<String> excluded,
+    private static final Pattern BRAND_SEPARATORS = Pattern.compile("[^\\p{L}\\d]+");
+
+    private static String brandWords(String text) {
+        return " " + BRAND_SEPARATORS.matcher(SearchInput.normalize(text).replace(".", "")).replaceAll(" ").strip() + " ";
+    }
+
+    List<Map<String, Object>> curatedSuggestions(Map<String, Object> filters, Requirements constraints, String unmatchedQuery, Set<String> excluded,
             List<String> pool, long seed, int capacity) throws SQLException {
         if (pool.isEmpty() || capacity <= 0) return List.of();
-        Where w = recommendationWhere(filters);
+        Where w = recommendationWhere(filters, constraints);
+        if (unmatchedQuery != null) {
+            String words = brandWords(unmatchedQuery);
+            var mentioned = new ArrayList<String>();
+            for (var vendor : rows("SELECT v.vendor_id,e.name FROM vendor v JOIN entity e USING(entity_key)", List.of())) {
+                if (words.contains(brandWords(vendor.str("vendor_id"))) || words.contains(brandWords(vendor.str("name"))))
+                    mentioned.add(vendor.str("vendor_id"));
+            }
+            if (!mentioned.isEmpty()) w.oneOf("o.vendor_id", mentioned);
+        }
         w.oneOf("o.offer_id", pool);
         var available = new HashMap<String, Row>();
         for (var row : rows("SELECT " + COLUMNS + SUGGESTION_FROM + " WHERE " + w.sql(), w.args)) {
@@ -906,7 +936,7 @@ final class SearchCatalog implements AutoCloseable {
     }
 
     List<Map<String, Object>> complements(
-            List<Row> anchors, Map<String, Object> filters, int capacity,
+            List<Row> anchors, Map<String, Object> filters, Requirements constraints, int capacity,
             List<Map<String, Object>> evaluations) throws SQLException {
         Set<String> used =
                 anchors.stream().map(r -> r.str("family_key")).collect(Collectors.toSet());
@@ -922,7 +952,9 @@ final class SearchCatalog implements AutoCloseable {
                 String family = relation.str("candidate_family");
                 if (used.contains(family)) continue;
                 Row candidateFamily = byKey(family);
-                for (var candidate : variants(candidateFamily, filters)) {
+                Where compatible = where(filters);
+                constrainLicense(compatible, constraints);
+                for (var candidate : variants(candidateFamily, compatible)) {
                     List<Map<String, Object>> checks = check(anchor, candidate, relation, evaluations);
                     if (checks.isEmpty()) continue;
                     var card = candidate.card("complement", "COMPATIBLE_CONSUMABLE");
@@ -947,7 +979,7 @@ final class SearchCatalog implements AutoCloseable {
     }
 
     /** Feed evidence is evaluated on the individual offers, including on older snapshots. */
-    List<Map<String,Object>> catalogConsumables(List<Row> anchors, Map<String,Object> filters,
+    List<Map<String,Object>> catalogConsumables(List<Row> anchors, Map<String,Object> filters, Requirements constraints,
             Set<String> shownFamilies, int capacity) throws SQLException {
         var perDevice = new ArrayList<List<Map<String,Object>>>();
         for (Row anchor : anchors) {
@@ -956,6 +988,7 @@ final class SearchCatalog implements AutoCloseable {
             if (category == null || model == null || !CatalogFit.modelCode(model)) continue;
             String categoryName = category.str("name");
             Where w = where(filters);
+            constrainLicense(w, constraints);
             w.add("o.vendor_id=? AND o.sku_norm IS NOT NULL", anchor.str("vendor_id"));
             boolean printer = Set.of("Принтеры и МФУ", "Принтеры", "МФУ").contains(categoryName);
             String evidence = "o.sku_raw";

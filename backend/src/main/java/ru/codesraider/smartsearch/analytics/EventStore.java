@@ -10,6 +10,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Function;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -88,6 +90,28 @@ public class EventStore {
         }
     }
 
+    /** Read back only the consecutive pages of the most recent shopping question. */
+    public Set<String> shownChatCards(String session, String version) {
+        try {
+            return database().sql().query("""
+                    SELECT index_version, json_extract(diagnostics_json,'$.chat_cards'),
+                           json_extract(diagnostics_json,'$.chat_more')
+                    FROM search_log WHERE source='demo' AND session_id=?
+                      AND json_type(diagnostics_json,'$.chat_cards')='array'
+                    ORDER BY ts DESC, rowid DESC
+                    """, rs -> {
+                var seen = new HashSet<String>();
+                while (rs.next() && version.equals(rs.getString(1))) {
+                    for (var card : json.readTree(rs.getString(2))) seen.add(card.asString());
+                    if (!rs.getBoolean(3)) break;
+                }
+                return seen;
+            }, session);
+        } catch (DataAccessException exception) {
+            throw ApiProblem.searchJournal(ApiProblem.events(exception));
+        }
+    }
+
     public boolean repeatsChatCards(String session, String version, List<String> cards, Instant now) {
         if (cards.isEmpty()) return false;
         try {
@@ -140,6 +164,29 @@ public class EventStore {
             for (var event : events) write(sql, event);
             return null;
         });
+    }
+
+    /** An offer page may show compatible SKUs that were absent from the original search response. */
+    public boolean registerOfferUpsell(String searchId, String session, String version, String anchor,
+                                       List<Map<String, Object>> cards) {
+        if (cards.isEmpty()) return false;
+        // Distinct filtered visits to the same offer may show different lists. Keep both for late events.
+        String pageKey = json.writeValueAsString(List.of(anchor, cards.stream().map(card -> card.get("offer_id")).toList()));
+        String patch = json.writeValueAsString(Map.of("offer_upsell", Map.of(pageKey, shownCards(cards))));
+        try {
+            return database().sql().update("""
+                UPDATE search_log SET shown_json=json_patch(shown_json, ?)
+                WHERE search_id=? AND session_id=? AND source='demo' AND index_version=?
+                  AND (EXISTS (SELECT 1 FROM json_each(shown_json,'$.details') WHERE key=?)
+                    OR EXISTS (SELECT 1 FROM json_each(shown_json,'$.offer_upsell') page, json_each(page.value) card
+                               WHERE json_extract(card.value,'$.offer_id')=?))
+                """, patch, searchId, session, version, anchor, anchor) == 1;
+        } catch (DataAccessException | ApiProblem exception) {
+            // The catalog page remains usable even when its recommendation cannot be attributed.
+            System.getLogger(EventStore.class.getName()).log(System.Logger.Level.WARNING,
+                    "Could not record offer recommendations for the originating search", exception);
+            return false;
+        }
     }
 
     <T> T transaction(Function<JdbcTemplate, T> action) {
@@ -195,14 +242,19 @@ public class EventStore {
                     || Event.CARD_BLOCKS.stream().flatMap(name -> shown.path(name).valueStream())
                             .anyMatch(card -> same(card, "offer_id", event.offer()) && same(card, "family_key", event.family()));
             default -> {
-                JsonNode cards = shown.path(event.block());
-                if (event.position() > cards.size()) yield false;
-                JsonNode card = cards.path(event.position().intValue() - 1);
-                yield same(card, "offer_id", event.offer()) && same(card, "family_key", event.family())
-                        && same(card, "role", event.role());
+                boolean inSearch = matchesPosition(shown.path(event.block()), event);
+                yield inSearch || ("upsell".equals(event.block()) && shown.path("offer_upsell").valueStream()
+                        .anyMatch(cards -> matchesPosition(cards, event)));
             }
         };
         if (!valid) throw ApiProblem.invalid("Событие не соответствует показанным карточкам или навигационной цели.");
+    }
+
+    private static boolean matchesPosition(JsonNode cards, Event event) {
+        if (event.position() > cards.size()) return false;
+        JsonNode card = cards.path(event.position().intValue() - 1);
+        return same(card, "offer_id", event.offer()) && same(card, "family_key", event.family())
+                && same(card, "role", event.role());
     }
 
     private static boolean same(JsonNode node, String key, String expected) {

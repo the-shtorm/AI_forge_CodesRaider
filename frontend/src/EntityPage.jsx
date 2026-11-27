@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { entityHref, eventSession, getEntity, safeLink, targetLabels } from "./api";
-import { trackEvents } from "./events";
+import { cardEvent, trackEvents } from "./events";
 import OfferDetail from "./OfferDetail";
 import ProductCard from "./ProductCard";
 import RelatedProducts from "./RelatedProducts";
@@ -21,7 +21,7 @@ export default function EntityPage({ target, filters, origin, navigate, add, sav
     const controller = new AbortController();
     async function load() {
       try {
-        const payload = await getEntity(target, filters, controller.signal);
+        const payload = await getEntity(target, filters, controller.signal, origin);
         if (!controller.signal.aborted) setEntity(payload);
       } catch (failure) {
         if (!controller.signal.aborted) setError(failure.message);
@@ -29,7 +29,25 @@ export default function EntityPage({ target, filters, origin, navigate, add, sav
     }
     load();
     return () => controller.abort();
-  }, [attempt, filters, target]);
+  }, [attempt, filters, target, origin]);
+
+  useEffect(() => {
+    if (!entity?.related_search_id || entity.related_search_id !== origin?.searchId
+        || eventSession(origin) !== origin.session) return;
+    trackEvents(origin.session, entity.related_offers.map((item, index) =>
+      cardEvent("impression", item, "upsell", index + 1, origin.searchId)));
+  }, [entity, origin]);
+
+  function visitRelated(event, child, item) {
+    const tracked = entity.related_search_id && entity.related_search_id === origin?.searchId
+      && eventSession(origin) === origin.session;
+    if (tracked) {
+      const position = entity.related_offers.indexOf(item) + 1;
+      trackEvents(origin.session, [cardEvent("click", item, "upsell", position, origin.searchId)]);
+    }
+    navigate(event, entityHref(child, {}), tracked
+      ? { ...origin, familyKey: item.family_key, clickedOfferId: item.offer_id } : null);
+  }
 
   function visitChild(event, child, selectedFilters = filters) {
     const session = eventSession(origin);
@@ -81,7 +99,7 @@ export default function EntityPage({ target, filters, origin, navigate, add, sav
         </section>}
         {!entity.offers.length && !entity.children.length && <p role="status" className="result-state">По этим условиям предложений нет. Вернитесь к поиску, чтобы изменить фильтры.</p>}
         {entity.kind === "offer" && <RelatedProducts items={entity.related_offers ?? []}
-          onVisit={(event, target) => visitChild(event, target, {})} />}
+          onVisit={visitRelated} />}
       </>}
     </main>
   );
