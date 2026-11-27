@@ -60,6 +60,8 @@ final class TaskInterpreter {
 
     private static final Pattern TASK = Pattern.compile("(?U)\\b(?:как|чем|чтобы|[а-я]{2,}(?:ть|ться|ти|чь))\\b");
 
+    private static final Pattern REFERENCE = prefixes("руководств|инструкц|учебник|книг|курс|стать[яию]|запис[ьи] лекци");
+
     private static final Pattern PERSONAL_COMPUTER = Pattern.compile("(?U)\\b(?:пк|компьютер[ау]?|ноутбук[ау]?)\\b");
     private static final Pattern SERVER_ROOM = Pattern.compile("(?U)\\b(?:сервер|стойк|подстанц|цод|трехфаз)");
     private static final Pattern UPS_RATING = Pattern.compile(
@@ -81,14 +83,23 @@ final class TaskInterpreter {
         return va >= 10_000;
     }
 
-    static QueryPlan interpret(String terms, Set<String> aliases, SearchCatalog catalog, ModelClient model,
-                               SearchIndex.QueryRanking ranking)
+    static QueryPlan interpret(String text, Set<String> aliases, SearchCatalog catalog, ModelClient model,
+                               SearchIndex.QueryRanking ranking, List<SearchCatalog.Row> direct)
             throws SQLException {
+        String terms = QueryPlan.sentenceText(text);
         if (!model.configured() || !terms.contains(" ") || !QueryPlan.freeForm(terms, aliases)
                 || ALTERNATIVE.matcher(terms).find()) return null;
         var topics = TOPICS.stream().filter(topic -> topic.subject().matcher(terms).find()).toList();
         if (catalog.mentionsVendor(terms)) return null;
         var candidates = topics.stream().filter(topic -> topic.context().matcher(terms).find()).toList();
+        if (!direct.isEmpty()) {
+            if (!TASK.matcher(terms).find() || REFERENCE.matcher(terms).find() || topics.isEmpty()) return null;
+            var plausible = candidates.isEmpty() ? topics : candidates;
+            if (catalog.hasPurposeAmongTopCards(direct, plausible.stream().map(Topic::purpose).toList())) return null;
+            // The returned cards match words but none can perform a plausible operation. Let Qwen
+            // describe the tool itself; only a recognized operation can replace the original list.
+            return rewrite(terms, topics, catalog, model);
+        }
         if (candidates.size() == 1) {
             var candidate = candidates.getFirst();
             if (!catalog.hasInterpretablePurpose(candidate.purpose())) return null;
@@ -101,6 +112,11 @@ final class TaskInterpreter {
             if (candidate != null && catalog.hasInterpretablePurpose(suggestion))
                 return model.confirmsTool(candidate.tool(), terms) ? plan("llm_semantic", candidate, terms) : null;
         }
+        return rewrite(terms, topics, catalog, model);
+    }
+
+    private static QueryPlan rewrite(String terms, List<Topic> topics, SearchCatalog catalog, ModelClient model)
+            throws SQLException {
         if (topics.isEmpty()) return null;
         String name = model.toolName(terms);
         if (name == null) return null;

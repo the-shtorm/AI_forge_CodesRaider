@@ -69,8 +69,13 @@ function options(items, key, label) {
   return [...counts.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ru"));
 }
 
+export function skipsUpsell(text) {
+  return /(?:без|кроме|не (?:предлагай(?:те)?|нужны?))\s+(?:(?:совместим\S+|дополнительн\S+)\s+)?(?:расходник|расходных материал|картридж|допродаж|дополнени|рекомендаци|аксессуар)|только основн\S* товар/u.test(normalize(text));
+}
+
 export function demoSearch({ q, filters = {}, selected_target, sort = "relevance", limit = 4 }) {
   const query = normalize(q);
+  const optOut = skipsUpsell(q);
   const exact = products.find(item => (selected_target?.kind === "offer" && item.offer_id === selected_target.target_id)
     || (item.sku && normalize(item.sku) === query));
   const targetVendor = query === "мтс" || query === "мтс линк" || selected_target?.target_id === "мтс линк";
@@ -81,7 +86,7 @@ export function demoSearch({ q, filters = {}, selected_target, sort = "relevance
     if (selected_target?.kind === "category") return item.category_id === selected_target.target_id;
     if (/по для сервера|почтовый сервер|серверное по/.test(query)) return /почтовый/.test(query) ? false : item.category_id === "software";
     if (/^сервер(ы)?$/.test(query)) return item.category_id === "servers";
-    if (item.category_id === "supplies" && /p2500w|bm1800w/.test(query) && !/картридж|pc-211p|tl-c2318h/.test(query)) return false;
+    if (/p2500w|bm1800w/.test(query) && !/pc-211p|tl-c2318h/.test(query)) return item.category_id === "print" && query.includes(normalize(item.sku));
     const haystack = normalize([item.name, item.sku, item.vendor, categories[item.category_id], ...Object.values(item.attributes).flat()].filter(Boolean).join(" "));
     const words = query.split(/[\s,?]+/).filter(word => word.length > 2);
     return words.length > 0 && (haystack.includes(query) || words.some(word => haystack.includes(word)));
@@ -99,18 +104,38 @@ export function demoSearch({ q, filters = {}, selected_target, sort = "relevance
     });
   }
   const direct = candidates.slice(0, 4);
-  const complements = direct.flatMap(anchor => {
+  const complements = optOut ? [] : direct.flatMap(anchor => {
     const relation = compatibility[anchor.offer_id];
     const item = relation && products.find(candidate => candidate.offer_id === relation[0]);
     if (!item || direct.includes(item) || !matchesFilters(item, filters)) return [];
     return [{ ...item, role: "complement", anchor_offer_id: anchor.offer_id,
       checks: [{ field: "supported_device", anchor_value: anchor.sku, candidate_value: item.sku, source_url: relation[1], result: "pass" }],
     }];
-  }).slice(0, 4 - direct.length);
-  const top4 = [...direct, ...complements];
+  });
+  const top4 = [...direct, ...complements].slice(0, 4);
+  const upsell = [...complements];
+  const pair = { servers: "software", software: "servers", meetings: "office", office: "meetings" };
+  const excluded = new Set([...candidates, ...complements].map(item => item.offer_id));
+  const eligible = products.filter(item => !excluded.has(item.offer_id) && item.available && matchesFilters(item, filters));
+  if (!optOut && !upsell.length) {
+    for (const anchor of direct) {
+      const candidate = eligible.find(item => item.category_id === pair[anchor.category_id] && !excluded.has(item.offer_id));
+      if (!candidate) continue;
+      upsell.push({ ...candidate, role: "related", anchor_offer_id: anchor.offer_id, recommendation_kind: "paired_category",
+        recommendation_reason: `К разделу «${categories[anchor.category_id]}» можно посмотреть товары раздела «${categories[candidate.category_id]}».` });
+      excluded.add(candidate.offer_id);
+      if (upsell.length === 4) break;
+    }
+    if (!upsell.length) {
+      const general = eligible.filter(candidate => !["supplies", "print"].includes(candidate.category_id));
+      for (const item of (general.length ? general : eligible).slice(0, 2)) {
+        upsell.push({ ...item, role: "related", recommendation_kind: "catalog_pick", recommendation_reason: `В наличии в разделе «${categories[item.category_id]}».` });
+      }
+    }
+  }
   return {
     search_id: `demo-${Date.now()}`, normalized_q: query, applied_filters: filters, mode: "lexical",
-    direct_count: candidates.length, top4, more_results: candidates.slice(4, limit), alternatives: [], facets,
+    direct_count: candidates.length, top4, more_results: candidates.slice(4, limit), alternatives: [], upsell, facets,
     primary_target: targetVendor ? { kind: "vendor", id: "webinar", label: "МТС Линк", url: `${store}/webinar/` }
       : exact && direct.length ? { kind: "offer", id: exact.offer_id, label: exact.name, url: exact.url } : null,
     shortfall_reason: top4.length === 4 ? null : direct.length ? "NOT_ENOUGH_VERIFIED_FAMILIES" : "NO_DIRECT_MATCH",

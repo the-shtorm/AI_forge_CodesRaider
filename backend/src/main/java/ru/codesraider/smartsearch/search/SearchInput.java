@@ -107,7 +107,7 @@ record SearchInput(
         }
     }
 
-    Map<String, Object> inferredFilters() {
+    Map<String, Object> inferredFilters(String licensingQuery) {
         var f = new LinkedHashMap<String, Object>();
         if (normalized.equals("по для сервера") || normalized.equals("серверное по"))
             f.put("category_id", "369");
@@ -118,7 +118,7 @@ record SearchInput(
         else if (normalized.contains("продлен")) f.put("license_type", "renewal");
         else if (normalized.contains("обновление лицензии") || normalized.contains("апгрейд"))
             f.put("license_type", "upgrade");
-        Matcher devices = DEVICES.matcher(normalized);
+        Matcher devices = DEVICES.matcher(licensingQuery);
         if (devices.find()) f.put("device_count", quantity(devices.group(1)));
         Matcher term = TERM.matcher(normalized);
         if (term.find())
@@ -132,32 +132,64 @@ record SearchInput(
         return normalized.matches("(?U)(?:купить |нужен |покажи )?(?:готовый )?сервер[ы]?");
     }
 
+    boolean requestsSupport() {
+        // In a task such as «чем техподдержке подключаться», support is the buyer.
+        String product = normalized.replaceAll("(?U)\\b(?:чем|как)\\s+(?:техподдержке|службе поддержки)\\b", "");
+        return product.contains("поддержк") || product.contains("сопровожден") || product.contains("support");
+    }
+
+    private static final Pattern RECOVERY_OBJECT = Pattern.compile(
+            "(?U)\\b(?:(?:видео|аудио)?файл[а-я]*|фото(?:графи[а-я]*|сним[а-я]*)?|сним(?:ок|к[а-я]*)"
+                    + "|документ[а-я]*|данн(?:ые|ых|ыми|ым))\\b");
+    private static final Pattern STANDALONE_RECOVERY = Pattern.compile(
+            "(?U)\\b(?:удал(?:ил[аи]?|ен[а-я]*|ения)|стер(?:ла|ли|ло|т[а-я]*)?"
+                    + "|утилит[а-я]*|программ[а-я]* для восстановлен[а-я]*"
+                    + "|(?:нет|без) (?:резервн[а-я]* )?(?:копи[а-я]*|б[эе]кап[а-я]*)"
+                    + "|(?:резервн[а-я]* )?копи[а-я]* нет)\\b");
+    private static final Pattern DESKTOP_PLATFORM = Pattern.compile("(?U)\\b(?:windows|linux|macos)\\b");
+
     boolean requestsFileRecovery() {
         boolean restores =
                 normalized.contains("восстанов")
                         || normalized.contains("вернуть")
                         || normalized.contains("возврат");
-        boolean files =
-                normalized.contains("файл")
-                        || normalized.contains("фотограф")
-                        || normalized.contains("снимк")
-                        || normalized.contains("документ")
-                        || normalized.contains("данн");
         boolean negated =
                 normalized.matches(
                         "(?U).*(?:\\bбез\\s+восстанов\\w*"
                             + "|\\bне\\s+(?:(?:нуж\\w*|надо|хочу|требу\\w*)\\s+)?"
                             + "(?:восстанов\\w*|вернуть|возврат\\w*)|\\bне\\s+(?:файл|документ|данн)\\w*).*");
         return restores
-                && files
+                && RECOVERY_OBJECT.matcher(normalized).find()
                 && !negated
                 && !normalized.contains("парол")
                 && !normalized.matches("(?s).*(?:sql|баз[ыу] данных|exchange|oracle).*");
     }
 
-    boolean skipsConsumables() {
-        return normalized.matches(
-                "(?s).*(?:без|кроме)\\s+(?:расходник\\w*|расходных материалов|картридж\\w*).*");
+    boolean requestsStandaloneFileRecovery() {
+        boolean mobile = normalized.matches("(?U).*\\b(?:телефон[а-я]*|смартфон[а-я]*|андроид[а-я]*|android|ios|iphone)\\b.*");
+        boolean fromBackup = normalized.matches("(?U).*\\b(?:из|с|используя) (?:резервн[а-я]* )?"
+                + "(?:копи[а-я]*|б[эе]кап[а-я]*|backup)\\b.*");
+        // On older catalogs a generic recovery request can also be served by backup software.
+        // Narrow it only when the buyer actually needs a standalone utility or a desktop OS.
+        boolean platform = DESKTOP_PLATFORM.matcher(normalized).find()
+                || DESKTOP_PLATFORM.matcher(String.valueOf(filters.get("platform"))).find();
+        return !mobile && !fromBackup && (platform || STANDALONE_RECOVERY.matcher(normalized).find());
+    }
+
+    private static final Pattern NO_UPSELL = Pattern.compile(
+            "(?U)\\b(?:без|кроме|не\\s+(?:предлагай(?:те)?|показывай(?:те)?))\\s+"
+                    + "(?:расходник\\w*|расходных материалов|картридж\\w*|аксессуар\\w*|допродаж\\w*|"
+                    + "рекомендаци\\w*|дополнени\\w*|сопутствующ\\w* товар\\w*)\\b");
+
+    boolean skipsUpsell() {
+        return NO_UPSELL.matcher(normalized).find();
+    }
+
+    String productQuery() {
+        if (!skipsUpsell()) return normalized;
+        String text = NO_UPSELL.matcher(normalized).replaceAll(" ").replaceAll("\\s+", " ")
+                .replaceAll("^[,.;: ]+|[,.;: ]+$", "");
+        return text.isEmpty() ? normalized : text;
     }
 
     private static long quantity(String value) {

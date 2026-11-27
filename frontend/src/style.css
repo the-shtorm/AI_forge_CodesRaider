@@ -84,6 +84,9 @@ h1, h2, h3, p, ul, dl, dd { margin: 0; }
 .assistant-products li { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 7px; align-items: center; }
 .assistant-product-image { display: grid; place-items: center; width: 48px; height: 48px; padding: 3px; border-radius: 5px; background: var(--surface); }
 .assistant-product-image .image-unavailable { font-size: .62rem; line-height: 1.2; }
+.assistant-recommendations { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 8px; }
+.assistant-recommendations h3 { font-size: .875rem; }
+.assistant-recommendations li p { margin-top: 3px; color: var(--muted); font-size: .8125rem; }
 .assistant-error-link { display: inline-block; margin-top: 5px; }
 .assistant-status { font-size: .875rem; color: var(--muted); }
 .assistant-suggestions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 13px 10px; }

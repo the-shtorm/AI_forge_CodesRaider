@@ -1,4 +1,5 @@
-import { demoSearch, fetchSearch } from "./catalog.js";
+import { demoSearch, fetchSearch, skipsUpsell } from "./catalog.js";
+import { upsellCards } from "./upsell.js";
 
 const topics = {
   office: {
@@ -38,34 +39,52 @@ function desiredBudget(text) {
   return Number.isSafeInteger(amount) ? amount : undefined;
 }
 
+function assistantCard({ item, anchor, block, position }) {
+  const { offer_id, family_key, name, url, image_url, role, recommendation_reason } = item;
+  return { offer_id, family_key, name, url, image_url, role, block, position, recommendation_reason,
+    anchorName: anchor?.name, source: role === "complement" ? item.checks[0].source_url : undefined };
+}
+
+function assistantCards(result) {
+  const top = result.top4 ?? [];
+  return {
+    products: top.flatMap((item, index) => item.role === "direct"
+      ? [assistantCard({ item, block: "top4", position: index + 1 })] : []),
+    upsell: upsellCards(result).map(assistantCard),
+  };
+}
+
 export function demoAssistant(question, history) {
   const earlierQuestions = history.filter(turn => turn.role === "user").map(turn => turn.text);
   const previousTopic = earlierQuestions.map(topicFor).findLast(Boolean);
   const currentTopic = topicFor(question);
   const platformFollowUp = currentTopic === "operatingSystem" && !/операционн\S* систем|нужна ос/i.test(question);
   const topic = platformFollowUp && previousTopic ? previousTopic : currentTopic ?? previousTopic;
-  if (!topic) {
-    return { text: "Для какой задачи вы подбираете программу? Например, для работы с документами, резервного копирования или видеовстреч.", products: [] };
-  }
-
   const context = [...earlierQuestions, question];
   const platform = context.map(desiredPlatform).findLast(Boolean);
   const budget = context.map(desiredBudget).findLast(value => value !== undefined);
   const filters = { max_price_minor: budget };
-  const items = demoSearch({ q: topics[topic].query, filters }).top4.filter(item => item.role === "direct").slice(0, 3);
-  if (!items.length) {
-    return { text: "В демокаталоге нет подходящего варианта в указанном бюджете. Можно увеличить бюджет или уточнить обязательные требования?", products: [] };
+  const cards = assistantCards(demoSearch({ q: topic ? topics[topic].query : question, filters }));
+  if (skipsUpsell(question)) cards.upsell = [];
+  if (!topic) {
+    return { text: cards.products.length ? "Вот что нашлось в демокаталоге." : "Для какой задачи вы подбираете товар?", ...cards };
+  }
+  if (!cards.products.length) {
+    return { text: "В демокаталоге нет подходящего варианта в указанном бюджете. Можно увеличить бюджет или уточнить обязательные требования?", ...cards };
   }
   if (topic === "office" && platform && !/^(windows|виндоус|виндовс)$/i.test(platform)) {
-    return { text: `В демокаталоге Office 2024 указан для Windows. Для ${platform} у меня нет подтверждённого варианта. Подойдёт веб-версия офисного пакета?`, products: [] };
+    const selectedPlatform = /линукс/i.test(platform) ? "Linux" : /макос/i.test(platform) ? "macOS" : platform;
+    const other = assistantCards(demoSearch({ q: topics.office.query, filters: { ...filters, platform: selectedPlatform } }));
+    return { text: `В демокаталоге Office 2024 указан для Windows. Для ${platform} у меня нет подтверждённого варианта. Подойдёт веб-версия офисного пакета?`,
+      products: [], upsell: skipsUpsell(question) ? [] : other.upsell };
   }
   if (topic === "backup" && platform) {
-    return { text: `Кибер Бэкап подходит по назначению, но карточка этой лицензии не подтверждает поддержку ${platform}. Уточните версию ОС и редакцию у поставщика перед выбором.`, products: items };
+    return { text: `Кибер Бэкап подходит по назначению, но карточка этой лицензии не подтверждает поддержку ${platform}. Уточните версию ОС и редакцию у поставщика перед выбором.`, ...cards };
   }
   if (topic === "office" && /^\s*(?:на\s+)?\d+\s*(?:пк|компьютер|устройств)/i.test(question)) {
-    return { text: "Office 2024 подходит по задаче. Для нескольких компьютеров проверьте число устройств, покрываемых конкретной лицензией, и сравните нужное количество лицензий.", products: items };
+    return { text: "Office 2024 подходит по задаче. Для нескольких компьютеров проверьте число устройств, покрываемых конкретной лицензией, и сравните нужное количество лицензий.", ...cards };
   }
-  return { text: topics[topic].text, products: items };
+  return { text: topics[topic].text, ...cards };
 }
 
 export async function requestAssistant(question, history, sessionId, signal, profileId) {
@@ -75,9 +94,9 @@ export async function requestAssistant(question, history, sessionId, signal, pro
     body: JSON.stringify({ q: question, strategy: "llm", session_id: sessionId, assistant_history: history,
       context: profileId ? { profile_id: profileId } : undefined }),
   });
-  const products = (result.top4 ?? []).filter(item => item.role === "direct").slice(0, 3);
-  const text = result.assistant_message || (products.length
+  const cards = assistantCards(result);
+  const text = result.assistant_message || (cards.products.length
     ? "Вот что нашёл поиск в каталоге по вашему запросу."
     : "В каталоге не нашлось совпадений. Попробуйте уточнить название или назначение товара.");
-  return { text, products, searchId: result.search_id };
+  return { text, ...cards, searchId: result.search_id };
 }

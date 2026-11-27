@@ -2,8 +2,8 @@
 
 **Цель на 48 часов** — автономная витрина, в которой покупатель получает конкретное предложение с ценой, может открыть варианты семейства и видит допродажу только после проверки совместимости. Spring Boot на Java 21 обслуживает React и публичный API на одном origin. Один экземпляр приложения читает неизменяемый каталог SQLite и индекс Lucene, а события пишет во второй файл SQLite. Лексический режим обеспечивает весь пользовательский сценарий. Локальный FastAPI добавляет векторный поиск при подтверждённом приросте качества.
 
-Spring обслуживает поиск, подсказки и карточки из импортированного снимка SQLite/Lucene и сохраняет успешные поиски в `search_log`. Vite проксирует `/health` и `/v1`. Клиентские события и отчёт по сессиям описаны ниже для следующего этапа. [Запуск с каталогом](../README.md#поиск-по-каталогу-softline) Порт 8001 обслуживает документацию с примерами и возвращает `501 CONTRACT_ONLY`. Источник форматов HTTP — [OpenAPI витрины](../contracts/search.openapi.yaml) и [OpenAPI энкодера](../contracts/model.openapi.yaml). Точные имена, типы, допустимость NULL, ключи и индексы SQLite заданы в [DDL каталога](../contracts/sql/catalog-v1.sql) и [DDL событий](../contracts/sql/events-v1.sql).
-Это целевая спецификация. Первый этап включает импорт снимка, лексический индекс, публичные маршруты `/v1`, журнал и отчёт. Порт 8001 обслуживает документацию с примерами и возвращает `501 CONTRACT_ONLY`. Источник форматов HTTP — [OpenAPI витрины](../contracts/search.openapi.yaml) и [OpenAPI энкодера](../contracts/model.openapi.yaml). Точные имена, типы, допустимость NULL, ключи и индексы SQLite заданы в [DDL каталога](../contracts/sql/catalog-v1.sql) и [DDL событий](../contracts/sql/events-v1.sql).
+Spring обслуживает поиск, подсказки и карточки из импортированного снимка SQLite/Lucene и сохраняет успешные поиски в `search_log`. Vite проксирует `/health` и `/v1`. Клиентские события и отчёт по сессиям описаны ниже для следующего этапа. [Запуск с каталогом](../README.md#поиск-по-каталогу-softline) Порт 8001 обслуживает документацию с примерами и возвращает `501 CONTRACT_ONLY`. Источник форматов HTTP — [OpenAPI витрины](../contracts/search.openapi.yaml) и [OpenAPI энкодера](../contracts/model.openapi.yaml). Точные имена, типы, допустимость NULL, ключи и индексы SQLite заданы в [DDL каталога](../contracts/sql/catalog-v1.sql) и [DDL событий](../contracts/sql/events-v2.sql).
+Это целевая спецификация. Первый этап включает импорт снимка, лексический индекс, публичные маршруты `/v1`, журнал и отчёт. Порт 8001 обслуживает документацию с примерами и возвращает `501 CONTRACT_ONLY`. Источник форматов HTTP — [OpenAPI витрины](../contracts/search.openapi.yaml) и [OpenAPI энкодера](../contracts/model.openapi.yaml). Точные имена, типы, допустимость NULL, ключи и индексы SQLite заданы в [DDL каталога](../contracts/sql/catalog-v1.sql) и [DDL событий](../contracts/sql/events-v2.sql).
 
 ## 1. Один Java-модуль и две точки входа
 
@@ -20,7 +20,7 @@ Spring обслуживает поиск, подсказки и карточки
 
 **Конфигурация стенда.** `APP_PORT` задаёт порт Spring на хосте (обычно 8080); `MODEL_BASE_URL=http://model:8000` доступен Spring внутри сети Compose. Для импорта с векторами использовать `import --embeddings` с прогретой моделью. Плановый `SEMANTIC_MODE=auto` включает гибридный путь только при совместимых векторах. При запуске лексического снимка веса и ключ LLM не требуются.
 
-**Режим сервера.** При запуске прочитать указатель один раз и открыть соответствующие `catalog.db` в режиме read-only и Lucene `DirectoryReader`. Обработчик использует одну пару до конца запроса. Миграцию `events.db` применять отдельно по `PRAGMA user_version`, включать `foreign_keys=ON` и ограниченный `busy_timeout` на каждом соединении. История и заказы переживают замену каталога. Готовность поиска определяется доступностью согласованной пары SQLite/Lucene. `model_service` сообщает о доступности HTTP-процесса, `semantic_ready` — о совместимости прогретой модели и векторов активного снимка.
+**Режим сервера.** При запуске прочитать указатель один раз и открыть соответствующие `catalog.db` в режиме read-only и Lucene `DirectoryReader`. Обработчик использует одну пару до конца запроса. Миграцию `events.db` применять отдельно по `PRAGMA user_version`, включать `foreign_keys=ON` и ограниченный `busy_timeout` на каждом соединении. История и заказы переживают замену каталога. Для готовности Spring нужны открытый снимок SQLite/Lucene и журнал событий, доступный для записи. `/actuator/health/readiness` возвращает `503` при отказе любой из этих зависимостей. `model_service` сообщает о доступности HTTP-процесса модели, `semantic_ready` — о совместимости прогретой модели и векторов активного снимка.
 
 ## 2. От XML до полей каталога
 
@@ -76,13 +76,16 @@ Spring обслуживает поиск, подсказки и карточки
 
 **Вложенные поля поиска.** У `context` есть опциональные `category_id,segment,profile_id`. У `filters` текстовые `category_id,vendor_id,platform,version`, перечисление `license_type`, положительные целые `term_months,device_count,seat_count`, boolean `available_only=false`, неотрицательный целый `max_price_minor` и трёхбуквенная `currency="RUB"`. Условия `filters` обязательны для кандидата; JSON-ключи этих условий опциональны для клиента. Для конфликтующего фильтра известной подборки вернуть явно запрошенное значение в `applied_filters`, сохранить цель и показать пустой результат.
 
-**Ответ поиска.** Обязательные поля — `search_id,index_version,mode,normalized_q,applied_filters,primary_target,direct_count,top4,more_results,alternatives,shortfall_reason`. Возможные `mode` — `lexical` и `hybrid`. `primary_target` — `{kind,id,url}` или `null`. Отобразить массивы в порядке сервера. В `top4` до четырёх карточек, в `more_results` — только дополнительные прямые; сумма длин ограничена `limit`. Навигация и аналоги отображаются отдельными блоками. При четырёх позициях причина недобора `null`; при нуле прямых — `NO_DIRECT_MATCH`, иначе при неполной четвёрке — `NOT_ENOUGH_VERIFIED_FAMILIES`.
+**Ответ поиска.** Обязательные поля — `search_id,index_version,mode,normalized_q,applied_filters,primary_target,direct_count,top4,more_results,alternatives,upsell,shortfall_reason`. Возможные `mode` — `lexical` и `hybrid`. `primary_target` — `{kind,id,url}` или `null`. Отобразить массивы в порядке сервера. В `top4` до четырёх карточек, в `more_results` — только дополнительные прямые; сумма длин ограничена `limit`. Навигация и аналоги отображаются отдельными блоками. При четырёх позициях причина недобора `null`; при нуле прямых — `NO_DIRECT_MATCH`, иначе при неполной четвёрке — `NOT_ENOUGH_VERIFIED_FAMILIES`.
+
+В `upsell` до четырёх карточек независимо от размера основной выдачи. Совместимое дополнение может также присутствовать в `top4`. Клиент показывает один экземпляр и передаёт блок и позицию фактически показанной карточки. При пустой прямой выдаче подборка из каталога может оставаться доступной. Счётчик `direct_count` учитывает только прямые совпадения.
 
 | Данные карточки | Обработка в интерфейсе |
 |---|---|
 | `offer_id,sku,name,vendor,url,available,price_minor,currency,offer_tier` | Обязательные ключи. `sku` и `price_minor` могут быть `null`. Для RUB форматировать копейки как рубли; при `null` вывести «Цена не указана». Наличие берётся из `available`. `offer_tier=primary\|reserve`. |
 | `old_price_minor,attributes` | Опциональны. `attributes` — объект с массивом строк на каждое свойство. Промо требует подтверждённого сравнения цен и наличия. |
 | `family_key,reason_codes,role` | Поля карточки в поисковой выдаче; в `Entity.offers` возвращаются обычные `Offer`. `reason_codes` непустой. Учитывать роль каждого товара при клике. |
+| `role=related` | Предложение в `upsell`. Поле `recommendation_reason` объясняет связь. Вид подбора в `recommendation_kind` принимает значения `paired_category`, `upgrade` или `catalog_pick`. Связь с определённым товаром задаётся через `anchor_offer_id`. |
 | `role=complement` | Дополнительно обязательны `anchor_offer_id` и непустые `checks[]` с `field,anchor_value,candidate_value,source_url,result="pass"`. |
 | `role=alternative` | Обязателен непустой список `differences[]`. При пустой прямой выдаче всё равно отобразить аналог из этого же ответа. |
 
@@ -94,7 +97,7 @@ Spring обслуживает поиск, подсказки и карточки
 
 | Событие | Дополнительные поля |
 |---|---|
-| `impression` или `click` карточки | `search_id,offer_id,family_key,role,block,position`. Блок — `top4,more_results,alternatives`; позиция с 1 внутри блока. |
+| `impression` или `click` карточки | `search_id,offer_id,family_key,role,block,position`. Блок — `top4,more_results,alternatives,upsell`; позиция с 1 внутри блока. |
 | `click` из деталей | `block=details,search_id,offer_id,family_key`. Указать фактически выбранный вариант. |
 | `click` по цели | `block=navigation,search_id,target_kind,target_id`. |
 | `reformulation` | `search_id` исходного и `next_search_id` нового уже выполненного поиска. |

@@ -46,15 +46,26 @@ public class EventStore {
         this.json = json;
     }
 
+    public boolean isWritable() {
+        try {
+            return transaction(sql -> {
+                // Exercise both tables and SQLite write permissions without changing any rows.
+                sql.update("UPDATE search_log SET search_id=search_id WHERE 0");
+                sql.update("UPDATE event SET event_id=event_id WHERE 0");
+                return true;
+            });
+        } catch (ApiProblem unavailable) {
+            return false;
+        }
+    }
+
     private synchronized Database database() {
         if (database != null) return database;
         try {
             Files.createDirectories(path.getParent());
             var source = Sqlite.dataSource(path, false);
             try (var connection = source.getConnection()) {
-                int version = Sqlite.version(connection);
-                if (version == 0) Sqlite.createV1(connection, "events");
-                else if (version != 1) throw new SQLException("Unsupported events schema version " + version);
+                Sqlite.ensureEvents(connection);
             }
             database = new Database(new JdbcTemplate(source), new TransactionTemplate(new JdbcTransactionManager(source)));
             return database;
@@ -71,6 +82,7 @@ public class EventStore {
         shown.put("top4", shownCards(top4));
         shown.put("more_results", shownCards((List<?>) response.get("more_results")));
         shown.put("alternatives", shownCards((List<?>) response.get("alternatives")));
+        if (response.get("upsell") instanceof List<?> upsell) shown.put("upsell", shownCards(upsell));
         shown.put("details", detailOffers);
         var selected = request.get("selected_target") instanceof Map<?, ?> target ? target : Map.of();
         try {
@@ -150,7 +162,7 @@ public class EventStore {
             case "navigation" -> same(shown.path("primary_target"), "kind", event.targetKind())
                     && same(shown.path("primary_target"), "id", event.targetId());
             case "details" -> same(shown.path("details"), event.offer(), event.family())
-                    || List.of("top4", "more_results", "alternatives").stream().flatMap(name -> shown.path(name).valueStream())
+                    || Event.CARD_BLOCKS.stream().flatMap(name -> shown.path(name).valueStream())
                             .anyMatch(card -> same(card, "offer_id", event.offer()) && same(card, "family_key", event.family()));
             default -> {
                 JsonNode cards = shown.path(event.block());
@@ -172,7 +184,8 @@ public class EventStore {
         return cards.stream().map(value -> {
             var card = (Map<?, ?>) value;
             Map<String, Object> entry = new LinkedHashMap<>();
-            for (String field : List.of("offer_id", "family_key", "role", "anchor_offer_id", "name", "url", "available", "attributes", "reason_codes", "checks", "differences")) {
+            for (String field : List.of("offer_id", "family_key", "role", "anchor_offer_id", "name", "url", "available",
+                    "attributes", "reason_codes", "checks", "differences", "recommendation_kind", "recommendation_reason")) {
                 if (card.containsKey(field)) entry.put(field, card.get(field));
             }
             return entry;
@@ -182,7 +195,7 @@ public class EventStore {
     public JsonNode shownCard(String searchId, String offerId) {
         return transaction(sql -> sql.query("""
                 SELECT l.q,card.value FROM search_log l,json_each(l.shown_json) block,json_each(block.value) card
-                WHERE l.search_id=? AND block.key IN ('top4','more_results','alternatives')
+                WHERE l.search_id=? AND block.key IN ('top4','more_results','alternatives','upsell')
                   AND json_extract(card.value,'$.offer_id')=? LIMIT 1
                 """, (rs, n) -> {
                     var card = (tools.jackson.databind.node.ObjectNode) json.readTree(rs.getString(2));

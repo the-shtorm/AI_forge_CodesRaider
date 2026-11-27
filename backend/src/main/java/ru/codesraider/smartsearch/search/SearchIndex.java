@@ -71,6 +71,7 @@ public class SearchIndex implements AutoCloseable {
     private FSDirectory directory;
     private DirectoryReader reader;
     private IndexSearcher searcher;
+    private ProductSpelling spelling;
     private CatalogNames catalogNames;
     private Path catalog;
     private String version;
@@ -149,6 +150,7 @@ public class SearchIndex implements AutoCloseable {
             }
             catalog = db;
             version = active;
+            spelling = new ProductSpelling(reader);
             searcher = candidateSearcher;
         } catch (IOException | SQLException | RuntimeException invalid) {
             LOG.warn("Search snapshot unavailable: {}", invalid.getMessage());
@@ -228,9 +230,15 @@ public class SearchIndex implements AutoCloseable {
 
     private Ranked rank(String query, String vendorId, String categoryId, CompletableFuture<float[]> vector, boolean requireAll)
             throws IOException {
-        List<String> lexical = lexical(words(normalize(query), requireAll), vendorId, categoryId);
+        String normalized = normalize(query);
+        List<String> lexical = lexical(words(normalized, requireAll), vendorId, categoryId);
         if (requireAll && lexical.isEmpty()) {
-            lexical = lexical(titleEvidence(query), vendorId, categoryId);
+            Query correction = spelling.titleQuery(normalized);
+            if (correction != null) {
+                var corrected = lexical(correction, vendorId, categoryId);
+                if (corrected.size() == 1) lexical = corrected;
+            }
+            if (lexical.isEmpty()) lexical = lexical(titleEvidence(normalized), vendorId, categoryId);
         }
         if (vector != null) {
             try {
@@ -330,8 +338,12 @@ public class SearchIndex implements AutoCloseable {
     private static final Pattern REQUEST_WORDS = Pattern.compile(
             "(?U)\\b(?:как|хочу|хотим|нужно|нужны|надо|купить|ищу|подобрать|подбираю|заказать|чем|"
                     + "программа|программу|программы|сервис|средство|офисный|рабочий)\\b");
+    private static final Pattern FIREWALL_TERM = Pattern.compile("(?U)\\b(?:ngfw|firewall)\\b");
+    private static final Pattern FIREWALL_RU = Pattern.compile("(?U)\\bмежсетев[а-я]*\\s+экран[а-я]*\\b");
 
     private Query titleEvidence(String text) throws IOException {
+        // NGFW and firewall titles already identify the product type spelled out in Russian.
+        if (FIREWALL_TERM.matcher(text).find()) text = FIREWALL_RU.matcher(text).replaceAll(" ");
         var terms = tokens(REQUEST_WORDS.matcher(text).replaceAll(" "));
         if (terms.isEmpty()) return new MatchNoDocsQuery();
         var query = new BooleanQuery.Builder();

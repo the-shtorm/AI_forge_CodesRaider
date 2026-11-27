@@ -24,6 +24,7 @@ class ProgramTest {
     SearchIndex index;
     HttpServer endpoint;
     SearchController search;
+    ModelClient model;
     private volatile String instruction;
     int calls;
     final JsonMapper json = JsonMapper.builder().build();
@@ -58,7 +59,7 @@ class ProgramTest {
                     }
                 });
         endpoint.start();
-        var model =
+        model =
                 new ModelClient(
                         "http://127.0.0.1:" + endpoint.getAddress().getPort() + "/chat",
                         "test",
@@ -90,7 +91,7 @@ class ProgramTest {
         assertTrue(hit.get("direct_count").asInt() > 0);
         assertEquals("1033", hit.at("/facets/categories/0/id").asString());
 
-        var filtered = run(q, Map.of("vendor_id", "pantum"));
+        var filtered = run(q + ".", Map.of("vendor_id", "pantum"));
         assertEquals("BACKUP", filtered.at("/program/purpose").asString());
         assertEquals(0, filtered.get("direct_count").asInt());
         assertTrue(filtered.at("/facets/vendors").size() > 0);
@@ -98,17 +99,72 @@ class ProgramTest {
     }
 
     @Test
-    void inferredVideoTaskSelectsEditorsAndCountsOnlyEligibleFacets() throws Exception {
+    void reinterpretsOnlyUnusableOrOffTopicTextMatches() throws Exception {
+        Path feed = temp.resolve("books-and-editors.xml"), snapshots = temp.resolve("books-and-editors");
+        Files.writeString(feed, """
+                <yml_catalog><shop><categories>
+                  <category id="10">Руководства</category><category id="495">Видеоредакторы</category>
+                </categories><offers>
+                  <offer id="11" group_id="11" available="false"><name>Руководство: как склеить видеофрагменты</name>
+                    <url>https://example.org/p/11/</url><vendor>Studio</vendor><vendorUrl>https://example.org/studio/</vendorUrl>
+                    <categoryId>10</categoryId><price>100</price><currencyId>RUR</currencyId></offer>
+                  <offer id="22" group_id="22" available="true"><name>Studio Video Editor Pro</name><description>Наложить титры на ролик</description>
+                    <url>https://example.org/p/22/</url><vendor>Studio</vendor><vendorUrl>https://example.org/studio/</vendorUrl>
+                    <categoryId>495</categoryId><price>200</price><currencyId>RUR</currencyId></offer>
+                </offers></shop></yml_catalog>
+                """);
+        String offline = "http://127.0.0.1:1";
+        try (var encoder = new EncoderClient(offline); var bookIndex = new SearchIndex(snapshots.toString(), offline, "lexical", 10)) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+            bookIndex.open();
+            var controller = new SearchController(bookIndex, new EventStore(temp.resolve("books.db").toString(), json), model);
+            String query = "Склеить видеофрагменты";
+            instruction = "{\"tool\":\"unknown\"}";
+            var unfiltered = json.valueToTree(controller.search(Map.of("q", query)));
+            assertEquals("11", unfiltered.at("/top4/0/offer_id").asString());
+            assertFalse(unfiltered.get("llm_applied").asBoolean());
+            instruction = "{\"tool\":\"video editing software\"}";
+            var corrected = json.valueToTree(controller.search(Map.of("q", query)));
+            assertEquals("llm_rewrite", corrected.at("/program/compiler").asString());
+            assertEquals("22", corrected.at("/top4/0/offer_id").asString());
+            assertEquals("495", corrected.at("/facets/categories/0/id").asString());
+            var scoped = json.valueToTree(controller.search(Map.of("q", query, "filters", Map.of("category_id", "10"))));
+            assertEquals("11", scoped.at("/top4/0/offer_id").asString());
+            assertFalse(scoped.get("llm_applied").asBoolean());
+            assertEquals(3, calls);
+            instruction = "Yes.";
+            var filtered = json.valueToTree(controller.search(Map.of("q", query, "filters", Map.of("available_only", true))));
+            assertEquals("llm_paraphrase", filtered.at("/program/compiler").asString());
+            assertEquals(1, filtered.get("direct_count").asInt());
+            assertEquals("22", filtered.at("/top4/0/offer_id").asString());
+            assertTrue(filtered.at("/top4/0/available").asBoolean());
+            assertEquals("495", filtered.at("/facets/categories/0/id").asString());
+            assertEquals(4, calls);
+            var suitable = json.valueToTree(controller.search(Map.of("q", "Наложить титры на ролик")));
+            assertEquals("22", suitable.at("/top4/0/offer_id").asString());
+            assertFalse(suitable.get("llm_applied").asBoolean());
+            assertEquals(4, calls);
+        }
+    }
+
+    @Test
+    void videoTasksSelectStandaloneEditorsAndCountOnlyEligibleFacets() throws Exception {
         var xml = new StringBuilder("<yml_catalog><shop><categories><category id='495'>Видеоредакторы</category>"
                 + "</categories><offers>");
-        var names = List.of("Studio Video Editor Pro", "Lens Effects", "Subtitle plug-in for Studio Video Editor");
-        for (int i = 0; i < names.size(); i++) {
+        record Offer(String vendor, String name, String license) {}
+        var offers = List.of(new Offer("studio", "Studio Video Editor Pro", "полная версия"),
+                new Offer("studio", "Lens Effects", "модуль"),
+                new Offer("studio", "Subtitle plug-in for Studio Video Editor", ""),
+                new Offer("corel", "Corel Pinnacle Studio 26 (лицензия), Standard", "полная версия"),
+                new Offer("wondershare", "Wondershare Filmora (Annual Plan), Boris FX", "модуль"));
+        for (int i = 0; i < offers.size(); i++) {
+            Offer offer = offers.get(i);
             xml.append("""
                     <offer id="%1$d" group_id="%1$d" available="true"><name>%2$s</name>
-                    <url>https://example.org/p/%1$d/</url><vendor>Studio</vendor>
-                    <vendorUrl>https://example.org/studio/</vendorUrl><categoryId>495</categoryId>
-                    <price>100</price><currencyId>RUR</currencyId></offer>
-                    """.formatted(i + 1, names.get(i)));
+                    <url>https://example.org/p/%1$d/</url><vendor>%3$s</vendor>
+                    <vendorUrl>https://example.org/%3$s/</vendorUrl><categoryId>495</categoryId>
+                    <price>100</price><currencyId>RUR</currencyId><param name="Тип лицензии">%4$s</param></offer>
+                    """.formatted(i + 1, offer.name(), offer.vendor(), offer.license()));
         }
         Path feed = temp.resolve("editors.xml"), snapshots = temp.resolve("media");
         Files.writeString(feed, xml.append("</offers></shop></yml_catalog>"));
@@ -117,11 +173,15 @@ class ProgramTest {
         }
         String version = Files.readString(snapshots.resolve("active")).strip();
         try (var db = new SearchCatalog(snapshots.resolve(version).resolve("catalog.db"))) {
-            var plan = new QueryPlan("llm_rewrite", QueryPlan.Purpose.VIDEO_EDITOR, "ролики", List.of(), "all");
-            var selection = new SearchCatalog.Selection(null, null, false, false, false, plan, new Requirements());
-            var offers = db.representatives(Map.of(), selection, null);
-            assertEquals(List.of("1"), offers.stream().map(row -> row.str("offer_id")).toList());
-            assertEquals(1, db.facet("category_id", Map.of(), selection, null).getFirst().number("count"));
+            for (String compiler : List.of("rules", "llm_rewrite")) {
+                var plan = new QueryPlan(compiler, QueryPlan.Purpose.VIDEO_EDITOR, "ролики", List.of(), "all");
+                var selection = new SearchCatalog.Selection(null, null, false, false, false, false, plan, new Requirements());
+                assertEquals(List.of("1", "4"), db.representatives(Map.of(), selection, null).stream()
+                        .map(row -> row.str("offer_id")).sorted().toList());
+                assertEquals(2, db.facet("category_id", Map.of(), selection, null).getFirst().number("count"));
+                assertEquals(List.of("4"), db.representatives(Map.of("vendor_id", "corel"), selection, null)
+                        .stream().map(row -> row.str("offer_id")).toList());
+            }
         }
     }
 
@@ -205,6 +265,17 @@ class ProgramTest {
     }
 
     @Test
+    void shortTyposShareSearchAndSuggestDestinations() throws Exception {
+        assertEquals("121231", run("asra", Map.of()).at("/primary_target/id").asString());
+        assertEquals("121231", search.suggest("asra", null, null).getFirst().get("target_id"));
+        assertEquals(run("сервер", Map.of()).at("/top4/0/offer_id"), run("sever", Map.of()).at("/top4/0/offer_id"));
+        assertEquals(0, run("asra", Map.of("vendor_id", "pantum")).get("direct_count").asInt());
+        assertNull(QueryPlan.missingLetter("asra", Set.of("astra linux", "astra cloud")));
+        assertNull(QueryPlan.missingLetter("asr4", Set.of("astra linux")));
+        assertEquals(0, calls);
+    }
+
+    @Test
     void strongClausesCompileWithoutModelAndKeepIntersectionStrict() throws Exception {
         var union = run("Нужны вебинары или удаленный доступ", Map.of());
         assertEquals("rules", union.at("/program/compiler").asString());
@@ -231,6 +302,16 @@ class ProgramTest {
         assertEquals("526683", result.at("/top4/0/offer_id").asString());
         assertEquals("526683", result.at("/primary_target/id").asString());
         assertEquals(0, calls);
+    }
+
+    @Test
+    void explicitlyRequestedModelCanInterpretAConstrainedTask() throws Exception {
+        instruction = "{\"op\":\"WEBINAR\"}";
+        var response = json.valueToTree(search.search(Map.of(
+                "q", "Как провести онлайн-семинар на 40 участников?", "strategy", "llm")));
+        assertEquals("llm", response.at("/program/compiler").asString());
+        assertEquals(1, calls);
+        assertEquals(0, response.get("direct_count").asInt()); // No demo SKU proves capacity for 40.
     }
 
     @Test
@@ -307,6 +388,7 @@ class ProgramTest {
     void purchaseVerbResolvesItsObjectWithoutDroppingRestrictions() throws Exception {
         assertEquals("473582", run("Мы планируем заказать EP2-06605", Map.of()).at("/primary_target/id").asString());
         assertEquals("526683", run("Хочу приобрести PC-211P", Map.of()).at("/primary_target/id").asString());
+        assertEquals("473582", run("Нужна лицензия с артикулом EP2-06605", Map.of()).at("/primary_target/id").asString());
         assertEquals(0, run("Мы не хотим купить EP2-06605", Map.of()).get("direct_count").asInt());
         assertEquals(0, run("Хочу купить EP2-06605", Map.of("platform", "macOS")).get("direct_count").asInt());
     }
@@ -320,7 +402,7 @@ class ProgramTest {
 
     @Test
     void explanationOnlyUsesAShownCardAndApprovedEvidence() throws Exception {
-        var response = run("EP2-06605", Map.of());
+        var response = run("EP2-06605 без рекомендаций", Map.of());
         String id = response.get("search_id").asString();
         assertThrows(ApiProblem.class, () -> search.explain(Map.of("search_id", id, "offer_id", "363882")));
         instruction = "{\"op\":\"availability\"}";

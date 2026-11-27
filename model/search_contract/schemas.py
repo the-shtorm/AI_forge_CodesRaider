@@ -5,7 +5,7 @@ from pydantic import AwareDatetime, Field, NonNegativeInt, PositiveInt, model_va
 from contract_http import DTO, Text
 
 Kind = Literal["offer", "family", "vendor", "category", "collection"]
-Role = Literal["direct", "complement", "alternative"]
+Role = Literal["direct", "complement", "alternative", "related"]
 Source = Literal["demo", "seed"]
 License = Literal["new", "renewal", "upgrade"]
 Currency = Annotated[str, Field(pattern="^[A-Z]{3}$")]
@@ -138,7 +138,7 @@ class Offer(DTO):
 
 class Card(Offer):
     family_key: Text = Field(
-        description="Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}."
+        description="Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения без семейства — offer/{offer_id}."
     )
     reason_codes: list[Text] = Field(
         min_length=1,
@@ -154,9 +154,9 @@ class CompatibilityCheck(DTO):
     field: Text = Field(description="Проверенная характеристика или правило совместимости.")
     anchor_value: Text = Field(description="Значение основного SKU.")
     candidate_value: Text = Field(description="Значение дополнительного SKU.")
-    source_url: Link = Field(description="Источник правила или подтверждённой матрицы.")
+    source_url: Link = Field(description="Страница производителя или карточка каталога с явным подтверждением совместимости.")
     result: Literal["pass"] = Field(
-        description="В видимую допродажу попадают только прошедшие обязательные проверки."
+        description="Для совместимого дополнения все обязательные проверки должны пройти."
     )
 
 
@@ -164,6 +164,13 @@ class ComplementCard(Card):
     role: Literal["complement"]
     anchor_offer_id: Text = Field(description="offer_id прямой карточки из этой выдачи.")
     checks: list[CompatibilityCheck] = Field(min_length=1)
+
+
+class RelatedCard(Card):
+    role: Literal["related"]
+    recommendation_kind: Literal["paired_category", "upgrade", "catalog_pick"]
+    recommendation_reason: Text = Field(description="Основание предложения по сведениям каталога.")
+    anchor_offer_id: Text | None = Field(None, description="ID товара, для которого подобрано предложение, если он есть.")
 
 
 class AlternativeCard(Card):
@@ -174,6 +181,7 @@ class AlternativeCard(Card):
 
 
 TopCard = Annotated[DirectCard | ComplementCard, Field(discriminator="role")]
+UpsellCard = Annotated[ComplementCard | RelatedCard, Field(discriminator="role")]
 
 
 class SearchFacet(DTO):
@@ -242,6 +250,10 @@ class SearchResponse(DTO):
     alternatives: list[AlternativeCard] = Field(
         description="Отдельный блок функциональных замен ниже основной выдачи."
     )
+    upsell: list[UpsellCard] = Field(
+        max_length=4,
+        description="Отдельный блок предложений к покупке. Дополнение с ролью complement может также присутствовать в top4. Показывайте его один раз.",
+    )
     shortfall_reason: Literal["NO_DIRECT_MATCH", "NOT_ENOUGH_VERIFIED_FAMILIES"] | None = Field(
         description="null при полной четвёрке. При нуле прямых совпадений — NO_DIRECT_MATCH, при недоборе проверенных семейств — NOT_ENOUGH_VERIFIED_FAMILIES."
     )
@@ -286,7 +298,7 @@ class CardEvent(EventBase):
     offer_id: Text
     family_key: Text
     role: Role
-    block: Literal["top4", "more_results", "alternatives"]
+    block: Literal["top4", "more_results", "alternatives", "upsell"]
     position: PositiveInt = Field(description="Позиция с 1 внутри указанного блока.")
 
 
