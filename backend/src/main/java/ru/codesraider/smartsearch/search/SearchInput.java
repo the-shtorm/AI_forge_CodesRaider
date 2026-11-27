@@ -107,7 +107,7 @@ record SearchInput(
         }
     }
 
-    Map<String, Object> inferredFilters() {
+    Map<String, Object> inferredFilters(String licensingQuery) {
         var f = new LinkedHashMap<String, Object>();
         if (normalized.equals("по для сервера") || normalized.equals("серверное по"))
             f.put("category_id", "369");
@@ -118,7 +118,7 @@ record SearchInput(
         else if (normalized.contains("продлен")) f.put("license_type", "renewal");
         else if (normalized.contains("обновление лицензии") || normalized.contains("апгрейд"))
             f.put("license_type", "upgrade");
-        Matcher devices = DEVICES.matcher(normalized);
+        Matcher devices = DEVICES.matcher(licensingQuery);
         if (devices.find()) f.put("device_count", quantity(devices.group(1)));
         Matcher term = TERM.matcher(normalized);
         if (term.find())
@@ -130,6 +130,12 @@ record SearchInput(
 
     boolean requestsCompleteServer() {
         return normalized.matches("(?U)(?:купить |нужен |покажи )?(?:готовый )?сервер[ы]?");
+    }
+
+    boolean requestsSupport() {
+        // In a task such as «чем техподдержке подключаться», support is the buyer.
+        String product = normalized.replaceAll("(?U)\\b(?:чем|как)\\s+(?:техподдержке|службе поддержки)\\b", "");
+        return product.contains("поддержк") || product.contains("сопровожден") || product.contains("support");
     }
 
     boolean requestsFileRecovery() {
@@ -147,15 +153,33 @@ record SearchInput(
                             + "|\\bне\\s+(?:(?:нуж\\w*|надо|хочу|требу\\w*)\\s+)?"
                             + "(?:восстанов\\w*|вернуть|возврат\\w*)|\\bне\\s+(?:файл|документ|данн)\\w*).*");
         return restores
-                && files
+                && (files || requestsDeletedDesktopFiles())
                 && !negated
                 && !normalized.contains("парол")
                 && !normalized.matches("(?s).*(?:sql|баз[ыу] данных|exchange|oracle).*");
     }
 
-    boolean skipsConsumables() {
-        return normalized.matches(
-                "(?s).*(?:без|кроме)\\s+(?:расходник\\w*|расходных материалов|картридж\\w*).*");
+    boolean requestsDeletedDesktopFiles() {
+        boolean deleted = normalized.matches("(?U).*\\b(?:удал(?:ил[аи]?|ен[а-я]*|ения)|стер(?:ла|ли|ло|т[а-я]*)?)\\b.*");
+        boolean files = normalized.matches("(?U).*\\b(?:файл[а-я]*|фото(?:граф[а-я]*)?|сним(?:ок|к[а-я]*)|документ[а-я]*)\\b.*");
+        boolean mobile = normalized.matches("(?U).*\\b(?:телефон[а-я]*|смартфон[а-я]*|андроид[а-я]*|android|ios|iphone)\\b.*");
+        return deleted && files && !mobile && !normalized.matches("(?U).*\\bиз (?:резервной )?копии\\b.*");
+    }
+
+    private static final Pattern NO_UPSELL = Pattern.compile(
+            "(?U)\\b(?:без|кроме|не\\s+(?:предлагай(?:те)?|показывай(?:те)?))\\s+"
+                    + "(?:расходник\\w*|расходных материалов|картридж\\w*|аксессуар\\w*|допродаж\\w*|"
+                    + "рекомендаци\\w*|дополнени\\w*|сопутствующ\\w* товар\\w*)\\b");
+
+    boolean skipsUpsell() {
+        return NO_UPSELL.matcher(normalized).find();
+    }
+
+    String productQuery() {
+        if (!skipsUpsell()) return normalized;
+        String text = NO_UPSELL.matcher(normalized).replaceAll(" ").replaceAll("\\s+", " ")
+                .replaceAll("^[,.;: ]+|[,.;: ]+$", "");
+        return text.isEmpty() ? normalized : text;
     }
 
     private static long quantity(String value) {

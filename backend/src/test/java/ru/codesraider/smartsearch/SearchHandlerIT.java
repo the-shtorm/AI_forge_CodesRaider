@@ -244,6 +244,16 @@ class SearchHandlerIT {
     }
 
     @Test
+    void requestedCartridgesAreMatchedToEachNamedDevice() throws Exception {
+        var two = search(Map.of("q", "Нужны принтер Pantum P2500W и МФУ Pantum BM1800W с подходящим картриджем для каждого"));
+        assertPantumCards(two, true);
+        var one = search(Map.of("q", "Принтер Pantum P2500W со совместимыми картриджами"));
+        assertPantumCards(one, false);
+        var unsupported = search(Map.of("q", "Цветной принтер Pantum P2500W с картриджем"));
+        assertEmptyList(unsupported, "top4");
+    }
+
+    @Test
     void explicitExclusionAndUnverifiedPrinterRequirementsSurviveSelection() throws Exception {
         var printer = search(Map.of("q", "Покажи устройство Pantum P2500W без картриджей"));
         assertEquals(1, printer.required("top4").size());

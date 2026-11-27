@@ -8,9 +8,9 @@ import java.util.regex.Pattern;
 record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> additionalPurposes, String join) {
     enum Purpose {
         WORDS("", ""),
-        BACKUP("бэкап|бекап|резерв|копи[юяий]|восстанов", "документ|файл|фотограф|диск"),
+        BACKUP("бэкап|бекап|backup|резерв|копи[юяий]|восстанов", "документ|файл|фотограф|диск"),
         WEBINAR(
-                "вебинар|видеовстреч|видеоконференц|лекци",
+                "вебинар|(?:онлайн|веб)[ -]семинар|видеовстреч|видеоконференц|лекци",
                 "встреч|собрать|слушател|интернет|презентаци"),
         REMOTE_ACCESS(
                 "удаленн[а-я]* доступ|рабоч[а-я]* стол",
@@ -109,15 +109,25 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         return new QueryPlan("rules", Purpose.WORDS, text, List.of(), "all");
     }
 
-    static QueryPlan compile(String normalized, Set<String> aliases, SearchCatalog db, ModelClient llm)
+    private static final Pattern VM_BACKUP = Pattern.compile(
+            "(?U)\\b(?:(?:резервн[а-я]* копи[а-я]*|б[эе]кап[а-я]*|backup) (?:для )?"
+                    + "(?:виртуальн[а-я]* машин[а-я]*|вм|vm)|vm backup)\\b");
+
+    static boolean requestsVmBackup(String text) {
+        return VM_BACKUP.matcher(text).find();
+    }
+
+    static QueryPlan compile(String normalized, Set<String> aliases, SearchCatalog db, ModelClient llm,
+                             boolean requestModel)
             throws SQLException {
         if (Pattern.compile("(?U)\\b(не|без|кроме|исключая)\\b").matcher(normalized).find())
             return new QueryPlan("rules", Purpose.UNKNOWN, normalized, List.of(), "all");
         Purpose purpose = INTENTS.get(normalized);
         if (purpose != null) return new QueryPlan("rules", purpose, normalized, List.of(), "all");
+        boolean vmBackup = requestsVmBackup(normalized);
         boolean freeForm =
-                normalized.split(" ").length >= 3
-                        && normalized.matches("[а-я -]+")
+                (normalized.split(" ").length >= 3 || vmBackup)
+                        && (normalized.matches("[а-я -]+") || vmBackup && normalized.matches("[а-яa-z -]+\\.?"))
                         && !Pattern.compile(
                                         "(?U)\\b(только|дешевле|дороже|рублей|дюймов|цветной|цветная|беспроводной|монохромный|лазерный)\\b")
                                 .matcher(normalized)
@@ -143,7 +153,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             // «Разослать приглашения и провести видеоконференцию» describes one
             // capability. A compound instruction needs evidence for two different capabilities.
             long capabilities = Arrays.stream(Purpose.values()).filter(op -> op.evidence(normalized) > 0).count();
-            if ((!compound || capabilities == 1) && best == 2 && grounded.size() == 1)
+            boolean clearIntent = (!compound || capabilities == 1) && best == 2 && grounded.size() == 1;
+            if (clearIntent && (!requestModel || !llm.configured() || compound))
                 return new QueryPlan("rules", grounded.getFirst(), normalized, List.of(), "all");
             if (grounded.isEmpty() || !llm.configured())
                 return words(normalized);
@@ -164,6 +175,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
                         program.join());
             }
             compiler = program == null ? "llm_fallback" : "llm_abstained";
+            if (clearIntent)
+                return new QueryPlan(compiler, grounded.getFirst(), normalized, List.of(), "all");
         }
         return new QueryPlan(compiler, Purpose.WORDS, normalized, List.of(), "all");
     }

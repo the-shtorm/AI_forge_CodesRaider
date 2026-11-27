@@ -20,6 +20,44 @@ class EventStoreTest {
     private final JsonMapper json = JsonMapper.builder().propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE).build();
 
     @Test
+    void preservesOldEventsAndTracksUpsellInItsOwnBlock(@TempDir Path folder) throws Exception {
+        Path db = folder.resolve("events.db");
+        var source = Sqlite.dataSource(db, false);
+        try (var conn = source.getConnection()) {
+            Sqlite.createV1(conn, "events");
+        }
+        var sql = new JdbcTemplate(source);
+        sql.update("""
+                INSERT INTO event(event_id,source,session_id,ts,type,offer_id)
+                VALUES('old','demo','buyer','2026-01-01T00:00:00.000000000Z','order','old-sku')
+                """);
+        var store = new EventStore(db.toString(), json);
+        var related = Map.of("role", "related", "family_key", "family/new", "offer_id", "extra",
+                "recommendation_kind", "catalog_pick", "recommendation_reason", "Предложение каталога.");
+        var response = Map.ofEntries(
+                Map.entry("search_id", "new-search"), Map.entry("index_version", "test"), Map.entry("mode", "lexical"),
+                Map.entry("normalized_q", "unknown"), Map.entry("applied_filters", Map.of()), Map.entry("direct_count", 0),
+                Map.entry("top4", List.of()), Map.entry("more_results", List.of()), Map.entry("alternatives", List.of()),
+                Map.entry("upsell", List.of(related)), Map.entry("shortfall_reason", "NO_DIRECT_MATCH"));
+        store.logSearch(Map.of("q", "unknown", "session_id", "buyer"), response, Map.of(), Map.of(), Instant.now(), 2);
+        var shown = store.shownCard("new-search", "extra");
+        assertEquals("Предложение каталога.", shown.required("recommendation_reason").asString());
+        assertEquals("catalog_pick", shown.required("recommendation_kind").asString());
+        assertEquals(0, sql.queryForObject("SELECT shown_family_count FROM search_log", Integer.class));
+        String click = """
+                [{"type":"click","event_id":"new","session_id":"buyer","ts":"2026-02-01T00:00:00Z",
+                "search_id":"new-search","offer_id":"extra","family_key":"family/new","role":"related","block":"upsell","position":1}]
+                """;
+        assertThrows(ApiProblem.class, () -> store.ingest(json.readTree(click.replace("upsell","top4"))));
+        store.ingest(json.readTree(click));
+        store.ingest(json.readTree(click));
+        assertEquals(2, sql.queryForObject("SELECT count(*) FROM event", Integer.class));
+        assertEquals("old-sku", sql.queryForObject("SELECT offer_id FROM event WHERE event_id='old'", String.class));
+        assertEquals(2, sql.queryForObject("PRAGMA user_version", Integer.class));
+        assertTrue(sql.queryForList("PRAGMA foreign_key_check").isEmpty());
+    }
+
+    @Test
     void rollsBackInvalidBatchAndAttributesLateClicksByExactOffer(@TempDir Path folder) throws Exception {
         Path db = folder.resolve("events.db");
         var store = new EventStore(db.toString(), json);

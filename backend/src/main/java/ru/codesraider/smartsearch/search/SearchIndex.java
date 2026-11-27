@@ -71,6 +71,7 @@ public class SearchIndex implements AutoCloseable {
     private FSDirectory directory;
     private DirectoryReader reader;
     private IndexSearcher searcher;
+    private ProductSpelling spelling;
     private Path catalog;
     private String version;
     private String profile;
@@ -140,6 +141,7 @@ public class SearchIndex implements AutoCloseable {
             }
             catalog = db;
             version = active;
+            spelling = new ProductSpelling(reader);
             searcher = candidateSearcher;
         } catch (IOException | SQLException | RuntimeException invalid) {
             LOG.warn("Search snapshot unavailable: {}", invalid.getMessage());
@@ -247,7 +249,16 @@ public class SearchIndex implements AutoCloseable {
     }
 
     private List<String> lexical(String text, String vendorId, String categoryId, boolean requireAll) throws IOException {
-        Query content = words(normalize(text), requireAll);
+        String normalized = normalize(text);
+        var hits = lexicalFamilies(words(normalized, requireAll), vendorId, categoryId);
+        if (!hits.isEmpty() || !requireAll) return hits;
+        Query correction = spelling.titleQuery(normalized);
+        if (correction == null) return hits;
+        var corrected = lexicalFamilies(correction, vendorId, categoryId);
+        return corrected.size() == 1 ? corrected : hits;
+    }
+
+    private List<String> lexicalFamilies(Query content, String vendorId, String categoryId) throws IOException {
         var query = new BooleanQuery.Builder().add(content, Occur.MUST)
                 .add(term(legacy ? "type" : "doc_type", "offer"), Occur.FILTER);
         if (vendorId != null) query.add(term("vendor_id", vendorId), Occur.FILTER);

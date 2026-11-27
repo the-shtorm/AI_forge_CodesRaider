@@ -168,7 +168,7 @@ SEARCH_REQUESTS = {
 }
 
 
-def result(q, cards, direct_count, reason, target=None):
+def result(q, cards, direct_count, reason, target=None, upsell=None):
     return {
         "search_id": SEARCH,
         "index_version": SNAPSHOT,
@@ -180,6 +180,7 @@ def result(q, cards, direct_count, reason, target=None):
         "top4": cards,
         "more_results": [],
         "alternatives": [],
+        "upsell": [card for card in cards if card["role"] == "complement"] if upsell is None else upsell,
         "shortfall_reason": reason,
     }
 
@@ -245,7 +246,15 @@ SEARCH_RESULTS = {
         },
     ),
     "absent": example(
-        "Совпадений нет", result("несуществующая-модель-000", [], 0, "NO_DIRECT_MATCH")
+        "Прямых совпадений нет, показано отдельное предложение каталога",
+        result("несуществующая-модель-000", [], 0, "NO_DIRECT_MATCH", upsell=[{
+            **OFFICE,
+            "family_key": "family/391338",
+            "role": "related",
+            "recommendation_kind": "catalog_pick",
+            "recommendation_reason": "Предложение из каталога программного обеспечения.",
+            "reason_codes": ["CATALOG_PICK"],
+        }]),
     ),
 }
 

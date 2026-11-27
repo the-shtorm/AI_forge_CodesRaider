@@ -87,6 +87,16 @@ class ProgramTest {
     }
 
     @Test
+    void explicitlyRequestedModelCanInterpretAConstrainedTask() throws Exception {
+        instruction = "{\"op\":\"WEBINAR\"}";
+        var response = json.valueToTree(search.search(Map.of(
+                "q", "Как провести онлайн-семинар на 40 участников?", "strategy", "llm")));
+        assertEquals("llm", response.at("/program/compiler").asString());
+        assertEquals(1, calls);
+        assertEquals(0, response.get("direct_count").asInt()); // No demo SKU proves capacity for 40.
+    }
+
+    @Test
     void modelBuildsAUnionOverTwoCatalogIndexes() throws Exception {
         instruction =
                 """
@@ -160,6 +170,7 @@ class ProgramTest {
     void purchaseVerbResolvesItsObjectWithoutDroppingRestrictions() throws Exception {
         assertEquals("473582", run("Мы планируем заказать EP2-06605", Map.of()).at("/primary_target/id").asString());
         assertEquals("526683", run("Хочу приобрести PC-211P", Map.of()).at("/primary_target/id").asString());
+        assertEquals("473582", run("Нужна лицензия с артикулом EP2-06605", Map.of()).at("/primary_target/id").asString());
         assertEquals(0, run("Мы не хотим купить EP2-06605", Map.of()).get("direct_count").asInt());
         assertEquals(0, run("Хочу купить EP2-06605", Map.of("platform", "macOS")).get("direct_count").asInt());
     }
@@ -173,7 +184,7 @@ class ProgramTest {
 
     @Test
     void explanationOnlyUsesAShownCardAndApprovedEvidence() throws Exception {
-        var response = run("EP2-06605", Map.of());
+        var response = run("EP2-06605 без рекомендаций", Map.of());
         String id = response.get("search_id").asString();
         assertThrows(ApiProblem.class, () -> search.explain(Map.of("search_id", id, "offer_id", "363882")));
         instruction = "{\"op\":\"availability\"}";

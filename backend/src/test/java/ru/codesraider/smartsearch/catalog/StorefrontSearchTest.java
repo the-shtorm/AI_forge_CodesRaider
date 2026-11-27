@@ -45,7 +45,7 @@ class StorefrontSearchTest {
                 <category id="327030">Другие решения удаленного доступа</category>
                 </categories><offers>%s</offers></shop></yml_catalog>
                 """.formatted(String.join("",
-                offer(535950, 414326, "webinar", 7388, 100, "МТС Линк Optimum 30"),
+                offer(535950, 414326, "webinar", 7388, 100, "МТС Линк Optimum, до 30 участников вебинара"),
                 offer(541589, 447242, "webinar", 7388, 200, "МТС Линк Стандарт"),
                 offer(541591, 447243, "webinar", 7388, 300, "МТС Линк Про"),
                 offer(222275, 146933, "sarsys", 7388, 10, "SpRobot SIP-канал Автообзвона"),
@@ -79,6 +79,10 @@ class StorefrontSearchTest {
                     assertTrue(result.required("top4").isEmpty());
                 }
             }
+            JsonNode capacity = JSON.valueToTree(controller.search(Map.of("q", "Чем провести онлайн-семинар для группы из 30 слушателей?")));
+            assertEquals(1, capacity.required("direct_count").asInt());
+            assertEquals("535950", capacity.at("/top4/0/offer_id").asString());
+            assertEquals(0, controller.search(Map.of("q", "Вебинар на 31 участника")).get("direct_count"));
         }
     }
 

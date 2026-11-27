@@ -19,7 +19,7 @@ record Event(String id, String source, String session, Instant time, String type
     static final String NON_BLANK = "(?Us).*\\S.*";
     private static final Set<String> COMMON = Set.of("event_id", "session_id", "ts", "source", "type");
     private static final Set<String> CARD_FIELDS = Set.of("block", "search_id", "offer_id", "family_key", "role", "position");
-    private static final Set<String> CARD_BLOCKS = Set.of("top4", "more_results", "alternatives");
+    static final Set<String> CARD_BLOCKS = Set.of("top4", "more_results", "alternatives", "upsell");
     private static final DateTimeFormatter STORAGE_TIME = new DateTimeFormatterBuilder().appendInstant(9).toFormatter();
 
     static Event parse(JsonNode node) {
@@ -52,7 +52,7 @@ record Event(String id, String source, String session, Instant time, String type
         if (card) {
             if (block == null || !CARD_BLOCKS.contains(block)) throw ApiProblem.invalid("Некорректный блок карточки.");
             role = text(node, "role");
-            if (!Set.of("direct", "complement", "alternative").contains(role)) throw ApiProblem.invalid("Некорректная роль карточки.");
+            if (!Set.of("direct", "complement", "alternative", "related").contains(role)) throw ApiProblem.invalid("Некорректная роль карточки.");
             var value = node.path("position");
             if (!value.isIntegralNumber() || !value.canConvertToLong() || value.asLong() < 1) {
                 throw ApiProblem.invalid("Позиция карточки должна быть положительным целым числом.");

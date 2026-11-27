@@ -11,9 +11,15 @@ const chatDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "shor
 
 function AssistantProduct({ item, sessionId, searchId, position }) {
   const url = safeLink(item.url);
-  const { element, click } = useCardImpression(sessionId, searchId, { ...item, role: "direct" }, "top4", position);
+  const source = safeLink(item.source);
+  // Older saved conversations contain only direct products and no block coordinates.
+  const { element, click } = useCardImpression(sessionId, searchId, { ...item, role: item.role ?? "direct" },
+    item.block ?? "top4", item.position ?? position);
   return <li ref={element}><div className="assistant-product-image"><ProductImage item={item} /></div>
-    {url ? <a onClick={click} href={url} target="_blank" rel="noreferrer">{item.name}</a> : <span>{item.name}</span>}
+    <div>{url ? <a onClick={click} href={url} target="_blank" rel="noreferrer">{item.name}</a> : <span>{item.name}</span>}
+      {item.role === "complement" && <p>Подходит к {item.anchorName}. {source && <a href={source} target="_blank" rel="noreferrer">Источник проверки</a>}</p>}
+      {item.role === "related" && <p>{item.recommendation_reason}</p>}
+    </div>
   </li>;
 }
 
@@ -77,11 +83,11 @@ export default function AssistantChat({ demo, profileId }) {
     try {
       const answer = demo ? demoAssistant(question, history) : await requestAssistant(question, history, id, controller.signal, profileId);
       if (!controller.signal.aborted) {
-        const products = answer.products.map(({ offer_id, family_key, name, url, image_url }) => ({ offer_id, family_key, name, url, image_url }));
         const previous = messages.findLast(message => message.searchId);
         if (!demo && previous && answer.searchId)
           recordEvent(id, "reformulation", { search_id: previous.searchId, next_search_id: answer.searchId });
-        setChats(current => appendMessage(current, id, { role: "assistant", text: answer.text, products, searchId: answer.searchId }));
+        setChats(current => appendMessage(current, id, { role: "assistant", text: answer.text, products: answer.products,
+          upsell: answer.upsell, searchId: answer.searchId }));
       }
     } catch {
       if (!controller.signal.aborted) setChats(current => appendMessage(current, id, { role: "assistant", error: true, text: "Помощник пока недоступен. Можно продолжить обычный поиск или открыть демо чата." }));
@@ -121,6 +127,11 @@ export default function AssistantChat({ demo, profileId }) {
                   <AssistantProduct key={item.offer_id} item={item} sessionId={demo ? null : activeChat.id}
                     searchId={message.searchId} position={position + 1} />)}
               </ul>}
+              {!!message.upsell?.length && <section className="assistant-recommendations">
+                <h3>{message.products?.length ? "Рекомендации к покупке" : "Предложения каталога"}</h3>
+                <ul className="assistant-products">{message.upsell.map(item => <AssistantProduct key={item.offer_id}
+                  item={item} sessionId={demo ? null : activeChat.id} searchId={message.searchId} />)}</ul>
+              </section>}
               {message.error && <a className="assistant-error-link" href="?demo=1">Открыть демо</a>}
             </div>
           ))}
