@@ -16,13 +16,15 @@ function AssistantProducts({ items, search, onVisit }) {
     {items.map(item => {
       const href = entityHref(cardTarget(item), item.role === "direct" ? search?.filters : {});
       return <li key={item.offer_id}>
-        <div className="assistant-product-image"><ProductImage /></div>
-        <div>
-          <a href={href} onClick={event => onVisit(event, href, item, search)}>{item.name}</a>
-          {item.result_kind && <div className="summary-text"><small>{[targetLabels[item.result_kind],
-            item.result_kind === "offer" && item.sku, item.result_kind === "offer" && item.version,
-            item.role === "complement" && "Совместимо"].filter(Boolean).join(" · ")}</small></div>}
-        </div>
+        <a className="assistant-product-link" href={href} onClick={event => onVisit(event, href, item, search)}>
+          <span className="assistant-product-image"><ProductImage /></span>
+          <span>
+            <strong>{item.name}</strong>
+            {item.result_kind && <small>{[targetLabels[item.result_kind],
+              item.result_kind === "offer" && item.sku, item.result_kind === "offer" && item.version,
+              item.role === "complement" && "Совместимо"].filter(Boolean).join(" · ")}</small>}
+          </span>
+        </a>
       </li>;
     })}
   </ul>;
@@ -97,7 +99,7 @@ export default function AssistantChat({ navigate, profileId }) {
     const attributed = search && eventSession(search) === search.session;
     if (attributed) trackEvents(search.session, [cardEvent("click", item, item.block ?? "top4", item.position, search.searchId)]);
     navigate(event, href, attributed ? { ...search, familyKey: item.family_key } : null);
-    setExpanded(false);
+    if (event.defaultPrevented) setExpanded(false);
   }
 
   async function send(text) {

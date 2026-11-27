@@ -44,6 +44,7 @@ function App() {
   const cartKey = "softline-cart-v1";
   const [cart, setCart] = useState(() => loadCart(cartKey));
   const routed = useRef(false);
+  const keepPosition = useRef(false);
   const saved = new Set(cart.map(({ item }) => item.offer_id));
   const catalogHref = "/";
   const analyticsHref = "/?view=analytics";
@@ -57,8 +58,9 @@ function App() {
 
   useEffect(() => {
     document.title = `${route.view === "analytics" ? "Аналитика поиска" : route.view === "cart" ? "Корзина" : "Каталог"} · Softline Store`;
-    if (routed.current) document.querySelector("main:not([hidden])")?.focus({ preventScroll: true });
+    if (routed.current && !keepPosition.current) document.querySelector("main:not([hidden])")?.focus({ preventScroll: true });
     routed.current = true;
+    keepPosition.current = false;
   }, [route]);
 
   useEffect(() => {
@@ -71,12 +73,13 @@ function App() {
     go(href, origin);
   }
 
-  function go(href, origin = null) {
+  function go(href, origin = null, { keepPosition: preserve = false } = {}) {
     if (route.key === href) return;
     const returnTo = route.view === "catalog" ? route.key : route.returnTo;
+    keepPosition.current = preserve;
     window.history.pushState({ origin, returnTo }, "", href);
     setRoute(readRoute());
-    window.scrollTo(0, 0);
+    if (!preserve) window.scrollTo(0, 0);
   }
 
   function add(item, origin) {

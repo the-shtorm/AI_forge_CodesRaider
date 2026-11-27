@@ -13,7 +13,8 @@ export default function CartPage({ items, navigate, remove, clear }) {
     {items.length > 0 ? <div className="product-grid" data-size={items.length}>{items.map(({ item, origin }) => {
       const href = entityHref({ kind: "offer", id: item.offer_id });
       return <ProductCard key={item.offer_id} item={item} action={<div className="offer-actions">
-        <a className="button secondary" href={href} onClick={event => navigate(event, href, origin)}>К товару</a>
+        <a className="button secondary card-link" href={href} aria-label={`К товару ${item.name}`}
+          onClick={event => navigate(event, href, origin)}>К товару</a>
         <button type="button" className="text-button" aria-label={`Убрать ${item.name}`} onClick={() => remove(item.offer_id)}>Убрать</button>
       </div>} />;
     })}</div> : !completed && <p className="result-state">Добавьте подходящие предложения из карточек товаров.</p>}

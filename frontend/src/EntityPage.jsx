@@ -62,7 +62,8 @@ export default function EntityPage({ target, filters, origin, navigate, add, sav
               const child = { kind: "offer", id: item.offer_id };
               const canAdd = item.available && item.price_minor != null;
               return <ProductCard key={item.offer_id} item={item} action={<div className="offer-actions">
-                <a className="button secondary" href={entityHref(child, filters)} onClick={event => visitChild(event, child)}>К товару</a>
+                <a className="button secondary card-link" href={entityHref(child, filters)}
+                  aria-label={`К товару ${item.name}`} onClick={event => visitChild(event, child)}>К товару</a>
                 {canAdd && <button type="button" className="button primary" disabled={saved.has(item.offer_id)} onClick={() => add(item, origin)}>
                   {saved.has(item.offer_id) ? "В корзине" : "Добавить в корзину"}
                 </button>}

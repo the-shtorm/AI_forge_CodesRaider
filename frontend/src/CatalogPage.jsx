@@ -130,7 +130,7 @@ export default function CatalogPage({ route, go, navigate }) {
   const data = load?.key === key ? load.data : undefined;
   const pending = load?.key !== key;
   const error = load?.key === key ? load.error : undefined;
-  const facets = data?.facets ?? emptyFacets;
+  const facets = load?.data?.facets ?? emptyFacets;
   const top = entries(data?.top4 ?? [], "top4");
   const direct = [...top.filter(({ item }) => item.role === "direct"), ...entries(data?.more_results ?? [], "more_results")];
   const recommendations = upsellCards(data);
@@ -141,8 +141,8 @@ export default function CatalogPage({ route, go, navigate }) {
     ? direct.slice((current - 1) * pageSize, current * pageSize) : entries(data?.offers ?? [], "");
   const primary = data?.primary_target;
 
-  function update(change) {
-    go(catalogHref({ ...route, ...change }));
+  function update(change, keepPosition = false) {
+    go(catalogHref({ ...route, ...change }), null, { keepPosition });
   }
 
   useEffect(() => {
@@ -224,9 +224,9 @@ export default function CatalogPage({ route, go, navigate }) {
         </button>)}
       </nav>
       <div className="result-layout">
-        <Filters key={filterParams(route.filters).toString()} filters={route.filters} facets={facets} busy={pending}
-          update={change => update({ page: 1, filters: { ...route.filters, ...change } })}
-          reset={() => update({ page: 1, filters: {} })} />
+        <Filters filters={route.filters} facets={facets} busy={pending}
+          update={change => update({ page: 1, filters: { ...route.filters, ...change } }, true)}
+          reset={() => update({ page: 1, filters: {} }, true)} />
         <section className="result-main" aria-busy={pending} aria-label="Выдача">
           {route.tab === "products" && <label className="sort-control">Показывать сначала
             <select value={route.sort} onChange={event => update({ sort: event.target.value, page: 1 })}>
