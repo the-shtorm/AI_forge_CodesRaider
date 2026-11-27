@@ -2,14 +2,17 @@ package ru.codesraider.smartsearch.search;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import ru.codesraider.smartsearch.analytics.EventStore;
+import ru.codesraider.smartsearch.catalog.CuratedOffers;
 import ru.codesraider.smartsearch.search.SearchCatalog.Row;
 import ru.codesraider.smartsearch.search.SearchCatalog.Selection;
 import ru.codesraider.smartsearch.web.ApiProblem;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.*;
@@ -18,8 +21,10 @@ import java.util.regex.Pattern;
 @RestController
 @RequestMapping(path = "/v1", produces = MediaType.APPLICATION_JSON_VALUE)
 public class SearchController {
+    private static final int MAX_RECOMMENDATIONS = 8;
     private final SearchIndex index;
     private final EventStore events;
+    private final VendorPrices vendorPrices = new VendorPrices();
     private static final Pattern MODEL_CODE =
             Pattern.compile("(?iu)\\b[a-z][a-z-]*\\d{3,}[a-z\\d-]*\\b");
     private static final Pattern CATALOG_CODE =
@@ -29,6 +34,7 @@ public class SearchController {
     private static final Pattern IDENTIFIER = Pattern.compile("(?U)^(id|sku|артикул)[:# ]+(.+)$");
 
     private final ModelClient model;
+    private final List<String> curatedOffers;
     // SQLite journals responses across restarts. Serialize the read/choose/journal cycle for
     // simultaneous sends from the same chat without retaining unbounded session identifiers.
     private final Object[] chatLocks = java.util.stream.Stream.generate(Object::new).limit(256).toArray();
@@ -39,9 +45,14 @@ public class SearchController {
 
     @org.springframework.beans.factory.annotation.Autowired
     SearchController(SearchIndex index, EventStore events, ModelClient model) {
+        this(index, events, model, CuratedOffers.configured());
+    }
+
+    SearchController(SearchIndex index, EventStore events, ModelClient model, List<String> curatedOffers) {
         this.model = model;
         this.index = index;
         this.events = events;
+        this.curatedOffers = List.copyOf(curatedOffers);
     }
 
     private SearchCatalog open() throws SQLException {
@@ -95,6 +106,7 @@ public class SearchController {
         String q = input.productQuery();
         Row target = null;
         String reason = "LEXICAL_MATCH", mode = "lexical";
+        String offerTargetReason = "EXACT_SKU";
         List<String> ids = null, families = null;
         boolean includeServerSoftware = false;
         String spelling = null;
@@ -110,6 +122,7 @@ public class SearchController {
             ids = List.of();
             plan = new QueryPlan("rules", QueryPlan.Purpose.UNKNOWN, q, List.of(), "all");
         } else if (!input.target().isEmpty()) {
+            offerTargetReason = "SELECTED_OFFER";
             constraints.extractQuery(licensingQuery);
             target =
                     db.entity(
@@ -144,7 +157,9 @@ public class SearchController {
                 if (target == null) target = db.alias(terms, category);
                 if (target == null) target = db.qualifiedSku(terms);
                 if (target == null && constraints.task == null && !input.requestsCompleteServer() && !input.requestsFileRecovery()) {
-                    target = db.exactName(terms, index.exactNames(terms));
+                    target = db.exactName(q, index.exactNames(q));
+                    if (target == null && !terms.equals(q)) target = db.exactName(terms, index.exactNames(terms));
+                    if (target != null && "offer".equals(target.str("kind"))) offerTargetReason = "EXACT_TITLE";
                     if (target == null && !terms.isEmpty() && !MODEL_CODE.matcher(terms).matches()
                             && !CATALOG_CODE.matcher(terms).matches()) {
                         String family = index.namedFamily(terms);
@@ -199,7 +214,7 @@ public class SearchController {
         if (target != null) {
             reason =
                     switch (target.str("kind")) {
-                        case "offer" -> "EXACT_SKU";
+                        case "offer" -> offerTargetReason;
                         case "family" -> "FAMILY_MATCH";
                         case "vendor" -> "VENDOR_MATCH";
                         case "collection" -> "COLLECTION_MATCH";
@@ -353,12 +368,17 @@ public class SearchController {
             diagnostics.put("chat_query", input.query());
         }
         List<Row> anchors = direct.subList(0, Math.min(4, direct.size()));
+        Row recommendationAnchor = anchors.isEmpty() ? null : anchors.getFirst();
+        Map<String, Object> recommendationFilters = filters;
         List<Map<String, Object>> top = new ArrayList<>(),
                 more = new ArrayList<>(),
                 alternatives = new ArrayList<>();
+        boolean offerLookup = "EXACT_SKU".equals(reason) || (target != null && "offer".equals(target.str("kind")));
         for (int i = 0; i < Math.min(input.limit(), direct.size()); i++) {
             var row = direct.get(i);
-            var card = row.card("direct", reason);
+            boolean versionIdentifiesOffer = (filters.containsKey("version") || constraints.editionYear != null)
+                    && row.number("offer_count") == 1;
+            var card = row.card("direct", reason, !offerLookup && !versionIdentifiesOffer);
             if (includeServerSoftware && "369".equals(row.str("category_id"))
                     && "software_admin".equals(input.context().get("profile_id")))
                 card.put("reason_codes", List.of(reason, "PROFILE_MATCH"));
@@ -377,6 +397,7 @@ public class SearchController {
         }
         if (!conflict && direct.isEmpty() && missingModel != null && q.contains("принтер")) {
             for (Row item : db.printerAlternatives(filters, missingModel, q)) {
+                if (recommendationAnchor == null) recommendationAnchor = item;
                 var card = item.card("alternative", "FUNCTIONAL_ALTERNATIVE");
                 card.put(
                         "differences",
@@ -393,51 +414,63 @@ public class SearchController {
             var relaxed = new LinkedHashMap<>(filters);
             String requested = relaxed.remove("version").toString();
             for (Row sku : db.representatives(relaxed, selection, families)) {
+                if (recommendationAnchor == null) {
+                    recommendationAnchor = sku;
+                    recommendationFilters = relaxed;
+                }
                 var alternative = sku.card("alternative", "FUNCTIONAL_ALTERNATIVE");
                 alternative.put("differences", List.of("Версия " + constraints.namedVersions.get(sku.str("offer_id"))
                         + " вместо запрошенной " + requested + "."));
                 alternatives.add(alternative);
             }
         }
-        List<Map<String, Object>> upsell = List.of();
-        if (!conflict && !input.skipsUpsell() && (chat == null || !direct.isEmpty())) {
-            Set<String> shownFamilies = new HashSet<>();
-            for (var block : List.of(top, more, alternatives))
-                for (var card : block) shownFamilies.add((String) card.get("family_key"));
+        var upsell = new ArrayList<Map<String, Object>>();
+        boolean recommendationsEnabled = !input.skipsUpsell();
+        Set<String> shownFamilies = new HashSet<>();
+        for (var row : direct) shownFamilies.add(row.cardKey());
+        for (var card : alternatives) shownFamilies.add((String) card.get("family_key"));
+        if (!conflict && recommendationsEnabled) {
+            int capacity = MAX_RECOMMENDATIONS;
 
             var evaluations = new ArrayList<Map<String, Object>>();
-            var verified = db.complements(anchors, filters, 4, evaluations).stream()
+            var verified = db.complements(anchors, filters, capacity, evaluations).stream()
                     .filter(card -> shownFamilies.add((String) card.get("family_key"))).toList();
             // Keep the established top4 contract. The independent upsell block also works with four direct hits.
             top.addAll(verified.subList(0, Math.min(4 - top.size(), verified.size())));
-            var suggestions = new ArrayList<>(verified);
-            // A category or vendor navigation target scopes the main results. A stand can belong to
-            // a different category than the laptops on that page. Keep explicit shopper filters.
+            upsell.addAll(verified);
+            // Verified accessories can belong to a different category than their anchor.
+            // Keep explicit shopper filters when relaxing navigation scope for compatibility checks.
             var merchandisingFilters = new LinkedHashMap<>(filters);
             if (!anchors.isEmpty()) {
                 for (String key : List.of("category_id", "vendor_id"))
                     if (!input.filters().containsKey(key)) merchandisingFilters.remove(key);
             }
-            if (!merchandisingFilters.equals(filters) && suggestions.size() < 4) {
-                for (var card : db.complements(anchors, merchandisingFilters, 4, evaluations)) {
-                    if (shownFamilies.add((String) card.get("family_key"))) suggestions.add(card);
-                    if (suggestions.size() == 4) break;
+            if (!merchandisingFilters.equals(filters) && upsell.size() < capacity) {
+                for (var card : db.complements(anchors, merchandisingFilters, capacity, evaluations)) {
+                    if (shownFamilies.add((String) card.get("family_key"))) upsell.add(card);
+                    if (upsell.size() == capacity) break;
                 }
             }
             if (!evaluations.isEmpty()) diagnostics.put("relation_checks", evaluations.stream().distinct().toList());
-            if (suggestions.size() < 4) {
-                suggestions.addAll(db.catalogConsumables(anchors, merchandisingFilters, shownFamilies, 4 - suggestions.size()));
+            if (upsell.size() < capacity) {
+                upsell.addAll(db.catalogConsumables(anchors, merchandisingFilters, shownFamilies, capacity - upsell.size()));
             }
-            if (suggestions.isEmpty()) {
-                var shoppingFilters = new LinkedHashMap<>(input.filters());
-                for (String key : List.of("available_only", "max_price_minor", "currency"))
-                    if (filters.containsKey(key)) shoppingFilters.put(key, filters.get(key));
-                Row contextHint = anchors.isEmpty() ? db.upsellContext(target, alternatives, families,
-                        (String) input.context().get("category_id")) : null;
-                suggestions.addAll(db.upsellSuggestions(anchors, merchandisingFilters, shoppingFilters, shownFamilies,
-                        (String) input.context().get("profile_id"), 4, contextHint));
+            if (recommendationAnchor != null && upsell.size() < capacity) {
+                String category = recommendationAnchor.str("category_id");
+                var ranked = index.rank(recommendationAnchor.str("name"),
+                        (String) recommendationFilters.get("vendor_id"), category, true);
+                upsell.addAll(db.similarOffers(category, recommendationFilters, ranked.families(),
+                        shownFamilies, capacity - upsell.size()));
             }
-            upsell = suggestions;
+        }
+        if (recommendationsEnabled && upsell.isEmpty()) {
+            var editorialFilters = new LinkedHashMap<>(input.filters());
+            for (String key : List.of("available_only", "max_price_minor", "currency"))
+                if (filters.containsKey(key)) editorialFilters.put(key, filters.get(key));
+            UUID seed = UUID.nameUUIDFromBytes(input.normalized().getBytes(StandardCharsets.UTF_8));
+            int count = 4 + Math.floorMod(seed.getMostSignificantBits(), MAX_RECOMMENDATIONS - 3);
+            upsell.addAll(db.curatedSuggestions(editorialFilters, shownFamilies, curatedOffers,
+                    seed.getLeastSignificantBits(), count));
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("search_id", UUID.randomUUID().toString());
@@ -559,6 +592,30 @@ public class SearchController {
         }
     }
 
+    @GetMapping("/catalog")
+    public Map<String, Object> catalog(@RequestParam Map<String, String> query) throws SQLException {
+        var params = new LinkedHashMap<>(query);
+        String sort = params.remove("sort");
+        if (sort == null) sort = "relevance";
+        if (!Set.of("relevance", "price_asc", "price_desc").contains(sort)) throw SearchInput.invalid("sort");
+        int page = catalogPageValue(params.remove("page"), "page", 1, Integer.MAX_VALUE);
+        int size = catalogPageValue(params.remove("page_size"), "page_size", 8, 48);
+        try (var db = open()) {
+            return db.browse(SearchInput.filters(params, true), sort, page, size);
+        }
+    }
+
+    private static int catalogPageValue(String raw, String field, int defaultValue, int maximum) {
+        if (raw == null) return defaultValue;
+        try {
+            int value = Integer.parseInt(raw);
+            if (value < 1 || value > maximum) throw SearchInput.invalid(field);
+            return value;
+        } catch (NumberFormatException invalid) {
+            throw SearchInput.invalid(field);
+        }
+    }
+
     @GetMapping("/entities/{kind}/{id}")
     public Map<String, Object> entity(
             @PathVariable("kind") String kind,
@@ -584,6 +641,10 @@ public class SearchController {
             if (kind.equals("offer") || kind.equals("family")) {
                 var variants = db.variants(target, scope);
                 result.put("offers", db.detailedOffers(variants));
+                if (kind.equals("offer") && !variants.isEmpty()) {
+                    result.put("related_offers", db.complements(
+                            List.of(variants.getFirst()), Map.of(), 4, new ArrayList<>()));
+                }
                 if (kind.equals("offer")
                         && !variants.isEmpty()
                         && variants.getFirst().get("family_key") != null) {
@@ -606,6 +667,22 @@ public class SearchController {
             }
             return result;
         }
+    }
+
+    @GetMapping("/entities/offer/{id}/price-comparison")
+    public ResponseEntity<VendorPrices.Comparison> priceComparison(@PathVariable("id") String id)
+            throws SQLException {
+        SearchInput.text(id, "id");
+        Row offer;
+        try (var db = open()) {
+            var target = db.entity("offer", id);
+            if (target == null) throw new ApiProblem(
+                    HttpStatus.NOT_FOUND, "ENTITY_NOT_FOUND", "Товар отсутствует в активном снимке.");
+            if (index.catalogDate() == null) return ResponseEntity.noContent().build();
+            offer = db.variants(target, Map.of()).stream().findFirst().orElse(null);
+        }
+        var comparison = vendorPrices.compare(offer, index.catalogDate());
+        return comparison == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(comparison);
     }
     @PostMapping(path = "/explain", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> explain(@RequestBody Map<String, Object> request) {

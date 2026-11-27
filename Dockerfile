@@ -24,6 +24,8 @@ FROM eclipse-temurin:21-jre-alpine AS app
 WORKDIR /app
 RUN mkdir -p /app/data/snapshots /app/data/events && chown -R 10001:10001 /app/data
 COPY --from=backend-build /workspace/backend/target/app.jar ./app.jar
+COPY backend/src/main/resources/search/demo.xml ./demo.xml
+COPY --chmod=755 backend/entrypoint.sh ./entrypoint.sh
 USER 10001:10001
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]

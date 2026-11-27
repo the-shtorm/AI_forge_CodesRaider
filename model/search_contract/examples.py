@@ -24,14 +24,23 @@ def offer(offer_id, name, sku, vendor, price_minor, path):
     }
 
 
+def card(item, family, kind="offer", target_id=None, count=1):
+    return {**item, "family_key": family, "result_kind": kind, "target_kind": kind,
+            "target_id": target_id or item["offer_id"], "offer_count": count}
+
+
 def direct(item, family, reason):
-    return {**item, "family_key": family, "role": "direct", "reason_codes": [reason]}
+    if reason == "EXACT_SKU" or family.startswith("offer/"):
+        destination = card(item, family)
+    else:
+        family_id = family.split("/", 1)[1].replace("/", "~")
+        destination = card(item, family, "family", family_id)
+    return {**destination, "role": "direct", "reason_codes": [reason]}
 
 
 def consumable(item, device, source):
     return {
-        **item,
-        "family_key": "hardware/pantum/" + item["sku"].lower(),
+        **card(item, "hardware/pantum/" + item["sku"].lower()),
         "role": "complement",
         "reason_codes": ["COMPATIBLE_CONSUMABLE"],
         "anchor_offer_id": device["offer_id"],
@@ -68,6 +77,21 @@ TL2318 = offer(
     345600,
     "/pantum/tl-c2318h-513625/",
 )
+
+CURATED = [
+    {**card(item, key), "role": "related", "recommendation_kind": "curated_fallback",
+     "recommendation_reason": "Предложение из подборки повседневных товаров и программ.",
+     "reason_codes": ["CURATED_FALLBACK"]}
+    for item, key in (
+        (OFFICE, "family/391338"),
+        (offer("231538", "Dr.Web Security Space", "LHW-BK-12M-1-A3", "Доктор Веб", 172400,
+               "/drweb/lhw-bk-12m-1-a3-231538/"), "family/193420"),
+        (offer("83303", "Клавиатура Logitech K120", "920-002522", "Logitech", 98500,
+               "/logitech/920-002522-83303/"), "hardware/logitech/920-002522"),
+        (offer("508887", "Флешка Netac U185 USB 3.2 Gen 1 64GB", "NT03U185N-064G-32WH", "Netac", 65700,
+               "/netac/nt03u185n-064g-32wh-508887/"), "offer/508887"),
+    )
+]
 
 MTS = [
     direct(
@@ -237,8 +261,7 @@ SEARCH_RESULTS = {
         {
             **result(ANALOG_Q.lower(), [], 0, "NO_DIRECT_MATCH"),
             "alternatives": [{
-                **PRINTER,
-                "family_key": "hardware/pantum/p2500w",
+                **card(PRINTER, "hardware/pantum/p2500w"),
                 "role": "alternative",
                 "reason_codes": ["FUNCTIONAL_ALTERNATIVE"],
                 "differences": ["Другая модель принтера: P2500W вместо P2507."],
@@ -246,15 +269,8 @@ SEARCH_RESULTS = {
         },
     ),
     "absent": example(
-        "Прямых совпадений нет, показано отдельное предложение каталога",
-        result("несуществующая-модель-000", [], 0, "NO_DIRECT_MATCH", upsell=[{
-            **OFFICE,
-            "family_key": "family/391338",
-            "role": "related",
-            "recommendation_kind": "catalog_pick",
-            "recommendation_reason": "Предложение из каталога программного обеспечения.",
-            "reason_codes": ["CATALOG_PICK"],
-        }]),
+        "Модель отсутствует, показана редакционная подборка",
+        result("несуществующая-модель-000", [], 0, "NO_DIRECT_MATCH", upsell=CURATED),
     ),
 }
 

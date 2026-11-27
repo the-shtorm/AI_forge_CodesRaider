@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, Field, NonNegativeInt, PositiveInt, model_validator
@@ -22,6 +23,18 @@ class SelectedTarget(DTO):
     target_id: Text = Field(
         description="Строковый ID из ответа /v1/suggest, в пространстве выбранного kind."
     )
+
+
+class PriceComparison(DTO):
+    vendor: Text
+    source_url: Annotated[str, Field(pattern=r"^https://")]
+    reference_type: Literal["vendor_price", "rrp"]
+    currency: Literal["RUB"]
+    store_price_minor: PositiveInt
+    vendor_price_minor: PositiveInt
+    difference_minor: int = Field(description="Цена вендора минус цена нашего каталога, в копейках.")
+    catalog_date: date
+    checked_at: AwareDatetime
 
 
 class Suggestion(SelectedTarget):
@@ -115,6 +128,7 @@ class Offer(DTO):
     sku: Text | None = Field(
         description="Исходный артикул vendorCode. Может отсутствовать или повторяться."
     )
+    version: Text | None = Field(None, description="Подтверждённая версия предложения, если известна.")
     name: Text
     vendor: Text
     url: Link
@@ -137,10 +151,17 @@ class Offer(DTO):
     )
 
 
-class Card(Offer):
+class CatalogCard(Offer):
     family_key: Text = Field(
         description="Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения без семейства — offer/{offer_id}."
     )
+    result_kind: Literal["family", "offer"]
+    target_kind: Literal["family", "offer"]
+    target_id: Text = Field(description="ID сущности, которая открывается по карточке.")
+    offer_count: PositiveInt = Field(description="Число подходящих SKU в семействе. Для предложения равно 1.")
+
+
+class Card(CatalogCard):
     reason_codes: list[Text] = Field(
         min_length=1,
         description="Основания показа, например EXACT_SKU, VENDOR_MATCH или COMPATIBLE_CONSUMABLE.",
@@ -169,7 +190,7 @@ class ComplementCard(Card):
 
 class RelatedCard(Card):
     role: Literal["related"]
-    recommendation_kind: Literal["paired_category", "upgrade", "catalog_pick"]
+    recommendation_kind: Literal["paired_category", "upgrade", "catalog_pick", "curated_fallback"]
     recommendation_reason: Text = Field(description="Основание предложения по сведениям каталога.")
     anchor_offer_id: Text | None = Field(None, description="ID товара, для которого подобрано предложение, если он есть.")
 
@@ -194,6 +215,20 @@ class SearchFacet(DTO):
 class SearchFacets(DTO):
     vendors: list[SearchFacet]
     categories: list[SearchFacet]
+
+
+class CatalogQuery(Filters):
+    page: int = Field(1, ge=1, le=2147483647, description="Страница за пределами выдачи округляется до последней.")
+    page_size: int = Field(8, ge=1, le=48)
+    sort: Literal["relevance", "price_asc", "price_desc"] = "relevance"
+
+
+class CatalogPage(DTO):
+    offers: list[CatalogCard]
+    total: NonNegativeInt
+    page: PositiveInt
+    page_size: PositiveInt
+    facets: SearchFacets
 
 
 Purpose = Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
@@ -242,21 +277,21 @@ class SearchResponse(DTO):
         description="Переход к SKU, семейству, вендору, категории или подборке. Учитывается отдельно от товарных мест."
     )
     direct_count: NonNegativeInt = Field(
-        description="Число различных прямых семейств после фильтров и выбора очереди цены, до обрезки по limit."
+        description="Число прямых карточек семейств и предложений после фильтров и выбора очереди цены, до обрезки по limit."
     )
     top4: list[TopCard] = Field(
         max_length=4,
         description="Порядок отображения. Сначала прямые семейства, затем подтверждённые дополнения. Все family_key различны.",
     )
     more_results: list[DirectCard] = Field(
-        description="Дополнительные прямые семейства сверх первой четвёрки, до общего limit."
+        description="Дополнительные прямые карточки сверх первой четвёрки, до общего limit."
     )
     alternatives: list[AlternativeCard] = Field(
         description="Отдельный блок функциональных замен ниже основной выдачи."
     )
     upsell: list[UpsellCard] = Field(
-        max_length=4,
-        description="Отдельный блок предложений к покупке. Дополнение с ролью complement может также присутствовать в top4. Показывайте его один раз.",
+        max_length=8,
+        description="Отдельный блок рекомендаций. При дублировании дополнения в top4 используйте координаты из upsell.",
     )
     shortfall_reason: Literal["NO_DIRECT_MATCH", "NOT_ENOUGH_VERIFIED_FAMILIES"] | None = Field(
         description="null при полной четвёрке. При нуле прямых совпадений — NO_DIRECT_MATCH, при недоборе проверенных семейств — NOT_ENOUGH_VERIFIED_FAMILIES."
@@ -282,6 +317,10 @@ class Entity(DTO):
     )
     children: list[Target] = Field(
         description="Для вендора, категории и collection — переходы внутри выбранной области."
+    )
+    related_offers: list[ComplementCard] = Field(
+        default_factory=list, max_length=4,
+        description="Для карточки товара — товары с подтверждённой совместимостью."
     )
 
 

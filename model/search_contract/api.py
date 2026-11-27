@@ -13,12 +13,15 @@ from search_contract import examples as ex
 from search_contract.schemas import (
     AnalyticsPeriod,
     AnalyticsResponse,
+    CatalogPage,
+    CatalogQuery,
     Entity,
     ExplainRequest,
     Explanation,
     EventBatch,
     Filters,
     Kind,
+    PriceComparison,
     PublicHealth,
     SearchRequest,
     SearchResponse,
@@ -95,9 +98,10 @@ def search_products(body: Annotated[SearchRequest, Body(openapi_examples=ex.SEAR
     """Точный артикул и явные фильтры имеют приоритет над контекстом. Все ограничения лицензии должны
     совпасть у одного SKU. В top4 каждое семейство занимает одно место. Дополнение содержит ID опорного
     предложения и положительные проверки. В upsell возвращаются совместимые дополнения и предложения
-    с объяснением подбора. Блок имеет свой лимит до четырёх товаров. Один и тот же расходник
-    может находиться в top4 и upsell. Клиент показывает его один раз. Навигация и функциональные
-    аналоги выводятся отдельно.
+    с объяснением подбора. Блок содержит до восьми карточек. Один и тот же расходник
+    может находиться в top4 и upsell. Клиент показывает его один раз и использует позицию из upsell.
+    Похожие предложения берутся из категории прямого товара или проверенного аналога.
+    При отсутствии подходящих рекомендаций сервер использует редакционный список curated_fallback.
 
     Отсутствие совпадений даёт 200 и пустой top4. При недоступности модели поиск переходит в lexical.
     Сервер регистрирует отправленный поиск один раз и возвращает search_id."""
@@ -145,6 +149,19 @@ def suggest_targets(
 
 
 @app.get(
+    "/v1/catalog",
+    operation_id="browseCatalog",
+    tags=["Каталог"],
+    summary="Получить страницу каталога",
+    response_model=CatalogPage,
+    responses={400: INVALID, 503: NO_CATALOG},
+)
+def browse_catalog(query: Annotated[CatalogQuery, Query()]):
+    """Страницы семейств и отдельных предложений с фасетами по фильтрам активного снимка."""
+    return pending()
+
+
+@app.get(
     "/v1/entities/{kind}/{id}",
     operation_id="getEntity",
     tags=["Каталог"],
@@ -174,6 +191,24 @@ def get_entity(
 ):
     """Повторно применяет фильтры поиска, переданные отдельными query-параметрами.
     Известная сущность с пустым списком удовлетворяющих фильтрам вариантов даёт 200."""
+    return pending()
+
+
+@app.get(
+    "/v1/entities/offer/{id}/price-comparison",
+    operation_id="compareOfferPrice",
+    tags=["Каталог"],
+    summary="Сравнить цену товара с опубликованной ценой вендора",
+    response_model=PriceComparison,
+    responses={
+        204: {"description": "Подтверждённого сравнения для этой позиции сейчас нет."},
+        400: INVALID,
+        404: error_doc("Товар отсутствует", ENTITY_NOT_FOUND=(404, "В снимке нет товара с таким ID.")),
+        503: NO_CATALOG,
+    },
+)
+def compare_offer_price(id: Annotated[Text, Path(description="ID конкретного предложения.")]):
+    """Сравнивает цену из датированной выгрузки с публичной ценой или РРЦ той же позиции в рублях."""
     return pending()
 
 

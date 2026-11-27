@@ -21,11 +21,13 @@ paths:
 
         предложения и положительные проверки. В upsell возвращаются совместимые дополнения и предложения
 
-        с объяснением подбора. Блок имеет свой лимит до четырёх товаров. Один и тот же расходник
+        с объяснением подбора. Блок содержит до восьми карточек. Один и тот же расходник
 
-        может находиться в top4 и upsell. Клиент показывает его один раз. Навигация и функциональные
+        может находиться в top4 и upsell. Клиент показывает его один раз и использует позицию из upsell.
 
-        аналоги выводятся отдельно.
+        Похожие предложения берутся из категории прямого товара или проверенного аналога.
+
+        При отсутствии подходящих рекомендаций сервер использует редакционный список curated_fallback.
 
 
         Отсутствие совпадений даёт 200 и пустой top4. При недоступности модели поиск переходит в lexical.
@@ -132,6 +134,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/microsoft/ep2-06605-473582/
                       family_key: family/391338
+                      result_kind: offer
+                      target_kind: offer
+                      target_id: '473582'
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - EXACT_SKU
@@ -160,6 +166,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/pantum/p2500w-363882/
                       family_key: hardware/pantum/p2500w
+                      result_kind: family
+                      target_kind: family
+                      target_id: pantum~p2500w
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - MODEL_MATCH
@@ -173,6 +183,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/pantum/bm1800w-521379/
                       family_key: hardware/pantum/bm1800w
+                      result_kind: family
+                      target_kind: family
+                      target_id: pantum~bm1800w
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - MODEL_MATCH
@@ -187,6 +201,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/pantum/pc-211p-526683/
                       family_key: hardware/pantum/pc-211p
+                      result_kind: offer
+                      target_kind: offer
+                      target_id: '526683'
+                      offer_count: 1
                       role: complement
                       reason_codes:
                       - COMPATIBLE_CONSUMABLE
@@ -208,6 +226,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/pantum/tl-c2318h-513625/
                       family_key: hardware/pantum/tl-c2318h
+                      result_kind: offer
+                      target_kind: offer
+                      target_id: '513625'
+                      offer_count: 1
                       role: complement
                       reason_codes:
                       - COMPATIBLE_CONSUMABLE
@@ -251,6 +273,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/cyberprotect/ps16nl-418697/
                       family_key: family/173614
+                      result_kind: family
+                      target_kind: family
+                      target_id: '173614'
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - COLLECTION_MATCH
@@ -265,6 +291,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/cyberprotect/pa16nl-418698/
                       family_key: family/173615
+                      result_kind: family
+                      target_kind: family
+                      target_id: '173615'
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - COLLECTION_MATCH
@@ -278,6 +308,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/cyberprotect/speam1-536456/
                       family_key: family/442025
+                      result_kind: family
+                      target_kind: family
+                      target_id: '442025'
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - COLLECTION_MATCH
@@ -292,6 +326,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/cyberprotect/bss1pc0gb-1y-sub-539763/
                       family_key: family/444870
+                      result_kind: family
+                      target_kind: family
+                      target_id: '444870'
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - COLLECTION_MATCH
@@ -323,6 +361,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/webinar/-535950/
                       family_key: family/414326
+                      result_kind: family
+                      target_kind: family
+                      target_id: '414326'
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - VENDOR_MATCH
@@ -336,6 +378,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/webinar/-541589/
                       family_key: family/447242
+                      result_kind: family
+                      target_kind: family
+                      target_id: '447242'
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - VENDOR_MATCH
@@ -349,6 +395,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/webinar/-541591/
                       family_key: family/447243
+                      result_kind: family
+                      target_kind: family
+                      target_id: '447243'
+                      offer_count: 1
                       role: direct
                       reason_codes:
                       - VENDOR_MATCH
@@ -379,6 +429,10 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/pantum/p2500w-363882/
                       family_key: hardware/pantum/p2500w
+                      result_kind: offer
+                      target_kind: offer
+                      target_id: '363882'
+                      offer_count: 1
                       role: alternative
                       reason_codes:
                       - FUNCTIONAL_ALTERNATIVE
@@ -387,7 +441,7 @@ paths:
                     upsell: []
                     shortfall_reason: NO_DIRECT_MATCH
                 absent:
-                  summary: Прямых совпадений нет, показано отдельное предложение каталога
+                  summary: Модель отсутствует, показана редакционная подборка
                   value:
                     search_id: example-search-1
                     index_version: 2026-11-25T14:12
@@ -410,11 +464,72 @@ paths:
                       offer_tier: primary
                       url: https://store.softline.ru/microsoft/ep2-06605-473582/
                       family_key: family/391338
+                      result_kind: offer
+                      target_kind: offer
+                      target_id: '473582'
+                      offer_count: 1
                       role: related
-                      recommendation_kind: catalog_pick
-                      recommendation_reason: Предложение из каталога программного обеспечения.
+                      recommendation_kind: curated_fallback
+                      recommendation_reason: Предложение из подборки повседневных товаров и программ.
                       reason_codes:
-                      - CATALOG_PICK
+                      - CURATED_FALLBACK
+                    - offer_id: '231538'
+                      name: Dr.Web Security Space
+                      sku: LHW-BK-12M-1-A3
+                      vendor: Доктор Веб
+                      price_minor: 172400
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/drweb/lhw-bk-12m-1-a3-231538/
+                      family_key: family/193420
+                      result_kind: offer
+                      target_kind: offer
+                      target_id: '231538'
+                      offer_count: 1
+                      role: related
+                      recommendation_kind: curated_fallback
+                      recommendation_reason: Предложение из подборки повседневных товаров и программ.
+                      reason_codes:
+                      - CURATED_FALLBACK
+                    - offer_id: '83303'
+                      name: Клавиатура Logitech K120
+                      sku: 920-002522
+                      vendor: Logitech
+                      price_minor: 98500
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/logitech/920-002522-83303/
+                      family_key: hardware/logitech/920-002522
+                      result_kind: offer
+                      target_kind: offer
+                      target_id: '83303'
+                      offer_count: 1
+                      role: related
+                      recommendation_kind: curated_fallback
+                      recommendation_reason: Предложение из подборки повседневных товаров и программ.
+                      reason_codes:
+                      - CURATED_FALLBACK
+                    - offer_id: '508887'
+                      name: Флешка Netac U185 USB 3.2 Gen 1 64GB
+                      sku: NT03U185N-064G-32WH
+                      vendor: Netac
+                      price_minor: 65700
+                      currency: RUB
+                      available: true
+                      offer_tier: primary
+                      url: https://store.softline.ru/netac/nt03u185n-064g-32wh-508887/
+                      family_key: offer/508887
+                      result_kind: offer
+                      target_kind: offer
+                      target_id: '508887'
+                      offer_count: 1
+                      role: related
+                      recommendation_kind: curated_fallback
+                      recommendation_reason: Предложение из подборки повседневных товаров и программ.
+                      reason_codes:
+                      - CURATED_FALLBACK
                     shortfall_reason: NO_DIRECT_MATCH
         default:
           description: Другие ошибки используют тот же формат Problem Details.
@@ -608,6 +723,225 @@ paths:
                   - kind: collection
                     target_id: cyberprotect-1033
                     label: Кибер Бэкап
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '503':
+          description: Каталог недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CATALOG_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Каталог недоступен
+                    status: 503
+                    detail: Активный снимок каталога ещё не опубликован.
+                    code: CATALOG_UNAVAILABLE
+  /v1/catalog:
+    get:
+      tags:
+      - Каталог
+      summary: Получить страницу каталога
+      description: Страницы семейств и отдельных предложений с фасетами по фильтрам активного снимка.
+      operationId: browseCatalog
+      parameters:
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Обязательный раздел каталога.
+          title: Category Id
+        description: Обязательный раздел каталога.
+      - name: vendor_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Ключ вендора из каталога.
+          title: Vendor Id
+        description: Ключ вендора из каталога.
+      - name: platform
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Требуемая ОС или платформа.
+          title: Platform
+        description: Требуемая ОС или платформа.
+      - name: version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Версия продукта как строка, например 5.0.
+          title: Version
+        description: Версия продукта как строка, например 5.0.
+      - name: license_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - new
+            - renewal
+            - upgrade
+            type: string
+          - type: 'null'
+          description: Покупка новой лицензии, продление или обновление.
+          title: License Type
+        description: Покупка новой лицензии, продление или обновление.
+      - name: term_months
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Срок лицензии в месяцах.
+          title: Term Months
+        description: Срок лицензии в месяцах.
+      - name: device_count
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Сколько устройств должна покрывать лицензия.
+          title: Device Count
+        description: Сколько устройств должна покрывать лицензия.
+      - name: seat_count
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Сколько рабочих мест должна покрывать лицензия.
+          title: Seat Count
+        description: Сколько рабочих мест должна покрывать лицензия.
+      - name: available_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: При true исключить недоступные предложения, включая резерв.
+          default: false
+          title: Available Only
+        description: При true исключить недоступные предложения, включая резерв.
+      - name: max_price_minor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 0
+          - type: 'null'
+          description: Бюджет всей запрошенной конфигурации в минимальных единицах валюты.
+          title: Max Price Minor
+        description: Бюджет всей запрошенной конфигурации в минимальных единицах валюты.
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[A-Z]{3}$
+          description: Валюта бюджета по ISO 4217. Для рублей сумма дана в копейках.
+          default: RUB
+          title: Currency
+        description: Валюта бюджета по ISO 4217. Для рублей сумма дана в копейках.
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: Страница за пределами выдачи округляется до последней.
+          default: 1
+          title: Page
+        description: Страница за пределами выдачи округляется до последней.
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 48
+          minimum: 1
+          default: 8
+          title: Page Size
+      - name: sort
+        in: query
+        required: false
+        schema:
+          enum:
+          - relevance
+          - price_asc
+          - price_desc
+          type: string
+          default: relevance
+          title: Sort
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogPage'
         default:
           description: Другие ошибки используют тот же формат Problem Details.
           content:
@@ -925,6 +1259,95 @@ paths:
                     title: Сущность отсутствует
                     status: 404
                     detail: В снимке нет сущности с таким типом и ID.
+                    code: ENTITY_NOT_FOUND
+        '503':
+          description: Каталог недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CATALOG_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Каталог недоступен
+                    status: 503
+                    detail: Активный снимок каталога ещё не опубликован.
+                    code: CATALOG_UNAVAILABLE
+  /v1/entities/offer/{id}/price-comparison:
+    get:
+      tags:
+      - Каталог
+      summary: Сравнить цену товара с опубликованной ценой вендора
+      description: Сравнивает цену из датированной выгрузки с публичной ценой или РРЦ той же позиции в рублях.
+      operationId: compareOfferPrice
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          pattern: \S
+          description: ID конкретного предложения.
+          title: Id
+        description: ID конкретного предложения.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceComparison'
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '204':
+          description: Подтверждённого сравнения для этой позиции сейчас нет.
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '404':
+          description: Товар отсутствует
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                ENTITY_NOT_FOUND:
+                  value:
+                    type: about:blank
+                    title: Товар отсутствует
+                    status: 404
+                    detail: В снимке нет товара с таким ID.
                     code: ENTITY_NOT_FOUND
         '503':
           description: Каталог недоступен
@@ -1317,6 +1740,14 @@ components:
           - type: 'null'
           title: Sku
           description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Version
+          description: Подтверждённая версия предложения, если известна.
         name:
           type: string
           minLength: 1
@@ -1385,6 +1816,29 @@ components:
           title: Family Key
           description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
             без семейства — offer/{offer_id}.
+        result_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Result Kind
+        target_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Target Kind
+        target_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Target Id
+          description: ID сущности, которая открывается по карточке.
+        offer_count:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Offer Count
+          description: Число подходящих SKU в семействе. Для предложения равно 1.
         reason_codes:
           items:
             type: string
@@ -1420,6 +1874,10 @@ components:
       - currency
       - offer_tier
       - family_key
+      - result_kind
+      - target_kind
+      - target_id
+      - offer_count
       - reason_codes
       - role
       - differences
@@ -1583,46 +2041,7 @@ components:
       - position
       - type
       title: CardClick
-    CompatibilityCheck:
-      properties:
-        field:
-          type: string
-          minLength: 1
-          pattern: \S
-          title: Field
-          description: Проверенная характеристика или правило совместимости.
-        anchor_value:
-          type: string
-          minLength: 1
-          pattern: \S
-          title: Anchor Value
-          description: Значение основного SKU.
-        candidate_value:
-          type: string
-          minLength: 1
-          pattern: \S
-          title: Candidate Value
-          description: Значение дополнительного SKU.
-        source_url:
-          type: string
-          pattern: ^(https?://|/)
-          title: Source Url
-          description: Страница производителя или карточка каталога с явным подтверждением совместимости.
-        result:
-          type: string
-          const: pass
-          title: Result
-          description: Для совместимого дополнения все обязательные проверки должны пройти.
-      additionalProperties: false
-      type: object
-      required:
-      - field
-      - anchor_value
-      - candidate_value
-      - source_url
-      - result
-      title: CompatibilityCheck
-    ComplementCard:
+    CatalogCard:
       properties:
         offer_id:
           type: string
@@ -1638,6 +2057,14 @@ components:
           - type: 'null'
           title: Sku
           description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Version
+          description: Подтверждённая версия предложения, если известна.
         name:
           type: string
           minLength: 1
@@ -1706,6 +2133,231 @@ components:
           title: Family Key
           description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
             без семейства — offer/{offer_id}.
+        result_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Result Kind
+        target_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Target Kind
+        target_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Target Id
+          description: ID сущности, которая открывается по карточке.
+        offer_count:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Offer Count
+          description: Число подходящих SKU в семействе. Для предложения равно 1.
+      additionalProperties: false
+      type: object
+      required:
+      - offer_id
+      - sku
+      - name
+      - vendor
+      - url
+      - available
+      - price_minor
+      - currency
+      - offer_tier
+      - family_key
+      - result_kind
+      - target_kind
+      - target_id
+      - offer_count
+      title: CatalogCard
+    CatalogPage:
+      properties:
+        offers:
+          items:
+            $ref: '#/components/schemas/CatalogCard'
+          type: array
+          title: Offers
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+        page:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Page
+        page_size:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Page Size
+        facets:
+          $ref: '#/components/schemas/SearchFacets'
+      additionalProperties: false
+      type: object
+      required:
+      - offers
+      - total
+      - page
+      - page_size
+      - facets
+      title: CatalogPage
+    CompatibilityCheck:
+      properties:
+        field:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Field
+          description: Проверенная характеристика или правило совместимости.
+        anchor_value:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Anchor Value
+          description: Значение основного SKU.
+        candidate_value:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Candidate Value
+          description: Значение дополнительного SKU.
+        source_url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Source Url
+          description: Страница производителя или карточка каталога с явным подтверждением совместимости.
+        result:
+          type: string
+          const: pass
+          title: Result
+          description: Для совместимого дополнения все обязательные проверки должны пройти.
+      additionalProperties: false
+      type: object
+      required:
+      - field
+      - anchor_value
+      - candidate_value
+      - source_url
+      - result
+      title: CompatibilityCheck
+    ComplementCard:
+      properties:
+        offer_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Offer Id
+          description: ID предложения из XML. Именно этот ID передаётся в товарных событиях.
+        sku:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Sku
+          description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Version
+          description: Подтверждённая версия предложения, если известна.
+        name:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Name
+        vendor:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Vendor
+        url:
+          type: string
+          pattern: ^(https?://|/)
+          title: Url
+          description: Абсолютный HTTP(S) URL или путь от корня витрины.
+        image_url:
+          anyOf:
+          - type: string
+            pattern: ^(https?://|/)
+            description: Абсолютный HTTP(S) URL или путь от корня витрины.
+          - type: 'null'
+          title: Image Url
+          description: Фотография предложения из каталога, если доступна.
+        available:
+          type: boolean
+          title: Available
+          description: Флаг наличия из снимка.
+        price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Price Minor
+          description: Цена выбранного предложения в минимальных единицах. Неизвестная или нулевая цена фида возвращается
+            как null.
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+          title: Currency
+        old_price_minor:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Old Price Minor
+          description: Предыдущая цена. Признак акции требует old_price_minor > price_minor и наличия.
+        offer_tier:
+          type: string
+          enum:
+          - primary
+          - reserve
+          title: Offer Tier
+          description: primary — доступен и имеет цену. reserve — подходящий товар второй очереди.
+        attributes:
+          additionalProperties:
+            items:
+              type: string
+            type: array
+          type: object
+          title: Attributes
+          description: Подтверждённые свойства этого SKU. Повторяющиеся параметры сохраняются массивом.
+        family_key:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Family Key
+          description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
+            без семейства — offer/{offer_id}.
+        result_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Result Kind
+        target_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Target Kind
+        target_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Target Id
+          description: ID сущности, которая открывается по карточке.
+        offer_count:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Offer Count
+          description: Число подходящих SKU в семействе. Для предложения равно 1.
         reason_codes:
           items:
             type: string
@@ -1744,6 +2396,10 @@ components:
       - currency
       - offer_tier
       - family_key
+      - result_kind
+      - target_kind
+      - target_id
+      - offer_count
       - reason_codes
       - role
       - anchor_offer_id
@@ -1857,6 +2513,14 @@ components:
           - type: 'null'
           title: Sku
           description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Version
+          description: Подтверждённая версия предложения, если известна.
         name:
           type: string
           minLength: 1
@@ -1925,6 +2589,29 @@ components:
           title: Family Key
           description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
             без семейства — offer/{offer_id}.
+        result_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Result Kind
+        target_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Target Kind
+        target_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Target Id
+          description: ID сущности, которая открывается по карточке.
+        offer_count:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Offer Count
+          description: Число подходящих SKU в семействе. Для предложения равно 1.
         reason_codes:
           items:
             type: string
@@ -1951,6 +2638,10 @@ components:
       - currency
       - offer_tier
       - family_key
+      - result_kind
+      - target_kind
+      - target_id
+      - offer_count
       - reason_codes
       - role
       title: DirectCard
@@ -1992,6 +2683,13 @@ components:
           type: array
           title: Children
           description: Для вендора, категории и collection — переходы внутри выбранной области.
+        related_offers:
+          items:
+            $ref: '#/components/schemas/ComplementCard'
+          type: array
+          maxItems: 4
+          title: Related Offers
+          description: Для карточки товара — товары с подтверждённой совместимостью.
       additionalProperties: false
       type: object
       required:
@@ -2368,6 +3066,14 @@ components:
           - type: 'null'
           title: Sku
           description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Version
+          description: Подтверждённая версия предложения, если известна.
         name:
           type: string
           minLength: 1
@@ -2487,6 +3193,60 @@ components:
       - type
       - offer_id
       title: OrderLine
+    PriceComparison:
+      properties:
+        vendor:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Vendor
+        source_url:
+          type: string
+          pattern: ^https://
+          title: Source Url
+        reference_type:
+          type: string
+          enum:
+          - vendor_price
+          - rrp
+          title: Reference Type
+        currency:
+          type: string
+          const: RUB
+          title: Currency
+        store_price_minor:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Store Price Minor
+        vendor_price_minor:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Vendor Price Minor
+        difference_minor:
+          type: integer
+          title: Difference Minor
+          description: Цена вендора минус цена нашего каталога, в копейках.
+        catalog_date:
+          type: string
+          format: date
+          title: Catalog Date
+        checked_at:
+          type: string
+          format: date-time
+          title: Checked At
+      additionalProperties: false
+      type: object
+      required:
+      - vendor
+      - source_url
+      - reference_type
+      - currency
+      - store_price_minor
+      - vendor_price_minor
+      - difference_minor
+      - catalog_date
+      - checked_at
+      title: PriceComparison
     PublicHealth:
       properties:
         status:
@@ -2593,6 +3353,14 @@ components:
           - type: 'null'
           title: Sku
           description: Исходный артикул vendorCode. Может отсутствовать или повторяться.
+        version:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Version
+          description: Подтверждённая версия предложения, если известна.
         name:
           type: string
           minLength: 1
@@ -2661,6 +3429,29 @@ components:
           title: Family Key
           description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
             без семейства — offer/{offer_id}.
+        result_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Result Kind
+        target_kind:
+          type: string
+          enum:
+          - family
+          - offer
+          title: Target Kind
+        target_id:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Target Id
+          description: ID сущности, которая открывается по карточке.
+        offer_count:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Offer Count
+          description: Число подходящих SKU в семействе. Для предложения равно 1.
         reason_codes:
           items:
             type: string
@@ -2680,6 +3471,7 @@ components:
           - paired_category
           - upgrade
           - catalog_pick
+          - curated_fallback
           title: Recommendation Kind
         recommendation_reason:
           type: string
@@ -2708,6 +3500,10 @@ components:
       - currency
       - offer_tier
       - family_key
+      - result_kind
+      - target_kind
+      - target_id
+      - offer_count
       - reason_codes
       - role
       - recommendation_kind
@@ -2975,7 +3771,8 @@ components:
           type: integer
           minimum: 0.0
           title: Direct Count
-          description: Число различных прямых семейств после фильтров и выбора очереди цены, до обрезки по limit.
+          description: Число прямых карточек семейств и предложений после фильтров и выбора очереди цены, до обрезки
+            по limit.
         top4:
           items:
             oneOf:
@@ -2996,7 +3793,7 @@ components:
             $ref: '#/components/schemas/DirectCard'
           type: array
           title: More Results
-          description: Дополнительные прямые семейства сверх первой четвёрки, до общего limit.
+          description: Дополнительные прямые карточки сверх первой четвёрки, до общего limit.
         alternatives:
           items:
             $ref: '#/components/schemas/AlternativeCard'
@@ -3014,10 +3811,10 @@ components:
                 complement: '#/components/schemas/ComplementCard'
                 related: '#/components/schemas/RelatedCard'
           type: array
-          maxItems: 4
+          maxItems: 8
           title: Upsell
-          description: Отдельный блок предложений к покупке. Дополнение с ролью complement может также присутствовать
-            в top4. Показывайте его один раз.
+          description: Отдельный блок рекомендаций. При дублировании дополнения в top4 используйте координаты из
+            upsell.
         shortfall_reason:
           anyOf:
           - type: string
