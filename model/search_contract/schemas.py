@@ -118,6 +118,7 @@ class Offer(DTO):
     vendor: Text
     url: Link
     image_url: Link | None = Field(None, description="Фотография предложения из каталога, если доступна.")
+    description: Text | None = Field(None, description="Описание из выгрузки, если известно. Возвращается в карточке предложения.")
     available: bool = Field(description="Флаг наличия из снимка.")
     price_minor: PositiveInt | None = Field(
         description="Цена выбранного предложения в минимальных единицах. Неизвестная или нулевая цена фида возвращается как null."

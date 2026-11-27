@@ -3,6 +3,10 @@ import { safeLink } from "./api.js";
 
 const licenseTypes = { new: "Новая", renewal: "Продление", upgrade: "Обновление" };
 
+export function formatOfferAttribute(name, values) {
+  return (name === "Тип лицензии" ? values.map(value => licenseTypes[value] ?? value) : values).join(", ");
+}
+
 export function priceLabel(amount, currency = "RUB") {
   if (amount == null) return "Цена не указана";
   const format = new Intl.NumberFormat("ru-RU", { style: "currency", currency, minimumFractionDigits: 0 });
@@ -10,9 +14,7 @@ export function priceLabel(amount, currency = "RUB") {
 }
 
 export default function ProductCard({ item, action, explanation }) {
-  const attributes = Object.entries(item.attributes ?? {}).map(([key, values]) => [
-    key, key === "Тип лицензии" ? values.map(value => licenseTypes[value] ?? value) : values,
-  ]);
+  const attributes = Object.entries(item.attributes ?? {});
   const promotion = item.available && item.price_minor > 0 && item.old_price_minor > item.price_minor;
 
   return (
@@ -29,10 +31,10 @@ export default function ProductCard({ item, action, explanation }) {
       {item.sku && <p className="sku">Артикул {item.sku}</p>}
       {item.reason_codes?.includes("EXACT_SKU") && <p className="summary-text">Совпадение по артикулу</p>}
       {attributes.length > 0 && <dl className="product-attributes">
-        {attributes.slice(0, 3).map(([key, values]) => <div key={key}><dt>{key}</dt><dd>{values.join(", ")}</dd></div>)}
+        {attributes.slice(0, 3).map(([key, values]) => <div key={key}><dt>{key}</dt><dd>{formatOfferAttribute(key, values)}</dd></div>)}
       </dl>}
       {attributes.length > 3 && <details className="proof"><summary>Все характеристики</summary><dl className="product-attributes">
-        {attributes.slice(3).map(([key, values]) => <div key={key}><dt>{key}</dt><dd>{values.join(", ")}</dd></div>)}
+        {attributes.slice(3).map(([key, values]) => <div key={key}><dt>{key}</dt><dd>{formatOfferAttribute(key, values)}</dd></div>)}
       </dl></details>}
       {item.differences?.length > 0 && <p className="compatible-with">{item.differences.join(". ")}</p>}
       <div className="product-bottom">

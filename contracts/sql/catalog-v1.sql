@@ -45,6 +45,7 @@ CREATE TABLE offer (
     sku_norm TEXT,
     url TEXT NOT NULL,
     description TEXT,
+    image_url TEXT,
     sales_notes TEXT,
     available INTEGER NOT NULL CHECK (available IN (0,1)),
     currency TEXT NOT NULL CHECK (currency GLOB '[A-Z][A-Z][A-Z]'),

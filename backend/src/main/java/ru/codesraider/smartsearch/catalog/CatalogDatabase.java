@@ -107,9 +107,9 @@ final class CatalogDatabase {
         update(
                 """
                 INSERT INTO offer(offer_id,entity_key,group_id,family_key,vendor_id,category_id,name,sku_raw,sku_norm,
-                  url,description,sales_notes,available,currency,price_minor,old_price_minor,product_type,base_model,
+                  url,description,image_url,sales_notes,available,currency,price_minor,old_price_minor,product_type,base_model,
                   version,edition,license_type,term_months,device_count,seat_count,seat_max,min_order_qty,price_unit,fact_sources_json)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)\
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)\
                 """,
                 o.id,
                 "offer/" + o.id,
@@ -122,6 +122,7 @@ final class CatalogDatabase {
                 o.skuNorm,
                 o.get("url"),
                 o.get("description"),
+                o.get("picture"),
                 o.get("sales_notes"),
                 o.available ? 1 : 0,
                 o.currency,

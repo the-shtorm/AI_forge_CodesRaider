@@ -511,12 +511,22 @@ final class SearchCatalog implements AutoCloseable {
     }
 
     List<Row> variants(Row target, Map<String, Object> filters) throws SQLException {
+        return variants(target, filters, "");
+    }
+
+    List<Row> detailVariants(Row target, Map<String, Object> filters) throws SQLException {
+        boolean hasImage = !rows("SELECT 1 FROM pragma_table_info('offer') WHERE name='image_url'", List.of()).isEmpty();
+        return variants(target, filters, hasImage ? ",o.description,o.image_url" : ",o.description");
+    }
+
+    private List<Row> variants(Row target, Map<String, Object> filters, String detailColumns) throws SQLException {
         var w = where(filters);
         if ("family".equals(target.str("kind"))) w.add("o.family_key=?", target.str("entity_key"));
         else w.add("o.offer_id=?", target.str("id"));
         return rows(
                 "SELECT "
                         + COLUMNS
+                        + detailColumns
                         + " FROM offer o JOIN entity v ON v.entity_key='vendor/'||o.vendor_id WHERE"
                         + " "
                         + w.sql()
@@ -525,7 +535,14 @@ final class SearchCatalog implements AutoCloseable {
     }
 
     List<Map<String, Object>> detailedOffers(List<Row> rows) throws SQLException {
-        var offers = rows.stream().map(Row::offer).toList();
+        var offers = rows.stream().map(row -> {
+            var offer = row.offer();
+            for (String key : List.of("description", "image_url")) {
+                String value = row.str(key);
+                if (value != null && !value.isBlank()) offer.put(key, value);
+            }
+            return offer;
+        }).toList();
         addAttributes(offers);
         return offers;
     }

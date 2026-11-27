@@ -1309,6 +1309,14 @@ components:
           - type: 'null'
           title: Image Url
           description: Фотография предложения из каталога, если доступна.
+        description:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Description
+          description: Описание из выгрузки, если известно. Возвращается в карточке предложения.
         available:
           type: boolean
           title: Available
@@ -1627,6 +1635,14 @@ components:
           - type: 'null'
           title: Image Url
           description: Фотография предложения из каталога, если доступна.
+        description:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Description
+          description: Описание из выгрузки, если известно. Возвращается в карточке предложения.
         available:
           type: boolean
           title: Available
@@ -1845,6 +1861,14 @@ components:
           - type: 'null'
           title: Image Url
           description: Фотография предложения из каталога, если доступна.
+        description:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Description
+          description: Описание из выгрузки, если известно. Возвращается в карточке предложения.
         available:
           type: boolean
           title: Available
@@ -2360,6 +2384,14 @@ components:
           - type: 'null'
           title: Image Url
           description: Фотография предложения из каталога, если доступна.
+        description:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          title: Description
+          description: Описание из выгрузки, если известно. Возвращается в карточке предложения.
         available:
           type: boolean
           title: Available

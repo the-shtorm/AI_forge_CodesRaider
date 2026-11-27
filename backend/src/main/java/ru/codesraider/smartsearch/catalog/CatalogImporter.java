@@ -37,7 +37,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 public final class CatalogImporter {
-    private static final String RECIPE = "catalog-v1.4";
+    private static final String RECIPE = "catalog-v1.5";
 
     private CatalogImporter() {}
 
@@ -270,6 +270,7 @@ public final class CatalogImporter {
                 offer.params.add(new FeedOffer.Param(name, xml.getElementText().strip()));
             } else {
                 switch (tag) {
+                    case "picture" -> offer.addPicture(xml.getElementText());
                     case "url",
                             "price",
                             "oldprice",

@@ -20,10 +20,18 @@ const groups = {
   "535950": "414326", "541589": "447242", "541591": "447243",
 };
 const license = { Платформа: ["Windows"], "Тип лицензии": ["new"], "Количество рабочих мест": ["1"] };
+const descriptions = {
+  "363882": "Монохромный лазерный принтер Pantum P2500W с подключением по Wi-Fi для печати документов.",
+  "521379": "Монохромное лазерное МФУ Pantum BM1800W для печати, сканирования и копирования документов.",
+  "526683": "Картридж Pantum PC-211P для монохромной лазерной печати на Pantum P2500W.",
+  "513625": "Картридж Pantum TL-C2318H для монохромной лазерной печати на Pantum BM1800W.",
+  "473582": "Офисный пакет Microsoft Office 2024 для работы с документами и таблицами. Бессрочная лицензия для Windows на одно рабочее место.",
+};
 
 function product(offer_id, sku, name, vendor, category_id, price_minor, path, attributes = {}) {
   return {
     offer_id, sku, name, vendor, category_id, price_minor, attributes,
+    description: descriptions[offer_id],
     vendor_id: vendorIds[vendor] ?? vendor.toLowerCase(), url: store + path, currency: "RUB",
     image_url: demoImages[offer_id] ?? (category_id === "1033" ? demoImages["418697"] : null),
     family_key: groups[offer_id] ? `family/${groups[offer_id]}` : `demo/${offer_id}`,

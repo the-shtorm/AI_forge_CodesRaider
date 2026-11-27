@@ -60,6 +60,20 @@ final class FeedOffer {
         return fields.get(key);
     }
 
+    void addPicture(String text) {
+        String value = empty(text);
+        if (value == null || fields.containsKey("picture")) return;
+        try {
+            URI url = URI.create(value);
+            if (url.getHost() != null && url.getUserInfo() == null
+                    && ("https".equalsIgnoreCase(url.getScheme()) || "http".equalsIgnoreCase(url.getScheme()))) {
+                fields.put("picture", value);
+            }
+        } catch (IllegalArgumentException ignored) {
+            // A malformed picture must not prevent importing the offer.
+        }
+    }
+
     static String empty(String text) {
         return text == null || text.isBlank() ? null : text.strip();
     }

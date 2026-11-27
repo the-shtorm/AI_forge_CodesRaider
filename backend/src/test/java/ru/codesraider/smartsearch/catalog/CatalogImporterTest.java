@@ -65,6 +65,9 @@ class CatalogImporterTest {
                 <offers><offer id="42" group_id="7" available="true"><name>Editor</name>
                 <url>https://example.org/editor</url><vendor>Example</vendor><vendorUrl>https://example.org/example/</vendorUrl>
                 <categoryId>1</categoryId><price>123.45</price><currencyId>RUR</currencyId>
+                <description>Редактор документов</description>
+                <picture>ftp://example.org/invalid.png</picture><picture>https://example.org/editor.png</picture>
+                <picture>https://example.org/alternate.png</picture>
                 <param name="Версия">5.1</param><param name="Язык">ru</param><param name="Язык">en</param>
                 </offer></offers></shop></yml_catalog>\
                 """);
@@ -105,13 +108,15 @@ class CatalogImporterTest {
                     var stmt = db.createStatement();
                     var row =
                             stmt.executeQuery(
-                                    "SELECT price_minor,version,currency,(SELECT count(*) FROM"
+                                    "SELECT price_minor,version,currency,description,image_url,(SELECT count(*) FROM"
                                             + " offer_param) FROM offer")) {
                 assertTrue(row.next());
                 assertEquals(12345, row.getInt(1));
                 assertEquals("5.1", row.getString(2));
                 assertEquals("RUB", row.getString(3));
-                assertEquals(3, row.getInt(4));
+                assertEquals("Редактор документов", row.getString(4));
+                assertEquals("https://example.org/editor.png", row.getString(5));
+                assertEquals(3, row.getInt(6));
             }
         } finally {
             server.stop(0);

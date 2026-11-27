@@ -358,7 +358,7 @@ public class SearchController {
             result.put("children", children);
             if (conflict) return result;
             if (kind.equals("offer") || kind.equals("family")) {
-                var variants = db.variants(target, scope);
+                var variants = db.detailVariants(target, scope);
                 result.put("offers", db.detailedOffers(variants));
                 if (kind.equals("offer") && !variants.isEmpty()) {
                     result.put(

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { entityHref, eventSession, getEntity, safeLink, targetLabels } from "./api";
 import { demoEntity } from "./catalog";
 import { trackEvents } from "./events";
+import OfferDetail from "./OfferDetail";
 import ProductCard from "./ProductCard";
 import RelatedProducts from "./RelatedProducts";
 
@@ -52,6 +53,7 @@ export default function EntityPage({ target, filters, demo, origin, navigate, ad
     }
   }
 
+  const offer = entity?.kind === "offer" ? entity.offers[0] : undefined;
   return (
     <main className="container page entity-page" tabIndex={-1}>
       <a href={catalogHref} className="back-link" onClick={event => navigate(event, catalogHref)}>← К поиску</a>
@@ -60,9 +62,11 @@ export default function EntityPage({ target, filters, demo, origin, navigate, ad
         <button type="button" className="text-button" onClick={() => { setError(""); setAttempt(attempt + 1); }}>Повторить</button>
       </div>}
       {entity && <>
-        <div className="result-heading"><p className="summary-text">{targetLabels[entity.kind]}</p><h1>{entity.name}</h1></div>
-        {entity.offers.length > 0 && <section className="result-group" aria-labelledby="offers-title">
-          <h2 id="offers-title">{entity.kind === "family" ? "Варианты" : "Характеристики и цена"}</h2>
+        {offer
+          ? <OfferDetail item={offer} saved={saved.has(offer.offer_id)} add={() => add(offer, origin)} onSupplier={() => trackOffer(offer)} />
+          : <div className="result-heading"><p className="summary-text">{targetLabels[entity.kind]}</p><h1>{entity.name}</h1></div>}
+        {entity.kind === "family" && entity.offers.length > 0 && <section className="result-group" aria-labelledby="offers-title">
+          <h2 id="offers-title">Варианты</h2>
           <div className="product-grid" data-size={entity.offers.length}>
             {entity.offers.map(item => {
               const href = safeLink(item.url);
