@@ -37,7 +37,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 public final class CatalogImporter {
-    private static final String RECIPE = "catalog-v1.3";
+    private static final String RECIPE = "catalog-v1.4";
 
     private CatalogImporter() {}
 
@@ -58,7 +58,7 @@ public final class CatalogImporter {
         }
     }
 
-    static void importSnapshot(Path source, Path root, boolean embeddings, EncoderClient client)
+    public static void importSnapshot(Path source, Path root, boolean embeddings, EncoderClient client)
             throws Exception {
         Files.createDirectories(root);
         root = root.toRealPath();

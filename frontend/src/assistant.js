@@ -79,5 +79,5 @@ export async function requestAssistant(question, history, sessionId, signal, pro
   const text = result.assistant_message || (products.length
     ? "Вот что нашёл поиск в каталоге по вашему запросу."
     : "В каталоге не нашлось совпадений. Попробуйте уточнить название или назначение товара.");
-  return { text, products };
+  return { text, products, searchId: result.search_id };
 }

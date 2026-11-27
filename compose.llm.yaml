@@ -1,0 +1,20 @@
+services:
+  app:
+    environment:
+      SEARCH_LLM_URL: http://llm:8080/v1/chat/completions
+      SEARCH_LLM_MODEL: softline
+      SEARCH_LLM_TIMEOUT_MS: ${SEARCH_LLM_TIMEOUT_MS:-5000}
+    depends_on:
+      llm:
+        condition: service_started
+
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:ce3817b50dae557848c3a5b7df6264f25b08792c9fc39d35b4e67e1d19b15b20
+    volumes:
+      - type: bind
+        source: ${LLM_GGUF:?Set LLM_GGUF to the downloaded model file}
+        target: /models/search.gguf
+        read_only: true
+        bind:
+          create_host_path: false
+    command: ["-m", "/models/search.gguf", "--alias", "softline", "--host", "0.0.0.0", "--port", "8080", "-t", "4", "-np", "1", "-c", "4096"]

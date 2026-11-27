@@ -5,3 +5,6 @@
 /frontend/dist/
 /model/.venv/
 __pycache__/
+
+/events.db*
+/backend/events.db*

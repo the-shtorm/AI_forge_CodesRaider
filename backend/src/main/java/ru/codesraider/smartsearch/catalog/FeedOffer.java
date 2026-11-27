@@ -168,6 +168,10 @@ final class FeedOffer {
                     else facts.remove("base_model");
                 }
             }
+            if (baseModel == null && Set.of("86563", "87093", "87268", "87276").contains(get("categoryId"))) {
+                String declared = confirmedParam("Базовая модель", "base_model");
+                if (declared != null && SearchIndex.normalize(get("name")).contains(SearchIndex.normalize(declared))) baseModel = declared;
+            }
             if (baseModel != null) {
                 String key =
                         SearchIndex.normalizeSku(baseModel).replaceAll("[^\\p{L}\\d._-]+", "-");
@@ -227,10 +231,33 @@ final class FeedOffer {
             priceUnit = "package";
             facts.put("price_unit", Map.of("basis", "physical_unit"));
         }
+        termMonths = mergeParam("Срок (мес.)", "term_months", termMonths, FeedOffer::positive);
+        deviceCount = mergeParam("Количество устройств", "device_count", deviceCount, FeedOffer::positive);
+        seatCount = mergeParam("Количество мест", "seat_count", seatCount, FeedOffer::positive);
+        priceUnit = mergeParam("Единица продажи", "price_unit", priceUnit, value -> switch (normalizedValue(value)) {
+            case "шт", "пакет", "package" -> "package";
+            case "место", "seat" -> "seat";
+            case "устройство", "device" -> "device";
+            default -> null;
+        });
+        minOrder = positive(confirmedParam("Минимальное количество", "min_order_qty"));
         addDescriptionFacts();
         if (licenseType == null) facts.remove("license_type");
         if (termMonths == null) facts.remove("term_months");
         if (seatMax == null) facts.remove("seat_max");
+    }
+
+    private <T> T mergeParam(String name, String field, T existing, java.util.function.Function<String, T> parse) {
+        var supplied = params.stream().filter(p -> p.name.equalsIgnoreCase(name))
+                .filter(p -> normalizedValue(p.value) != null).toList();
+        if (supplied.isEmpty()) return existing;
+        var values = supplied.stream().map(p -> parse.apply(p.value)).distinct().toList();
+        if (values.size() != 1 || values.getFirst() == null || (existing != null && !existing.equals(values.getFirst()))) {
+            facts.remove(field);
+            return null;
+        }
+        facts.put(field, Map.of("param_ordinal", params.indexOf(supplied.getFirst())));
+        return values.getFirst();
     }
 
     private void addDescriptionFacts() {
@@ -245,7 +272,7 @@ final class FeedOffer {
                 .flatMap(value -> java.util.Arrays.stream(value.split("[/,]")))
                 .map(FeedOffer::normalizedValue).filter(java.util.Objects::nonNull).distinct().toList();
         if (!platforms.isEmpty()) facts.put("platform", Map.of("field", "description", "values", platforms));
-        minOrder = mergeDescription("min_order_qty", null, labels.getOrDefault("минимальная покупка", Set.of()),
+        minOrder = mergeDescription("min_order_qty", minOrder, labels.getOrDefault("минимальная покупка", Set.of()),
                 value -> matchedQuantity(MIN_ORDER, value));
         seatCount = mergeDescription("seat_count", seatCount, labels.getOrDefault("к-во пользователей", Set.of()),
                 FeedOffer::positive);
@@ -275,7 +302,7 @@ final class FeedOffer {
 
     private static String license(String value) {
         return switch (SearchIndex.normalize(value)) {
-            case "full", "полная версия", "новая лицензия" -> "new";
+            case "new", "новая", "full", "полная версия", "новая лицензия" -> "new";
             case "продление", "renewal" -> "renewal";
             case "обновление", "перекрестное обновление", "upgrade", "upg" -> "upgrade";
             default -> null;

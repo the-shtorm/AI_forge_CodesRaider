@@ -181,15 +181,19 @@ public class SearchIndex implements AutoCloseable {
 
     /** Reuse the same embedding when the storefront removes a filter for a facet. */
     QueryRanking prepareRanking(String query, boolean allowSemantic) throws IOException {
+        return prepareRanking(query, allowSemantic, false);
+    }
+
+    QueryRanking prepareRanking(String query, boolean allowSemantic, boolean requireAll) throws IOException {
         if (!ready()) throw new IOException("No active catalog snapshot");
         CompletableFuture<float[]> vector = allowSemantic && semanticReady()
                 ? encoder.encodeQuery(profile, query) : null;
-        return (vendorId, categoryId) -> rank(query, vendorId, categoryId, vector);
+        return (vendorId, categoryId) -> rank(query, vendorId, categoryId, vector, requireAll);
     }
 
-    private Ranked rank(String query, String vendorId, String categoryId, CompletableFuture<float[]> vector)
+    private Ranked rank(String query, String vendorId, String categoryId, CompletableFuture<float[]> vector, boolean requireAll)
             throws IOException {
-        List<String> lexical = lexical(query, vendorId, categoryId);
+        List<String> lexical = lexical(query, vendorId, categoryId, requireAll);
         if (vector != null) {
             try {
                 List<String> semantic = neighbors(vector.join(), vendorId, categoryId);
@@ -242,8 +246,8 @@ public class SearchIndex implements AutoCloseable {
         return List.copyOf(keys);
     }
 
-    private List<String> lexical(String text, String vendorId, String categoryId) throws IOException {
-        Query content = words(normalize(text));
+    private List<String> lexical(String text, String vendorId, String categoryId, boolean requireAll) throws IOException {
+        Query content = words(normalize(text), requireAll);
         var query = new BooleanQuery.Builder().add(content, Occur.MUST)
                 .add(term(legacy ? "type" : "doc_type", "offer"), Occur.FILTER);
         if (vendorId != null) query.add(term("vendor_id", vendorId), Occur.FILTER);
@@ -281,7 +285,7 @@ public class SearchIndex implements AutoCloseable {
         return List.copyOf(result);
     }
 
-    private Query words(String text) throws IOException {
+    private Query words(String text, boolean requireAll) throws IOException {
         if (legacy) text = text.replaceAll("(?U)\\b(?:найди|найдите|подбери|покажи|нужен|нужна|купить)\\b", " ");
         Set<String> terms = new LinkedHashSet<>();
         try (var stream = analyzer.tokenStream("name", text)) {
@@ -296,7 +300,7 @@ public class SearchIndex implements AutoCloseable {
             var fields = new ArrayList<Query>();
             (legacy ? LEGACY_FIELDS : FIELDS)
                     .forEach((field, weight) -> fields.add(new BoostQuery(term(field, word), weight)));
-            result.add(new DisjunctionMaxQuery(fields, 0.1f), legacy ? Occur.MUST : Occur.SHOULD);
+            result.add(new DisjunctionMaxQuery(fields, 0.1f), legacy || requireAll || word.matches(".*\\d.*") ? Occur.MUST : Occur.SHOULD);
         }
         return result.build();
     }

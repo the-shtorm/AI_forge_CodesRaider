@@ -126,12 +126,34 @@ final class SearchCatalog implements AutoCloseable {
                 List.of(q, q));
     }
 
-    List<Row> printerModel(String sku) throws SQLException {
-        return rows("""
-                SELECT e.* FROM offer o JOIN entity e ON e.entity_key=o.entity_key
-                WHERE o.sku_norm=? AND o.vendor_id='pantum' AND o.category_id='93995'
-                ORDER BY o.offer_id
-                """, List.of(sku));
+    private static final String PRINTER_CATEGORY = "o.category_id IN (SELECT id FROM entity WHERE kind='category' AND (id='93995' OR name LIKE '%ринтер%' OR name LIKE '%МФУ%'))";
+    private static final String SERVER_OFFER = "(o.category_id IN ('86563','87093','87268','87276') AND (o.name LIKE '%ервер%' OR lower(o.name) LIKE '%server%' OR (o.vendor_id='depo' AND lower(o.base_model) LIKE 'storm %')))";
+
+    // Category proves device type, the title, description and labeled feed parameters prove features.
+    private static final String PRINT_EVIDENCE = "o.name || ' ' || coalesce(o.description,'') || ' ' || "
+            + "coalesce((SELECT group_concat(p.value,' ') FROM offer_param p WHERE p.offer_id=o.offer_id "
+            + "AND p.name IN ('Технология печати','Тип печати','Цветность','Цветность печати','Формат','Формат бумаги','Максимальный формат')), '')";
+
+    List<Row> printerModel(String sku, String request) throws SQLException {
+        return rows("SELECT e.*, " + PRINT_EVIDENCE + " AS evidence FROM offer o JOIN entity e ON e.entity_key=o.entity_key "
+                + "WHERE o.sku_norm=? AND o.vendor_id='pantum' AND " + PRINTER_CATEGORY + " ORDER BY o.offer_id", List.of(sku))
+                .stream().filter(row -> printerFeatures(request, row.str("evidence"))).toList();
+    }
+
+    private static boolean printerFeatures(String request, String facts) {
+        String evidence = SearchInput.normalize(facts);
+        for (String token : request.split("(?U)[^\\p{L}\\d-]+")) {
+            if (token.matches("(?:покажи|нужен|нужны|купить|ищу|найти|хочу|мне|пожалуйста|устройств[а-я]*|или|принтер[а-я]*|мфу|pantum|пантум|[a-z][a-z-]*\\d{3,}[a-z\\d-]*)")) continue;
+            boolean proved = switch (token) {
+                case "лазерный" -> evidence.contains("лазер");
+                case "а4", "a4" -> evidence.matches("(?sU).*\\b[aа]4\\b.*");
+                case "монохромный", "черно-белый" -> evidence.contains("монохром") || evidence.contains("черно-бел") || evidence.contains("ч/б");
+                case "" -> true;
+                default -> false;
+            };
+            if (!proved) return false;
+        }
+        return true;
     }
 
     Row exactName(String name, List<String> keys) throws SQLException {
@@ -147,18 +169,48 @@ final class SearchCatalog implements AutoCloseable {
 
     List<String> serverOfferIds() throws SQLException {
         // Even the Rack-server leaf in this feed contains DEPO Race workstations.
-        return rows(
-                        "SELECT offer_id,name FROM offer WHERE category_id IN"
-                            + " ('86563','87093','87268','87276') AND family_key IS NOT NULL ORDER"
-                            + " BY family_key",
-                        List.of())
-                .stream()
-                .filter(
-                        r ->
-                                SearchIndex.normalize(r.str("name"))
-                                        .matches("(?U).*(?:сервер|server)\\b.*"))
-                .map(r -> r.str("offer_id"))
-                .toList();
+        return rows("SELECT offer_id FROM offer o WHERE " + SERVER_OFFER + " AND family_key IS NOT NULL ORDER BY family_key", List.of())
+                .stream().map(row -> row.str("offer_id")).toList();
+    }
+
+    Set<String> aliasTerms(String category) throws SQLException {
+        var terms = new HashSet<String>();
+        for (var row : rows("SELECT DISTINCT term FROM alias WHERE scope IN ('*',?)", List.of("category/" + category)))
+            terms.add(row.str("term"));
+        return terms;
+    }
+
+    boolean mentionsVendor(String text) throws SQLException {
+        for (var row : rows("SELECT e.name,v.vendor_id FROM vendor v JOIN entity e USING(entity_key)", List.of())) {
+            if (text.contains(SearchInput.normalize(row.str("name"))) || text.contains(row.str("vendor_id"))) return true;
+        }
+        return false;
+    }
+
+    private static final java.util.regex.Pattern PURCHASE_SKU = java.util.regex.Pattern.compile(
+            "(?U)^(?:(?:[а-я]+ ){0,3}(?:хочу|хотим|хочет|хотят|прошу|просит|планируем) )?"
+                    + "(?:купить|заказать|приобрести) ([\\p{L}\\d][\\p{L}\\d-]*\\d[\\p{L}\\d-]*)$");
+
+    Row purchaseTarget(String terms) throws SQLException {
+        var match = PURCHASE_SKU.matcher(terms);
+        if (!match.matches() || terms.matches("(?U).*(?:\\bне|\\bбез|\\bкроме|\\bвместо|\\bесли|\\bдля)\\b.*")) return null;
+        var matches = exact(SearchIndex.normalizeSku(match.group(1)));
+        return matches.size() == 1 ? matches.getFirst() : null;
+    }
+
+    Row qualifiedSku(String terms) throws SQLException {
+        var words = Arrays.asList(terms.split(" "));
+        for (String word : words) {
+            if (!word.matches("(?U)[\\p{L}\\d-]*\\d[\\p{L}\\d-]*")) continue;
+            var matches = exact(SearchIndex.normalizeSku(word));
+            if (matches.size() != 1) continue;
+            Row match = matches.getFirst();
+            var known = new HashSet<>(Arrays.asList(SearchInput.normalize(match.str("name")).split("(?U)[^\\p{L}\\d-]+")));
+            known.removeAll(Set.of("для", "или", "без", "вместо"));
+            known.add(word);
+            if (known.containsAll(words)) return match;
+        }
+        return null;
     }
 
     Row alias(String q, String category) throws SQLException {
@@ -301,8 +353,9 @@ final class SearchCatalog implements AutoCloseable {
             w.add(
                     """
                     o.currency=? AND o.price_minor>0 AND (CASE o.price_unit
-                        WHEN 'package' THEN CASE WHEN o.min_order_qty=1 OR (o.min_order_qty IS NULL
-                            AND json_extract(o.fact_sources_json,'$.price_unit.basis')='physical_unit') THEN 1 END
+                        WHEN 'package' THEN coalesce(o.min_order_qty, CASE WHEN
+                            json_extract(o.fact_sources_json,'$.price_unit.basis')='physical_unit'
+                            OR json_type(o.fact_sources_json,'$.price_unit.param_ordinal')='integer' THEN 1 END)
                         WHEN 'seat' THEN max(o.min_order_qty,1 + (? - 1) / o.seat_count)
                         WHEN 'device' THEN max(o.min_order_qty,1 + (? - 1) / o.device_count)
                     END)<=? / o.price_minor
@@ -316,15 +369,44 @@ final class SearchCatalog implements AutoCloseable {
     }
 
     record Selection(Row target, List<String> offerIds, boolean support, boolean fileRecovery,
-                     boolean includeServerSoftware) {
+                     boolean includeServerSoftware, QueryPlan program, Requirements constraints) {
         Selection(Row target, List<String> offerIds, boolean support, boolean fileRecovery) {
-            this(target, offerIds, support, fileRecovery, false);
+            this(target, offerIds, support, fileRecovery, false, null, new Requirements());
         }
+    }
+
+    // All SQL fragments come from this enum. The model supplies neither SQL nor product IDs.
+    private static String predicate(QueryPlan.Purpose purpose) {
+        String category = switch (purpose) {
+            case BACKUP -> "id='1033' OR name LIKE '%езервное копирование%'";
+            case WEBINAR -> "name LIKE '%ебинар%' OR name LIKE '%идеоконференц%'";
+            case REMOTE_ACCESS -> "name LIKE '%даленный доступ%' OR name LIKE '%далённый доступ%' OR name LIKE '%даленное администрирование%'";
+            case ANTIVIRUS -> "name LIKE '%нтивирус%'";
+            case PRINTER -> "id='93995' OR name LIKE '%ринтер%' OR name LIKE '%МФУ%'";
+            default -> null;
+        };
+        if (category != null)
+            return "o.category_id IN (SELECT id FROM entity WHERE kind='category' AND (" + category + "))";
+        return switch (purpose) {
+            case WORDS -> "1";
+            case SERVER -> SERVER_OFFER;
+            case SERVER_SOFTWARE -> "(o.category_id='369' OR (o.group_id IS NOT NULL AND (o.name LIKE '%ервер%' OR lower(o.name) LIKE '%server%')))";
+            default -> "0";
+        };
     }
 
     private Where candidateWhere(Map<String, Object> filters, Selection selection, List<String> families) {
         Where w = where(filters);
         Row target = selection.target();
+        for (String excluded : selection.constraints().excludedVersions) w.add("o.version<>?", excluded);
+        for (String excluded : selection.constraints().excludedLicenses) w.add("o.license_type<>?", excluded);
+        if (selection.program() != null) {
+            var plan = selection.program();
+            var predicates = new ArrayList<String>();
+            predicates.add(predicate(plan.purpose()));
+            for (var op : plan.additionalPurposes()) predicates.add(predicate(op));
+            w.add("(" + String.join(plan.join().equals("any") ? " OR " : " AND ", predicates) + ")");
+        }
         if (selection.fileRecovery()) {
             // Rank relevant families first; a category match also supplies candidates when a
             // paraphrase has no useful lexical hits. Explicit filters stay on this same SKU.
@@ -591,38 +673,13 @@ final class SearchCatalog implements AutoCloseable {
      */
     List<Row> printerAlternatives(Map<String, Object> filters, String requested, String q)
             throws SQLException {
-        // This rule has evidence for type, print technology, paper format and monochrome output.
-        // Leave other requests unresolved until there is a predicate for every requested attribute.
-        var supported =
-                Set.of(
-                        "нужен",
-                        "нужны",
-                        "купить",
-                        "покажи",
-                        "ищу",
-                        "найти",
-                        "хочу",
-                        "мне",
-                        "пожалуйста",
-                        "принтер",
-                        "принтеры",
-                        "монохромный",
-                        "лазерный",
-                        "черно-белый",
-                        "a4",
-                        "а4",
-                        "pantum", "пантум");
-        for (String token : q.split("(?U)[^\\p{L}\\d-]+"))
-            if (!token.isEmpty()
-                    && !token.equalsIgnoreCase(requested)
-                    && !supported.contains(token)) return List.of();
         Where w = where(filters);
-        w.add("o.vendor_id='pantum' AND o.category_id='93995' AND o.base_model IS NOT NULL");
+        w.add("o.vendor_id='pantum' AND " + PRINTER_CATEGORY + " AND o.base_model IS NOT NULL");
         var variants =
                 rows(
                         "SELECT "
                                 + COLUMNS
-                                + ",o.description FROM offer o JOIN entity v ON"
+                                + "," + PRINT_EVIDENCE + " AS evidence FROM offer o JOIN entity v ON"
                                 + " v.entity_key='vendor/'||o.vendor_id WHERE "
                                 + w.sql()
                                 + " ORDER BY tier,o.offer_id",
@@ -630,18 +687,7 @@ final class SearchCatalog implements AutoCloseable {
         Map<String, Row> chosen = new LinkedHashMap<>();
         int best = Integer.MAX_VALUE;
         for (var row : variants) {
-            String evidence =
-                    SearchInput.normalize(
-                            row.str("name") + " " + Objects.toString(row.get("description"), ""));
-            if (row.str("base_model").equalsIgnoreCase(requested) || !evidence.contains("принтер"))
-                continue;
-            if (q.contains("лазер") && !evidence.contains("лазер")) continue;
-            if (q.matches("(?s).*\\b[aа]4\\b.*") && !evidence.matches("(?s).*\\b[aа]4\\b.*"))
-                continue;
-            if ((q.contains("монохром") || q.contains("черно-бел"))
-                    && !(evidence.contains("монохром")
-                            || evidence.contains("ч/б")
-                            || evidence.contains("черно-бел"))) continue;
+            if (row.str("base_model").equalsIgnoreCase(requested) || !printerFeatures(q, row.str("evidence"))) continue;
             if (row.number("tier") > best) break;
             best = row.number("tier");
             chosen.putIfAbsent(row.str("family_key"), row);

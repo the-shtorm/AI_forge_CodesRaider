@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { recordEvent, useCardImpression } from "./searchEvents";
 import ProductImage from "./ProductImage";
 import { demoAssistant, requestAssistant } from "./assistant";
 import { safeLink } from "./catalog";
@@ -7,6 +8,14 @@ import { appendMessage, loadChats, pruneChats, saveChats } from "./chatHistory";
 const greeting = "Расскажите, для чего нужна программа. Помогу подобрать ПО под вашу задачу и бюджет.";
 const suggestions = ["Офис без подписки", "Как восстановить файлы после сбоя?"];
 const chatDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
+
+function AssistantProduct({ item, sessionId, searchId, position }) {
+  const url = safeLink(item.url);
+  const { element, click } = useCardImpression(sessionId, searchId, { ...item, role: "direct" }, "top4", position);
+  return <li ref={element}><div className="assistant-product-image"><ProductImage item={item} /></div>
+    {url ? <a onClick={click} href={url} target="_blank" rel="noreferrer">{item.name}</a> : <span>{item.name}</span>}
+  </li>;
+}
 
 export default function AssistantChat({ demo, profileId }) {
   const storageKey = `softline-assistant-chats-v1${demo ? "-demo" : ""}`;
@@ -68,8 +77,11 @@ export default function AssistantChat({ demo, profileId }) {
     try {
       const answer = demo ? demoAssistant(question, history) : await requestAssistant(question, history, id, controller.signal, profileId);
       if (!controller.signal.aborted) {
-        const products = answer.products.map(({ offer_id, name, url, image_url }) => ({ offer_id, name, url, image_url }));
-        setChats(current => appendMessage(current, id, { role: "assistant", text: answer.text, products }));
+        const products = answer.products.map(({ offer_id, family_key, name, url, image_url }) => ({ offer_id, family_key, name, url, image_url }));
+        const previous = messages.findLast(message => message.searchId);
+        if (!demo && previous && answer.searchId)
+          recordEvent(id, "reformulation", { search_id: previous.searchId, next_search_id: answer.searchId });
+        setChats(current => appendMessage(current, id, { role: "assistant", text: answer.text, products, searchId: answer.searchId }));
       }
     } catch {
       if (!controller.signal.aborted) setChats(current => appendMessage(current, id, { role: "assistant", error: true, text: "Помощник пока недоступен. Можно продолжить обычный поиск или открыть демо чата." }));
@@ -105,11 +117,9 @@ export default function AssistantChat({ demo, profileId }) {
             <div className={`message message-${message.role}`} key={index}>
               <p>{message.text}</p>
               {!!message.products?.length && <ul className="assistant-products">
-                {message.products.map(item => {
-                  const url = safeLink(item.url);
-                  return <li key={item.offer_id}><div className="assistant-product-image"><ProductImage item={item} /></div>
-                    {url ? <a href={url} target="_blank" rel="noreferrer">{item.name}</a> : <span>{item.name}</span>}</li>;
-                })}
+                {message.products.map((item, position) =>
+                  <AssistantProduct key={item.offer_id} item={item} sessionId={demo ? null : activeChat.id}
+                    searchId={message.searchId} position={position + 1} />)}
               </ul>}
               {message.error && <a className="assistant-error-link" href="?demo=1">Открыть демо</a>}
             </div>

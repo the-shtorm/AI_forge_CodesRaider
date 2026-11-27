@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import AssistantChat from "./AssistantChat";
+import { recordEvent, useCardImpression } from "./searchEvents";
 import ProductImage from "./ProductImage";
 import { demoSearch, demoSuggestions, fetchSearch, safeLink } from "./catalog";
 import "./style.css";
@@ -99,11 +100,31 @@ function Filters({ filters, facets, update, reset, busy }) {
   );
 }
 
-function ProductCard({ item, anchor }) {
+function ProductCard({ item, anchor, tracking }) {
+  const [explanation, setExplanation] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const searchId = tracking?.searchId;
+  const session = tracking?.session;
+  const position = tracking?.position;
+  const block = tracking?.block;
+  const { element, click } = useCardImpression(session, searchId, item, block, position);
+
+  async function explain() {
+    setLoading(true);
+    setFailed(false);
+    try {
+      const answer = await fetchSearch("/v1/explain", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ search_id: searchId, offer_id: item.offer_id }) });
+      setExplanation(answer.text);
+    } catch { setFailed(true); }
+    finally { setLoading(false); }
+  }
+
   const url = safeLink(item.url);
   const attributes = Object.entries(item.attributes ?? {}).slice(0, 2);
   return (
-    <article className="product-card" data-role={item.role}>
+    <article ref={element} className="product-card" data-role={item.role}>
       <figure className="product-figure">
         <div className="product-photo"><ProductImage item={item} /></div>
         <figcaption><h3>{item.name}</h3></figcaption>
@@ -119,8 +140,11 @@ function ProductCard({ item, anchor }) {
       {anchor && <p className="compatible-with">Подходит к {anchor.name}</p>}
       <div className="product-bottom">
         <div><p className="price">{formatPrice(item)}</p><p className={`stock${item.available ? " available" : ""}`}>{item.available ? "В наличии" : "Нет в наличии"}</p></div>
-        {url && <a className="button secondary card-link" href={url} target="_blank" rel="noreferrer">К товару</a>}
+        {url && <a className="button secondary card-link" onClick={click} href={url} target="_blank" rel="noreferrer">К товару</a>}
       </div>
+      {searchId && (explanation ? <p className="compatible-with" role="status">{explanation}</p>
+        : <button type="button" className="text-button" onClick={explain} disabled={loading}>
+          {loading ? "Готовим пояснение…" : failed ? "Повторить запрос пояснения" : "Почему этот товар?"}</button>)}
       {!!item.checks?.length && <details className="proof"><summary>Почему подходит</summary>
         <ul>{item.checks.map((check, index) => {
           const source = safeLink(check.source_url);
@@ -132,8 +156,9 @@ function ProductCard({ item, anchor }) {
   );
 }
 
-function ProductGrid({ items, anchors }) {
-  return <div className="product-grid" data-size={items.length}>{items.map(item => <ProductCard key={item.offer_id} item={item} anchor={anchors?.get(item.anchor_offer_id)} />)}</div>;
+function ProductGrid({ items, anchors, session, result, block = "top4" }) {
+  return <div className="product-grid" data-size={items.length}>{items.map(item => <ProductCard key={[result?.search_id, item.offer_id].join("/")} item={item}
+    tracking={session && { session, searchId: result.search_id, block, position: result[block].indexOf(item) + 1 }} anchor={anchors?.get(item.anchor_offer_id)} />)}</div>;
 }
 
 function entityLink(url, filters) {
@@ -203,6 +228,7 @@ function App() {
   const searchRequest = useRef(null);
   const searchInput = useRef(null);
   const sessionId = useRef(null);
+  const previousSearch = useRef(null);
   const suggestionsId = useId();
 
   useEffect(() => () => searchRequest.current?.abort(), []);
@@ -249,7 +275,13 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...body, session_id: sessionId.current }),
       });
-      if (!controller.signal.aborted) setResult(payload);
+      if (!controller.signal.aborted) {
+        const previous = previousSearch.current;
+        if (previous && previous.q !== body.q)
+          recordEvent(sessionId.current, "reformulation", { search_id: previous.id, next_search_id: payload.search_id });
+        previousSearch.current = { id: payload.search_id, q: body.q };
+        setResult(payload);
+      }
     } catch (failure) {
       if (!controller.signal.aborted) {
         if (next.selected_target && failure.code === "UNKNOWN_TARGET") {
@@ -306,6 +338,10 @@ function App() {
   const complements = (result?.top4 ?? []).filter(item => item.role === "complement" && anchors.has(item.anchor_offer_id) && item.checks?.length && item.checks.every(check => check.result === "pass"));
   const primary = result?.primary_target;
   const offerWithoutFamilyCard = primary?.kind === "offer" && !direct.length;
+  const tracking = { session: demo ? null : sessionId.current, result };
+  function navigationClick() {
+    recordEvent(tracking.session, "click", { search_id: result.search_id, block: "navigation", target_kind: primary.kind, target_id: primary.id });
+  }
   const primaryUrl = entityLink(primary?.url, result?.applied_filters ?? {});
   const facetItems = tab === "products" ? [] : facets[tab];
   const title = request ? `Результаты по запросу «${request.q}»` : "Поиск по каталогу";
@@ -385,17 +421,17 @@ function App() {
                 </div>}
 
                 {result && tab === "products" && <>
-                  {primaryUrl && primary.kind !== "offer" && <a className="primary-target" href={primaryUrl} target="_blank" rel="noreferrer">{primary.label ?? navigationLabels[primary.kind]}</a>}
-                  {direct.length > 0 && <ProductGrid items={direct} />}
-                  {offerWithoutFamilyCard && <a className="primary-target"
+                  {primaryUrl && primary.kind !== "offer" && <a className="primary-target" onClick={navigationClick} href={primaryUrl} target="_blank" rel="noreferrer">{primary.label ?? navigationLabels[primary.kind]}</a>}
+                  {direct.length > 0 && <ProductGrid {...tracking} items={direct} />}
+                  {offerWithoutFamilyCard && <a className="primary-target" onClick={navigationClick}
                     href={entityLink(`/?kind=offer&id=${encodeURIComponent(primary.id)}`, result.applied_filters ?? {})}>
                     Открыть предложение № {primary.id}
                   </a>}
                   {!direct.length && !offerWithoutFamilyCard && <div className="result-state"><p>Подходящих товаров не найдено.</p><p>Уточните запрос или сбросьте фильтры.</p></div>}
-                  {!!complements.length && <section className="result-group" aria-labelledby="complements-title"><h2 id="complements-title">Совместимые дополнения</h2><ProductGrid items={complements} anchors={anchors} /></section>}
+                  {!!complements.length && <section className="result-group" aria-labelledby="complements-title"><h2 id="complements-title">Совместимые дополнения</h2><ProductGrid {...tracking} items={complements} anchors={anchors} /></section>}
                   {result.shortfall_reason === "NOT_ENOUGH_VERIFIED_FAMILIES" && <p className="shortfall">В каталоге меньше четырёх подтверждённых семейств для этого запроса.</p>}
-                  {!!result.more_results?.length && <section className="result-group"><h2>Другие подходящие товары</h2><ProductGrid items={result.more_results} /></section>}
-                  {!!result.alternatives?.length && <section className="result-group"><h2>Альтернативы</h2><ProductGrid items={result.alternatives} /></section>}
+                  {!!result.more_results?.length && <section className="result-group"><h2>Другие подходящие товары</h2><ProductGrid {...tracking} block="more_results" items={result.more_results} /></section>}
+                  {!!result.alternatives?.length && <section className="result-group"><h2>Альтернативы</h2><ProductGrid {...tracking} block="alternatives" items={result.alternatives} /></section>}
                 </>}
 
                 {result && tab !== "products" && (facetItems.length ? <ul className="facet-results">

@@ -6,6 +6,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import ru.codesraider.smartsearch.storage.Sqlite;
 
@@ -242,6 +243,20 @@ final class CatalogDatabase {
             for (String term : java.util.List.of("кибер бэкап", "кибер бекап", "cyber backup", "кибер backup", "кибербэкап")) {
                 alias(term, key);
             }
+        }
+        // Register spelling variants only when their destination exists in this feed.
+        for (var entry : Map.of(
+                "family/121231", List.of("астра линукс"),
+                "family/391338", List.of("офис для дома и бизнеса"),
+                "family/22268", List.of("крипто про csp", "криптопро csp"),
+                "family/306539", List.of("энидеск"),
+                "family/46421", List.of("сканер вс"),
+                "family/437421", List.of("maxpatrol"),
+                "family/165034", List.of("microsoft 365 family", "microsoft 365 для семьи"),
+                "vendor/webinar", List.of("мтс линк")).entrySet()) {
+            for (String term : entry.getValue())
+                update("INSERT OR IGNORE INTO alias(term,entity_key,scope) SELECT ?,entity_key,'*' FROM entity WHERE entity_key=?",
+                        term, entry.getKey());
         }
         relation(
                 "P2500W",

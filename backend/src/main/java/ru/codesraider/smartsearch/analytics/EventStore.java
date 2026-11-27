@@ -172,11 +172,23 @@ public class EventStore {
         return cards.stream().map(value -> {
             var card = (Map<?, ?>) value;
             Map<String, Object> entry = new LinkedHashMap<>();
-            for (String field : List.of("offer_id", "family_key", "role", "anchor_offer_id")) {
+            for (String field : List.of("offer_id", "family_key", "role", "anchor_offer_id", "name", "url", "available", "attributes", "reason_codes", "checks", "differences")) {
                 if (card.containsKey(field)) entry.put(field, card.get(field));
             }
             return entry;
         }).toList();
+    }
+
+    public JsonNode shownCard(String searchId, String offerId) {
+        return transaction(sql -> sql.query("""
+                SELECT l.q,card.value FROM search_log l,json_each(l.shown_json) block,json_each(block.value) card
+                WHERE l.search_id=? AND block.key IN ('top4','more_results','alternatives')
+                  AND json_extract(card.value,'$.offer_id')=? LIMIT 1
+                """, (rs, n) -> {
+                    var card = (tools.jackson.databind.node.ObjectNode) json.readTree(rs.getString(2));
+                    card.put("query", rs.getString(1));
+                    return (JsonNode) card;
+                }, searchId, offerId).stream().findFirst().orElse(null));
     }
 
     private record LoggedSearch(String source, String session, String shown) {}
