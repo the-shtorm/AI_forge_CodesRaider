@@ -80,6 +80,7 @@ public class SearchIndex implements AutoCloseable {
     private String version;
     private String profile;
     private boolean legacy;
+    private String cardKeyField;
     private ScheduledExecutorService monitor;
     private volatile boolean compatible;
     @Value("${SEARCH_TASK_SEMANTICS:false}")
@@ -132,6 +133,7 @@ public class SearchIndex implements AutoCloseable {
             directory = FSDirectory.open(folder.resolve("lucene"));
             reader = DirectoryReader.open(directory);
             var metadata = reader.getIndexCommit().getUserData();
+            cardKeyField = "card_key".equals(metadata.get("card_key_field")) ? "card_key" : "family_key";
             if (!active.equals(metadata.get("index_version"))) {
                 throw new IOException("Lucene and SQLite snapshot versions disagree");
             }
@@ -312,7 +314,7 @@ public class SearchIndex implements AutoCloseable {
         if (vendorId != null) query.add(term("vendor_id", vendorId), Occur.FILTER);
         if (categoryId != null) query.add(term("category_id", categoryId), Occur.FILTER);
         if (legacy) return legacyFamilies(query.build());
-        var grouping = new GroupingSearch("family_key").setGroupDocsLimit(1).setIgnoreDocsWithoutGroupField(true);
+        var grouping = new GroupingSearch(cardKeyField).setGroupDocsLimit(1).setIgnoreDocsWithoutGroupField(true);
         TopGroups<BytesRef> groups = grouping.search(searcher, query.build(), 0, LEXICAL_LIMIT);
         var result = new ArrayList<String>(groups.groups.length);
         for (var group : groups.groups) {
@@ -415,19 +417,20 @@ public class SearchIndex implements AutoCloseable {
             var keys = scopedFamilies(vendorId, categoryId);
             if (keys.isEmpty()) return List.of();
             scope = new BooleanQuery.Builder().add(scope, Occur.FILTER)
-                    .add(new TermInSetQuery("family_key", keys), Occur.FILTER).build();
+                    .add(new TermInSetQuery(cardKeyField, keys), Occur.FILTER).build();
         }
         var hits = searcher.search(new KnnFloatVectorQuery("vector", vector, VECTOR_LIMIT, scope), VECTOR_LIMIT);
         var families = new LinkedHashSet<String>();
         var stored = searcher.storedFields();
         for (var hit : hits.scoreDocs) {
-            families.add(stored.document(hit.doc, Set.of("family_key")).get("family_key"));
+            families.add(stored.document(hit.doc, Set.of(cardKeyField)).get(cardKeyField));
         }
         return List.copyOf(families);
     }
 
     private List<BytesRef> scopedFamilies(String vendorId, String categoryId) throws IOException {
-        String sql = "SELECT DISTINCT family_key FROM offer WHERE family_key IS NOT NULL"
+        String key = "card_key".equals(cardKeyField) ? "coalesce(family_key,entity_key)" : "family_key";
+        String sql = "SELECT DISTINCT " + key + " FROM offer WHERE " + key + " IS NOT NULL"
                 + (vendorId == null ? "" : " AND vendor_id=?") + (categoryId == null ? "" : " AND category_id=?");
         try (var conn = DriverManager.getConnection(sqliteUrl(catalog)); var statement = conn.prepareStatement(sql)) {
             int i = 1;

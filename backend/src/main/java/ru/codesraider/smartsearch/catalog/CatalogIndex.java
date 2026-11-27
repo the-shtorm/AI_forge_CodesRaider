@@ -23,14 +23,14 @@ import java.util.Set;
 
 final class CatalogIndex {
     private static final class Passage {
-        final String family;
+        final String cardKey;
         final Set<String> vendors = new HashSet<>();
         final Set<String> categories = new HashSet<>();
         String text;
         boolean primary;
 
-        Passage(String family) {
-            this.family = family;
+        Passage(String cardKey) {
+            this.cardKey = cardKey;
         }
     }
 
@@ -56,7 +56,8 @@ final class CatalogIndex {
         exact(d, "doc_type", "offer");
         exact(d, "offer_id", o.id);
         exact(d, "family_key", o.family);
-        if (o.family != null) d.add(new SortedDocValuesField("family_key", new BytesRef(o.family)));
+        String cardKey = o.family == null ? "offer/" + o.id : o.family;
+        indexCardKey(d, cardKey);
         exact(d, "sku_norm", o.skuNorm);
         exact(d, "vendor_id", o.vendorId);
         exact(d, "category_id", o.get("categoryId"));
@@ -79,9 +80,9 @@ final class CatalogIndex {
         text(d, "description", description);
         writer.addDocument(d);
 
-        if (vectorIndex && o.family != null) {
+        if (vectorIndex) {
             String key = o.group == null ? "offer/" + o.id : o.family;
-            var p = passages.computeIfAbsent(key, unused -> new Passage(o.family));
+            var p = passages.computeIfAbsent(key, unused -> new Passage(cardKey));
             p.categories.add(o.get("categoryId"));
             p.vendors.add(o.vendorId);
             boolean primary = o.available && o.price != null && o.price > 0;
@@ -89,7 +90,7 @@ final class CatalogIndex {
                 // Keep task and product identity ahead of generic license and supply metadata.
                 String passage =
                         String.join(
-                                ". ", o.familyName, purpose, category, o.get("name"), description);
+                                ". ", o.familyName == null ? "" : o.familyName, purpose, category, o.get("name"), description);
                 p.text = passage.substring(0, Math.min(520, passage.length()));
                 p.primary = primary;
             }
@@ -100,6 +101,11 @@ final class CatalogIndex {
         return value == null
                 ? ""
                 : value.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").strip();
+    }
+
+    private static void indexCardKey(Document d, String key) {
+        exact(d, "card_key", key);
+        d.add(new SortedDocValuesField("card_key", new BytesRef(key)));
     }
 
     int writeVectors(EncoderClient client, String profile) throws IOException {
@@ -125,9 +131,7 @@ final class CatalogIndex {
             Passage p = batch.get(i);
             var d = new Document();
             exact(d, "doc_type", "vector");
-            exact(d, "family_key", p.family);
-            // DocValues are also needed on vector docs when grouping mixed results.
-            d.add(new SortedDocValuesField("family_key", new BytesRef(p.family)));
+            indexCardKey(d, p.cardKey);
             for (String vendor : p.vendors) exact(d, "vendor_id", vendor);
             for (String category : p.categories) exact(d, "category_id", category);
             d.add(
@@ -143,7 +147,7 @@ final class CatalogIndex {
                         stmt.executeQuery(
                                 """
                                 SELECT e.entity_key,e.kind,e.id,e.name,group_concat(a.term,' ') AS aliases
-                                FROM entity e LEFT JOIN alias a ON a.entity_key=e.entity_key WHERE e.kind <> 'offer'
+                                FROM entity e LEFT JOIN alias a ON a.entity_key=e.entity_key
                                 GROUP BY e.entity_key\
                                 """)) {
             while (rs.next()) {

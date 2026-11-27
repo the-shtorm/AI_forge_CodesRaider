@@ -37,7 +37,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 public final class CatalogImporter {
-    private static final String RECIPE = "catalog-v1.4";
+    private static final String RECIPE = "catalog-v1.5";
 
     private CatalogImporter() {}
 
@@ -235,10 +235,12 @@ public final class CatalogImporter {
             manifest.put("rules_version", RECIPE);
             manifest.put("offer_count", count);
             manifest.put("family_count", db.families.size());
+            manifest.put("curated_offer_diagnostics", CuratedOffers.skipped(con, CuratedOffers.configured()));
             manifest.put("vector_count", vectors);
             manifest.put("profile_id", profile);
             Map<String, String> metadata = new LinkedHashMap<>();
             metadata.put("index_version", version);
+            metadata.put("card_key_field", "card_key");
             if (profile != null) metadata.put("profile_id", profile);
             writer.setLiveCommitData(metadata.entrySet());
             writer.commit();
