@@ -21,6 +21,7 @@ import java.util.regex.Pattern;
 @RestController
 @RequestMapping(path = "/v1", produces = MediaType.APPLICATION_JSON_VALUE)
 public class SearchController {
+    private static final int MAX_RECOMMENDATIONS = 8;
     private final SearchIndex index;
     private final EventStore events;
     private final VendorPrices vendorPrices = new VendorPrices();
@@ -367,6 +368,8 @@ public class SearchController {
             diagnostics.put("chat_query", input.query());
         }
         List<Row> anchors = direct.subList(0, Math.min(4, direct.size()));
+        Row recommendationAnchor = anchors.isEmpty() ? null : anchors.getFirst();
+        Map<String, Object> recommendationFilters = filters;
         List<Map<String, Object>> top = new ArrayList<>(),
                 more = new ArrayList<>(),
                 alternatives = new ArrayList<>();
@@ -394,6 +397,7 @@ public class SearchController {
         }
         if (!conflict && direct.isEmpty() && missingModel != null && q.contains("принтер")) {
             for (Row item : db.printerAlternatives(filters, missingModel, q)) {
+                if (recommendationAnchor == null) recommendationAnchor = item;
                 var card = item.card("alternative", "FUNCTIONAL_ALTERNATIVE");
                 card.put(
                         "differences",
@@ -410,56 +414,63 @@ public class SearchController {
             var relaxed = new LinkedHashMap<>(filters);
             String requested = relaxed.remove("version").toString();
             for (Row sku : db.representatives(relaxed, selection, families)) {
+                if (recommendationAnchor == null) {
+                    recommendationAnchor = sku;
+                    recommendationFilters = relaxed;
+                }
                 var alternative = sku.card("alternative", "FUNCTIONAL_ALTERNATIVE");
                 alternative.put("differences", List.of("Версия " + constraints.namedVersions.get(sku.str("offer_id"))
                         + " вместо запрошенной " + requested + "."));
                 alternatives.add(alternative);
             }
         }
-        List<Map<String, Object>> upsell = List.of();
-        if (!conflict && !input.skipsUpsell()) {
-            UUID seed = UUID.nameUUIDFromBytes(input.normalized().getBytes(StandardCharsets.UTF_8));
-            int minimum = direct.isEmpty() ? 4 : 3;
-            int capacity = minimum + Math.floorMod(seed.getMostSignificantBits(), 9 - minimum);
-            Set<String> shownFamilies = new HashSet<>();
-            for (var row : direct) shownFamilies.add(row.cardKey());
-            for (var card : alternatives) shownFamilies.add((String) card.get("family_key"));
+        var upsell = new ArrayList<Map<String, Object>>();
+        boolean recommendationsEnabled = !input.skipsUpsell();
+        Set<String> shownFamilies = new HashSet<>();
+        for (var row : direct) shownFamilies.add(row.cardKey());
+        for (var card : alternatives) shownFamilies.add((String) card.get("family_key"));
+        if (!conflict && recommendationsEnabled) {
+            int capacity = MAX_RECOMMENDATIONS;
 
             var evaluations = new ArrayList<Map<String, Object>>();
             var verified = db.complements(anchors, filters, capacity, evaluations).stream()
                     .filter(card -> shownFamilies.add((String) card.get("family_key"))).toList();
             // Keep the established top4 contract. The independent upsell block also works with four direct hits.
             top.addAll(verified.subList(0, Math.min(4 - top.size(), verified.size())));
-            var suggestions = new ArrayList<>(verified);
-            // A category or vendor navigation target scopes the main results. A stand can belong to
-            // a different category than the laptops on that page. Keep explicit shopper filters.
+            upsell.addAll(verified);
+            // Verified accessories can belong to a different category than their anchor.
+            // Keep explicit shopper filters when relaxing navigation scope for compatibility checks.
             var merchandisingFilters = new LinkedHashMap<>(filters);
             if (!anchors.isEmpty()) {
                 for (String key : List.of("category_id", "vendor_id"))
                     if (!input.filters().containsKey(key)) merchandisingFilters.remove(key);
             }
-            if (!merchandisingFilters.equals(filters) && suggestions.size() < capacity) {
+            if (!merchandisingFilters.equals(filters) && upsell.size() < capacity) {
                 for (var card : db.complements(anchors, merchandisingFilters, capacity, evaluations)) {
-                    if (shownFamilies.add((String) card.get("family_key"))) suggestions.add(card);
-                    if (suggestions.size() == capacity) break;
+                    if (shownFamilies.add((String) card.get("family_key"))) upsell.add(card);
+                    if (upsell.size() == capacity) break;
                 }
             }
             if (!evaluations.isEmpty()) diagnostics.put("relation_checks", evaluations.stream().distinct().toList());
-            if (suggestions.size() < capacity) {
-                suggestions.addAll(db.catalogConsumables(anchors, merchandisingFilters, shownFamilies, capacity - suggestions.size()));
+            if (upsell.size() < capacity) {
+                upsell.addAll(db.catalogConsumables(anchors, merchandisingFilters, shownFamilies, capacity - upsell.size()));
             }
-            if (suggestions.size() < capacity) {
-                var shoppingFilters = new LinkedHashMap<>(input.filters());
-                for (String key : List.of("available_only", "max_price_minor", "currency"))
-                    if (filters.containsKey(key)) shoppingFilters.put(key, filters.get(key));
-                Row contextHint = anchors.isEmpty() ? db.upsellContext(target, alternatives,
-                        (String) input.context().get("category_id")) : null;
-                suggestions.addAll(db.upsellSuggestions(anchors, shoppingFilters, shownFamilies,
-                        (String) input.context().get("profile_id"), capacity - suggestions.size(), contextHint));
-                suggestions.addAll(db.curatedSuggestions(shoppingFilters, shownFamilies, curatedOffers,
-                        seed.getLeastSignificantBits(), capacity - suggestions.size()));
+            if (recommendationAnchor != null && upsell.size() < capacity) {
+                String category = recommendationAnchor.str("category_id");
+                var ranked = index.rank(recommendationAnchor.str("name"),
+                        (String) recommendationFilters.get("vendor_id"), category, true);
+                upsell.addAll(db.similarOffers(category, recommendationFilters, ranked.families(),
+                        shownFamilies, capacity - upsell.size()));
             }
-            upsell = suggestions;
+        }
+        if (recommendationsEnabled && upsell.isEmpty()) {
+            var editorialFilters = new LinkedHashMap<>(input.filters());
+            for (String key : List.of("available_only", "max_price_minor", "currency"))
+                if (filters.containsKey(key)) editorialFilters.put(key, filters.get(key));
+            UUID seed = UUID.nameUUIDFromBytes(input.normalized().getBytes(StandardCharsets.UTF_8));
+            int count = 4 + Math.floorMod(seed.getMostSignificantBits(), MAX_RECOMMENDATIONS - 3);
+            upsell.addAll(db.curatedSuggestions(editorialFilters, shownFamilies, curatedOffers,
+                    seed.getLeastSignificantBits(), count));
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("search_id", UUID.randomUUID().toString());
