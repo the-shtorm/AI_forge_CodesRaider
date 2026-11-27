@@ -127,6 +127,34 @@ final class TaskInterpreter {
         return null;
     }
 
+    private static final Pattern ENGLISH_TASK = Pattern.compile("\\b(?:how|need|want|can|to)\\b");
+
+    static boolean describesTask(String terms) {
+        return !REFERENCE.matcher(terms).find() && (TASK.matcher(terms).find() || ENGLISH_TASK.matcher(terms).find());
+    }
+
+    static QueryPlan chatPlan(String terms, AssistantTurn chat, ModelClient model, SearchCatalog catalog,
+                              List<String> previousTitles) throws SQLException {
+        var instruction = model.chatInstruction(terms, chat, previousTitles);
+        if (instruction == null) return null;
+        String tool = instruction.tool();
+        for (var topic : TOPICS)
+            if (topic.names().contains(tool) && model.confirmsTool(topic.tool(), terms))
+                return plan("llm_chat", topic, terms);
+        var purpose = switch (tool) {
+            case "network switch", "ethernet switch" -> Purpose.SWITCH;
+            case "computer monitor", "monitor" -> Purpose.MONITOR;
+            case "rack server", "server hardware" -> Purpose.SERVER;
+            default -> Purpose.WORDS;
+        };
+        if (purpose != Purpose.WORDS && model.confirmsTool(tool, terms))
+            return new QueryPlan("llm_chat", purpose, terms, List.of(), "all");
+        String name = catalog.exactLeafCategoryName(instruction.category());
+        // A generic shop section cannot verify a concrete tool.
+        if (name == null || !model.confirmsTool(name, terms)) return null;
+        return new QueryPlan("llm_chat", Purpose.WORDS, name, List.of(), "all");
+    }
+
     private static QueryPlan plan(String compiler, Topic topic, String terms) {
         return new QueryPlan(compiler, topic.purpose(), terms, List.of(), "all");
     }

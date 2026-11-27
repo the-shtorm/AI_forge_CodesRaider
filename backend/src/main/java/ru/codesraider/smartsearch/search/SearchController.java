@@ -29,6 +29,9 @@ public class SearchController {
     private static final Pattern IDENTIFIER = Pattern.compile("(?U)^(id|sku|артикул)[:# ]+(.+)$");
 
     private final ModelClient model;
+    // SQLite journals responses across restarts. Serialize the read/choose/journal cycle for
+    // simultaneous sends from the same chat without retaining unbounded session identifiers.
+    private final Object[] chatLocks = java.util.stream.Stream.generate(Object::new).limit(256).toArray();
 
     public SearchController(SearchIndex index, EventStore events) {
         this(index, events, new ModelClient("", "softline", "", 3000));
@@ -50,16 +53,36 @@ public class SearchController {
     public Map<String, Object> search(@RequestBody Map<String, Object> request)
             throws SQLException, IOException {
         long start = System.nanoTime();
-        Instant time = Instant.now();
         SearchInput input = SearchInput.parse(request);
+        var chat = input.strategy().equals("llm") ? AssistantTurn.from(request) : null;
+        if (chat != null && chat.session() != null) {
+            synchronized (chatLocks[Math.floorMod(chat.session().hashCode(), chatLocks.length)]) {
+                return run(request, input, chat, start);
+            }
+        }
+        return run(request, input, chat, start);
+    }
+
+    private Map<String, Object> run(Map<String, Object> request, SearchInput input, AssistantTurn chat, long start)
+            throws SQLException, IOException {
+        Instant time = Instant.now();
         Map<String, Object> response;
         var diagnostics = new LinkedHashMap<String, Object>();
         var detailOffers = new LinkedHashMap<String, String>();
         try (var db = open()) {
-            response = search(input, db, diagnostics, detailOffers);
+            var effective = input;
+            if (chat != null && input.target().isEmpty()) {
+                String query = chat.resolve(input.query(), () -> chat.session() == null ? null
+                        : events.lastChatQuery(chat.session(), index.version()));
+                if (!query.equals(input.query()))
+                    effective = new SearchInput(query, SearchInput.normalize(query), input.limit(), input.sort(),
+                            input.strategy(), input.context(), input.filters(), input.target());
+            }
+            response = search(effective, db, diagnostics, detailOffers, chat);
+            response.put("normalized_q", input.normalized());
         }
         try {
-            events.logSearch(request, response, diagnostics, detailOffers, time, (System.nanoTime() - start) / 1_000_000);
+            events.logSearch(request, response, diagnostics, detailOffers, chat == null ? time : Instant.now(), (System.nanoTime() - start) / 1_000_000);
         } catch (ApiProblem failure) {
             throw ApiProblem.searchJournal(failure);
         }
@@ -67,7 +90,7 @@ public class SearchController {
     }
 
     private Map<String, Object> search(SearchInput input, SearchCatalog db,
-                                       Map<String, Object> diagnostics, Map<String, String> detailOffers)
+                                       Map<String, Object> diagnostics, Map<String, String> detailOffers, AssistantTurn chat)
             throws SQLException, IOException {
         String q = input.productQuery();
         Row target = null;
@@ -82,7 +105,11 @@ public class SearchController {
         QueryPlan plan = QueryPlan.words(q);
         String terms = q;
         Set<String> aliases = Set.of();
-        if (!input.target().isEmpty()) {
+        if (chat != null && input.target().isEmpty() && chat.needsClarification(q)) {
+            constraints.task = null;
+            ids = List.of();
+            plan = new QueryPlan("rules", QueryPlan.Purpose.UNKNOWN, q, List.of(), "all");
+        } else if (!input.target().isEmpty()) {
             constraints.extractQuery(licensingQuery);
             target =
                     db.entity(
@@ -132,7 +159,7 @@ public class SearchController {
                     }
                 }
                 plan = target == null && constraints.task == null && !input.requestsFileRecovery()
-                        ? QueryPlan.compile(terms, aliases, db, model, input.strategy().equals("llm")) : QueryPlan.words(terms);
+                        ? QueryPlan.compile(terms, aliases, db, model) : QueryPlan.words(terms);
             }
         }
         var required = new LinkedHashMap<>(db.scope(target));
@@ -253,6 +280,38 @@ public class SearchController {
                 }
             }
         }
+        String chatMessage = null;
+        var replacedCards = new HashSet<String>();
+        if (chat != null && !conflict && !fileRecovery && families != null && selection.program() != null
+                && plan.purpose() == QueryPlan.Purpose.WORDS && constraints.namedVersions.isEmpty()) {
+            boolean weak = direct.isEmpty() || !index.matchesDirectTitle(terms, direct);
+            // When all eligible families fit on screen, a mere change of order cannot help.
+            // Only a free-form lexical task may be recompiled. A known target keeps its identity.
+            boolean retry = !weak && !plan.appliedModel() && chat.session() != null && !direct.isEmpty()
+                    && direct.size() <= chat.cardLimit() && input.sort().equals("relevance")
+                    && TaskInterpreter.describesTask(terms) && chat.canRewrite(terms)
+                    && events.repeatsChatCards(chat.session(), index.version(), chat.cards(direct), Instant.now());
+            if ((weak || retry) && !db.mentionsVendor(terms) && !aliases.contains(terms)) {
+                var priorTitles = retry ? direct.stream().map(row -> row.str("name")).toList() : List.<String>of();
+                QueryPlan proposal = chat.canRewrite(terms) && model.configured()
+                        ? TaskInterpreter.chatPlan(terms, chat, model, db, priorTitles) : null;
+                var candidate = proposal != null ? proposal
+                        : new QueryPlan("rules", QueryPlan.Purpose.UNKNOWN, terms, List.of(), "all");
+                var alternative = new Selection(null, null, selection.support(), false, false, false, candidate, constraints);
+                var eligible = db.representatives(filters, alternative, null);
+                var priorIds = retry ? chat.cards(direct) : List.<String>of();
+                if (!retry || eligible.stream().anyMatch(row -> !priorIds.contains(row.str("offer_id")))) {
+                    plan = candidate;
+                    selection = alternative;
+                    ranking = null;
+                    families = null;
+                    mode = "lexical";
+                    reason = plan.purpose() == QueryPlan.Purpose.WORDS ? "CATEGORY_MATCH" : "PURPOSE_MATCH";
+                    direct = eligible;
+                    replacedCards.addAll(priorIds);
+                }
+            }
+        }
         if (selection.program() != null && plan.isSinglePurpose() && direct.size() > 1
                 && input.sort().equals("relevance")) {
             // The catalog decides eligibility. BM25 breaks ties inside the verified purpose.
@@ -272,6 +331,26 @@ public class SearchController {
             } else if (input.context().get("category_id") instanceof String category) {
                 direct.sort(Comparator.comparing(row -> !category.equals(row.str("category_id"))));
             }
+        }
+        if (chat != null) {
+            if (!replacedCards.isEmpty()) {
+                direct.sort(Comparator.comparing(row -> replacedCards.contains(row.str("offer_id"))));
+                diagnostics.put("chat_repetition", true);
+                diagnostics.put("chat_order", "NEXT_MATCH");
+                chatMessage = "Подобрал другие товары для той же задачи. Условия поиска сохранены.";
+            }
+            var cards = chat.cards(direct);
+            if (replacedCards.isEmpty() && chat.session() != null && events.repeatsChatCards(chat.session(), index.version(), cards, Instant.now())) {
+                diagnostics.put("chat_repetition", true);
+                if (input.sort().equals("relevance")) {
+                    chatMessage = chat.diversify(direct, q, model, diagnostics);
+                    cards = chat.cards(direct);
+                } else {
+                    chatMessage = "Эти товары снова первыми по выбранной сортировке. Какой критерий подбора изменить?";
+                }
+            }
+            diagnostics.put("chat_cards", cards);
+            diagnostics.put("chat_query", input.query());
         }
         List<Row> anchors = direct.subList(0, Math.min(4, direct.size()));
         List<Map<String, Object>> top = new ArrayList<>(),
@@ -321,7 +400,7 @@ public class SearchController {
             }
         }
         List<Map<String, Object>> upsell = List.of();
-        if (!conflict && !input.skipsUpsell()) {
+        if (!conflict && !input.skipsUpsell() && (chat == null || !direct.isEmpty())) {
             Set<String> shownFamilies = new HashSet<>();
             for (var block : List.of(top, more, alternatives))
                 for (var card : block) shownFamilies.add((String) card.get("family_key"));
@@ -392,14 +471,17 @@ public class SearchController {
             facets.put(field.equals("vendor_id") ? "vendors" : "categories", options);
         }
         result.put("facets", facets);
-        var trace = plan.trace(constraints);
+        var trace = new LinkedHashMap<>(plan.trace(constraints));
+        if (diagnostics.containsKey("chat_order")) trace.put("order", diagnostics.get("chat_order"));
         result.put("program", trace);
         diagnostics.put("program", trace);
         result.put("llm_applied", plan.appliedModel());
-        if (input.strategy().equals("llm")) {
+        if (chat != null) {
             String message = "Показаны совпадения каталога по текущей фразе. Для уточнения примените фильтры.";
             if (direct.isEmpty()) {
-                message = "По текущей фразе каталог не нашёл товаров. Введите название, артикул или уточните задачу.";
+                message = plan.purpose() == QueryPlan.Purpose.UNKNOWN || (plan.purpose() == QueryPlan.Purpose.WORDS
+                        && !plan.appliedModel() && target == null && ids == null && constraints.task == null && !fileRecovery && !conflict)
+                        ? AssistantTurn.CLARIFY : AssistantTurn.FILTERED;
                 if (!alternatives.isEmpty()) {
                     var first = alternatives.getFirst();
                     var differences = (List<?>) first.get("differences");
@@ -407,7 +489,8 @@ public class SearchController {
                             + ". " + differences.getFirst();
                 }
             }
-            result.put("assistant_message", message);
+            result.put("assistant_message", chatMessage == null ? message : chatMessage);
+            if (diagnostics.containsKey("chat_model_order")) result.put("llm_applied", true);
         }
         result.put(
                 "shortfall_reason",

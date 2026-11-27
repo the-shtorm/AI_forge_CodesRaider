@@ -57,7 +57,7 @@ record SearchInput(
     static SearchInput parse(Map<String, Object> body) {
         verifyKeys(
                 body, Set.of("q", "session_id", "context", "filters", "selected_target", "limit",
-                        "strategy", "assistant_history", "sort"));
+                        "strategy", "assistant_history", "assistant_card_limit", "sort"));
         String q = text(body.get("q"), "q");
         int limit = (int) integer(body.getOrDefault("limit", 4), 4, 50, "limit");
         String sort = text(body.getOrDefault("sort", "relevance"), "sort");
@@ -65,6 +65,7 @@ record SearchInput(
             throw invalid("sort");
         String strategy = text(body.getOrDefault("strategy", "standard"), "strategy");
         if (!Set.of("standard", "llm").contains(strategy)) throw invalid("strategy");
+        if (body.containsKey("assistant_card_limit")) integer(body.get("assistant_card_limit"), 1, 4, "assistant_card_limit");
         validateHistory(body.get("assistant_history"));
         if (body.get("session_id") != null) text(body.get("session_id"), "session_id");
         var context = object(body.get("context"), "context");

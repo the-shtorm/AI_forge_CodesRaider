@@ -7,6 +7,9 @@ import java.util.*;
 import java.util.regex.*;
 
 class Requirements {
+    static final String BUDGET = "(?:до|не дороже)\\s+((?:\\d{1,3}(?: \\d{3})+|\\d+)(?:\\.\\d{1,2})?)"
+            + "(?:\\s*(тыс(?:яч[аиу]?|\\.)?|к)\\s*)?\\s*(?:рублей|рубля|рубль|руб|р\\b)?";
+    static final String PLATFORM = "(?:для|под|на|(?:компьютер[а-я]*|ноутбук[а-я]*|пк)\\s+с)\\s+(windows|linux|macos)\\b";
     private static final String CAPACITY_PREFIX = "(?:на\\s+)?(?:(?:минимум|не (?:менее|меньше)(?: чем)?)\\s+(?:на\\s+)?)?";
     private static final String SERVER_DESTINATION = "(?:на\\s+сервер(?:е)?|для\\s+сервера)";
     private static final String SERVER_LICENSE = "(?:серверн(?:ая|ую|ой)\\s+лицензи[яюи]"
@@ -122,10 +125,10 @@ class Requirements {
         text =
                 take(
                         text,
-                        "(?:до|не дороже)\\s+((?:\\d{1,3}(?:"
-                                + " \\d{3})+|\\d+)(?:\\.\\d{1,2})?)\\s*(?:рублей|рубля|руб|р\\b)?",
+                        BUDGET,
                         m -> {
-                            long budget = new BigDecimal(m.group(1).replace(" ", "")).movePointRight(2).longValueExact();
+                            int scale = m.group(2) == null ? 2 : 5;
+                            long budget = new BigDecimal(m.group(1).replace(" ", "")).movePointRight(scale).longValueExact();
                             require("max_price_minor", budget);
                         });
         text =
@@ -163,7 +166,7 @@ class Requirements {
         text =
                 take(
                         text,
-                        "(?:для|под|на|(?:компьютер[а-я]*|ноутбук[а-я]*|пк)\\s+с)\\s+(windows|linux|macos)\\b",
+                        PLATFORM,
                         m -> require("platform", m.group(1)));
         return take(text, "(?:только\\s+)?в наличии", m -> require("available_only", true))
                 .strip()

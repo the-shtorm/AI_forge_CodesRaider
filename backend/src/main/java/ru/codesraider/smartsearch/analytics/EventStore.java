@@ -74,6 +74,36 @@ public class EventStore {
         }
     }
 
+    public String lastChatQuery(String session, String version) {
+        try {
+            var previous = database().sql().queryForList("""
+                    SELECT CASE WHEN index_version=? THEN json_extract(diagnostics_json,'$.chat_query') END
+                    FROM search_log WHERE source='demo' AND session_id=?
+                      AND json_type(diagnostics_json,'$.chat_cards')='array'
+                    ORDER BY ts DESC, rowid DESC LIMIT 1
+                    """, String.class, version, session);
+            return previous.isEmpty() ? null : previous.getFirst();
+        } catch (DataAccessException exception) {
+            throw ApiProblem.searchJournal(ApiProblem.events(exception));
+        }
+    }
+
+    public boolean repeatsChatCards(String session, String version, List<String> cards, Instant now) {
+        if (cards.isEmpty()) return false;
+        try {
+            var previous = database().sql().queryForList("""
+                    SELECT CASE WHEN index_version=? THEN json_extract(diagnostics_json,'$.chat_cards') END FROM search_log
+                    WHERE source='demo' AND session_id=? AND ts>=? AND ts<=?
+                      AND json_type(diagnostics_json,'$.chat_cards')='array'
+                    ORDER BY ts DESC, rowid DESC LIMIT 2
+                    """, String.class, version, session, Event.timestamp(now.minusSeconds(120)), Event.timestamp(now));
+            String key = json.writeValueAsString(cards);
+            return previous.size() == 2 && previous.stream().allMatch(key::equals);
+        } catch (DataAccessException exception) {
+            throw ApiProblem.searchJournal(ApiProblem.events(exception));
+        }
+    }
+
     public void logSearch(Map<String, ?> request, Map<String, ?> response, Map<String, Object> diagnostics,
                           Map<String, String> detailOffers, Instant time, long elapsedMs) {
         var shown = new LinkedHashMap<String, Object>();

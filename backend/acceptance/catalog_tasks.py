@@ -57,12 +57,12 @@ def dcg(bits):
     return sum(bit / math.log2(position + 2) for position, bit in enumerate(bits))
 
 
-def measure(cases, endpoint, fingerprint, products, ideals, repeat, judge=relevant):
+def measure(cases, endpoint, fingerprint, products, ideals, repeat, judge=relevant, strategy="standard"):
     for repetition in range(repeat):
         ordered = cases.copy()
         random.Random(211 + repetition).shuffle(ordered)
         for case in ordered:
-            payload = json.dumps({"q": case["query"]}, ensure_ascii=False).encode()
+            payload = json.dumps({"q": case["query"], "strategy": strategy}, ensure_ascii=False).encode()
             request = Request(endpoint.rstrip("/") + "/v1/search", data=payload,
                               headers={"Content-Type": "application/json"})
             start = time.monotonic()
@@ -86,6 +86,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("feed", type=Path)
     parser.add_argument("--url", default="http://localhost:8080")
+    parser.add_argument("--strategy", choices=("standard", "llm"), default="standard", help="Search bar or assistant API")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--csv", type=Path, required=True)
     parser.add_argument("--task-goals", nargs="?", const="development", choices=("development", "holdout"),
@@ -114,7 +115,7 @@ def main():
     with args.feed.open("rb") as f:
         fingerprint = hashlib.file_digest(f, "sha256").hexdigest()[:16]
     products, ideals = read_catalog(args.feed, judge, intents)
-    rows = list(measure(cases, args.url, fingerprint, products, ideals, args.repeat, judge))
+    rows = list(measure(cases, args.url, fingerprint, products, ideals, args.repeat, judge, args.strategy))
     with args.csv.open("w", newline="") as output:
         writer = csv.DictWriter(output, fieldnames=rows[0])
         writer.writeheader()

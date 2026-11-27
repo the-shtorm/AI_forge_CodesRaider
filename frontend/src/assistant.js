@@ -91,7 +91,7 @@ export async function requestAssistant(question, history, sessionId, signal, pro
   const result = await fetchSearch("/v1/search", {
     method: "POST", signal,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ q: question, strategy: "llm", session_id: sessionId, assistant_history: history,
+    body: JSON.stringify({ q: question, strategy: "llm", session_id: sessionId, assistant_history: history, assistant_card_limit: 4,
       context: profileId ? { profile_id: profileId } : undefined }),
   });
   const cards = assistantCards(result);

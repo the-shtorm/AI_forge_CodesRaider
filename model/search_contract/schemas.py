@@ -85,8 +85,9 @@ class SearchRequest(DTO):
         None, description="Выбранная подсказка. Сервер проверяет её ID и тип в текущем снимке."
     )
     strategy: Literal["standard", "llm"] = Field(
-        "standard", description="llm запрашивает интерпретацию намерения. Явные фильтры всегда обязательны."
+        "standard", description="llm включает диалоговый подбор. Сначала применяются правила, затем при необходимости локальная модель."
     )
+    assistant_card_limit: int = Field(3, ge=1, le=4, description="Число прямых карточек, видимых в чате.")
     assistant_history: list[AssistantTurn] | None = Field(
         None, max_length=8, description="Предыдущие сообщения чата от старых к новым. Текущий вопрос находится в q."
     )
@@ -201,7 +202,10 @@ Purpose = Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
 
 
 class SearchProgram(DTO):
-    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained", "catalog_fallback", "task_rules", "llm_paraphrase", "llm_rewrite", "llm_semantic"]
+    order: Literal["NEXT_MATCH", "OTHER_VENDOR", "LOWER_PRICE"] | None = Field(
+        None, description="Порядок альтернативных совпадений при третьем повторе в чате."
+    )
+    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained", "catalog_fallback", "task_rules", "llm_paraphrase", "llm_rewrite", "llm_semantic", "llm_chat"]
     purpose: Purpose
     additional_purposes: list[Purpose] = Field(max_length=1)
     join: Literal["all", "any"]
@@ -261,7 +265,7 @@ class SearchResponse(DTO):
         None, description="Варианты фильтров по прямым совпадениям. Для каждой группы учитывать все явные ограничения, кроме собственного фильтра."
     )
     llm_applied: bool | None = Field(
-        None, description="true, когда интерпретация LLM участвовала в поиске, false при деградации."
+        None, description="true, когда сервер применил план LLM или выбранный моделью порядок подходящих предложений."
     )
     assistant_message: Text | None = Field(
         None, max_length=2000, description="Ответ чата на основе найденных сведений или уточняющий вопрос."
