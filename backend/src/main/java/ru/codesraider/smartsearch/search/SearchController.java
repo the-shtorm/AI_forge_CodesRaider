@@ -5,11 +5,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import ru.codesraider.smartsearch.analytics.EventStore;
+import ru.codesraider.smartsearch.catalog.CuratedOffers;
 import ru.codesraider.smartsearch.search.SearchCatalog.Row;
 import ru.codesraider.smartsearch.search.SearchCatalog.Selection;
 import ru.codesraider.smartsearch.web.ApiProblem;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.*;
@@ -29,6 +31,7 @@ public class SearchController {
     private static final Pattern IDENTIFIER = Pattern.compile("(?U)^(id|sku|артикул)[:# ]+(.+)$");
 
     private final ModelClient model;
+    private final List<String> curatedOffers;
     // SQLite journals responses across restarts. Serialize the read/choose/journal cycle for
     // simultaneous sends from the same chat without retaining unbounded session identifiers.
     private final Object[] chatLocks = java.util.stream.Stream.generate(Object::new).limit(256).toArray();
@@ -39,9 +42,14 @@ public class SearchController {
 
     @org.springframework.beans.factory.annotation.Autowired
     SearchController(SearchIndex index, EventStore events, ModelClient model) {
+        this(index, events, model, CuratedOffers.configured());
+    }
+
+    SearchController(SearchIndex index, EventStore events, ModelClient model, List<String> curatedOffers) {
         this.model = model;
         this.index = index;
         this.events = events;
+        this.curatedOffers = List.copyOf(curatedOffers);
     }
 
     private SearchCatalog open() throws SQLException {
@@ -95,6 +103,7 @@ public class SearchController {
         String q = input.productQuery();
         Row target = null;
         String reason = "LEXICAL_MATCH", mode = "lexical";
+        String offerTargetReason = "EXACT_SKU";
         List<String> ids = null, families = null;
         boolean includeServerSoftware = false;
         String spelling = null;
@@ -110,6 +119,7 @@ public class SearchController {
             ids = List.of();
             plan = new QueryPlan("rules", QueryPlan.Purpose.UNKNOWN, q, List.of(), "all");
         } else if (!input.target().isEmpty()) {
+            offerTargetReason = "SELECTED_OFFER";
             constraints.extractQuery(licensingQuery);
             target =
                     db.entity(
@@ -144,7 +154,9 @@ public class SearchController {
                 if (target == null) target = db.alias(terms, category);
                 if (target == null) target = db.qualifiedSku(terms);
                 if (target == null && constraints.task == null && !input.requestsCompleteServer() && !input.requestsFileRecovery()) {
-                    target = db.exactName(terms, index.exactNames(terms));
+                    target = db.exactName(q, index.exactNames(q));
+                    if (target == null && !terms.equals(q)) target = db.exactName(terms, index.exactNames(terms));
+                    if (target != null && "offer".equals(target.str("kind"))) offerTargetReason = "EXACT_TITLE";
                     if (target == null && !terms.isEmpty() && !MODEL_CODE.matcher(terms).matches()
                             && !CATALOG_CODE.matcher(terms).matches()) {
                         String family = index.namedFamily(terms);
@@ -199,7 +211,7 @@ public class SearchController {
         if (target != null) {
             reason =
                     switch (target.str("kind")) {
-                        case "offer" -> "EXACT_SKU";
+                        case "offer" -> offerTargetReason;
                         case "family" -> "FAMILY_MATCH";
                         case "vendor" -> "VENDOR_MATCH";
                         case "collection" -> "COLLECTION_MATCH";
@@ -356,9 +368,12 @@ public class SearchController {
         List<Map<String, Object>> top = new ArrayList<>(),
                 more = new ArrayList<>(),
                 alternatives = new ArrayList<>();
+        boolean offerLookup = "EXACT_SKU".equals(reason) || (target != null && "offer".equals(target.str("kind")));
         for (int i = 0; i < Math.min(input.limit(), direct.size()); i++) {
             var row = direct.get(i);
-            var card = row.card("direct", reason);
+            boolean versionIdentifiesOffer = (filters.containsKey("version") || constraints.editionYear != null)
+                    && row.number("offer_count") == 1;
+            var card = row.card("direct", reason, !offerLookup && !versionIdentifiesOffer);
             if (includeServerSoftware && "369".equals(row.str("category_id"))
                     && "software_admin".equals(input.context().get("profile_id")))
                 card.put("reason_codes", List.of(reason, "PROFILE_MATCH"));
@@ -400,13 +415,16 @@ public class SearchController {
             }
         }
         List<Map<String, Object>> upsell = List.of();
-        if (!conflict && !input.skipsUpsell() && (chat == null || !direct.isEmpty())) {
+        if (!conflict && !input.skipsUpsell()) {
+            UUID seed = UUID.nameUUIDFromBytes(input.normalized().getBytes(StandardCharsets.UTF_8));
+            int minimum = direct.isEmpty() ? 4 : 3;
+            int capacity = minimum + Math.floorMod(seed.getMostSignificantBits(), 9 - minimum);
             Set<String> shownFamilies = new HashSet<>();
-            for (var block : List.of(top, more, alternatives))
-                for (var card : block) shownFamilies.add((String) card.get("family_key"));
+            for (var row : direct) shownFamilies.add(row.cardKey());
+            for (var card : alternatives) shownFamilies.add((String) card.get("family_key"));
 
             var evaluations = new ArrayList<Map<String, Object>>();
-            var verified = db.complements(anchors, filters, 4, evaluations).stream()
+            var verified = db.complements(anchors, filters, capacity, evaluations).stream()
                     .filter(card -> shownFamilies.add((String) card.get("family_key"))).toList();
             // Keep the established top4 contract. The independent upsell block also works with four direct hits.
             top.addAll(verified.subList(0, Math.min(4 - top.size(), verified.size())));
@@ -418,24 +436,26 @@ public class SearchController {
                 for (String key : List.of("category_id", "vendor_id"))
                     if (!input.filters().containsKey(key)) merchandisingFilters.remove(key);
             }
-            if (!merchandisingFilters.equals(filters) && suggestions.size() < 4) {
-                for (var card : db.complements(anchors, merchandisingFilters, 4, evaluations)) {
+            if (!merchandisingFilters.equals(filters) && suggestions.size() < capacity) {
+                for (var card : db.complements(anchors, merchandisingFilters, capacity, evaluations)) {
                     if (shownFamilies.add((String) card.get("family_key"))) suggestions.add(card);
-                    if (suggestions.size() == 4) break;
+                    if (suggestions.size() == capacity) break;
                 }
             }
             if (!evaluations.isEmpty()) diagnostics.put("relation_checks", evaluations.stream().distinct().toList());
-            if (suggestions.size() < 4) {
-                suggestions.addAll(db.catalogConsumables(anchors, merchandisingFilters, shownFamilies, 4 - suggestions.size()));
+            if (suggestions.size() < capacity) {
+                suggestions.addAll(db.catalogConsumables(anchors, merchandisingFilters, shownFamilies, capacity - suggestions.size()));
             }
-            if (suggestions.isEmpty()) {
+            if (suggestions.size() < capacity) {
                 var shoppingFilters = new LinkedHashMap<>(input.filters());
                 for (String key : List.of("available_only", "max_price_minor", "currency"))
                     if (filters.containsKey(key)) shoppingFilters.put(key, filters.get(key));
-                Row contextHint = anchors.isEmpty() ? db.upsellContext(target, alternatives, families,
+                Row contextHint = anchors.isEmpty() ? db.upsellContext(target, alternatives,
                         (String) input.context().get("category_id")) : null;
-                suggestions.addAll(db.upsellSuggestions(anchors, merchandisingFilters, shoppingFilters, shownFamilies,
-                        (String) input.context().get("profile_id"), 4, contextHint));
+                suggestions.addAll(db.upsellSuggestions(anchors, shoppingFilters, shownFamilies,
+                        (String) input.context().get("profile_id"), capacity - suggestions.size(), contextHint));
+                suggestions.addAll(db.curatedSuggestions(shoppingFilters, shownFamilies, curatedOffers,
+                        seed.getLeastSignificantBits(), capacity - suggestions.size()));
             }
             upsell = suggestions;
         }

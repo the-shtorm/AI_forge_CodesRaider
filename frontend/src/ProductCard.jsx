@@ -1,5 +1,5 @@
 import ProductImage from "./ProductImage";
-import { safeLink } from "./api.js";
+import { safeLink, targetLabels } from "./api.js";
 
 const licenseTypes = { new: "Новая", renewal: "Продление", upgrade: "Обновление" };
 
@@ -25,10 +25,13 @@ export default function ProductCard({ item, action, explanation }) {
       </figure>
       <div className="product-top">
         <span className="vendor-name">{item.vendor}</span>
+        {item.result_kind && <span className="compatibility-tag">{targetLabels[item.result_kind]}</span>}
         {item.role === "complement" && <span className="compatibility-tag">Совместимо</span>}
         {item.offer_tier === "reserve" && <span className="compatibility-tag">Резерв</span>}
       </div>
-      {item.sku && <p className="sku">Артикул {item.sku}</p>}
+      {item.result_kind !== "family" && (item.sku || item.version) && <p className="sku">
+        {[item.sku && `Артикул ${item.sku}`, item.version && `Версия ${item.version}`].filter(Boolean).join(" · ")}
+      </p>}
       {item.reason_codes?.includes("EXACT_SKU") && <p className="summary-text">Совпадение по артикулу</p>}
       {attributes.length > 0 && <dl className="product-attributes">
         {attributes.slice(0, 3).map(([key, values]) => <div key={key}><dt>{key}</dt><dd>{formatOfferAttribute(key, values)}</dd></div>)}

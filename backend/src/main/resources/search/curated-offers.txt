@@ -1,0 +1,25 @@
+# Softline catalog. Each entry is a concrete offer ID.
+473568 # Microsoft Office для дома 2024
+231538 # Dr.Web Security Space
+83303  # Logitech K120
+508887 # Netac U185 64 GB
+539763 # Кибер Бэкап Старт
+233426 # TP-Link Archer C6
+541420 # PDF Commander Бизнес
+524820 # Pilot Pro USB
+195982 # Microsoft 365 Персональный
+328305 # Logitech M190
+416858 # Kaspersky Standard
+473631 # ADATA SD620 512 GB
+85486  # TP-Link TL-SG105
+541589 # МТС Линк Стандарт
+535333 # Defender Ultra Swift USB
+53955  # Uranium Backup Base
+525822 # ContentReader PDF 16 Standard
+533516 # A4Tech HU-8
+351840 # Samsung T7 1 TB
+541192 # D-Link DGS-1005A
+149018 # WinRAR
+512515 # Pilot S 3 м
+339669 # Handy Backup Office Expert
+350128 # Defender Accura MM-275

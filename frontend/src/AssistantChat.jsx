@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ProductImage from "./ProductImage";
 import { requestAssistant } from "./assistant";
-import { entityHref, eventSession, newId } from "./api";
+import { cardTarget, entityHref, eventSession, newId, targetLabels } from "./api";
 import { cardEvent, trackEvents } from "./events";
 import { appendMessage, loadChats, pruneChats, saveChats } from "./chatHistory";
 
@@ -14,10 +14,15 @@ const storageKey = "softline-assistant-chats-v1";
 function AssistantProducts({ items, search, onVisit }) {
   return <ul className="assistant-products">
     {items.map(item => {
-      const href = entityHref({ kind: "offer", id: item.offer_id }, item.role === "direct" ? search?.filters : {});
+      const href = entityHref(cardTarget(item), item.role === "direct" ? search?.filters : {});
       return <li key={item.offer_id}>
         <div className="assistant-product-image"><ProductImage /></div>
-        <a href={href} onClick={event => onVisit(event, href, item, search)}>{item.name}</a>
+        <div>
+          <a href={href} onClick={event => onVisit(event, href, item, search)}>{item.name}</a>
+          {item.result_kind && <div className="summary-text"><small>{[targetLabels[item.result_kind],
+            item.result_kind === "offer" && item.sku, item.result_kind === "offer" && item.version,
+            item.role === "complement" && "Совместимо"].filter(Boolean).join(" · ")}</small></div>}
+        </div>
       </li>;
     })}
   </ul>;
@@ -167,7 +172,7 @@ export default function AssistantChat({ navigate, profileId }) {
               <p>{message.text}</p>
               {!!message.products?.length && <AssistantProducts items={message.products} search={message.search} onVisit={visitProduct} />}
               {!!message.upsell?.length && <section className="assistant-recommendations">
-                <h3>{message.upsell.some(item => item.anchorId ?? item.anchorName) ? "Покупают вместе" : "Предложения каталога"}</h3>
+                <h3>{message.upsell.every(item => item.anchorId ?? item.anchorName) ? "Покупают вместе" : "Возможно, вас заинтересует"}</h3>
                 <AssistantProducts items={message.upsell} search={message.search} onVisit={visitProduct} />
               </section>}
             </div>
