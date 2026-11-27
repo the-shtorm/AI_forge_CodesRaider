@@ -30,6 +30,7 @@ final class SearchCatalog implements AutoCloseable {
                     + " LIKE '%cross-grade%' THEN 3 WHEN instr(o.name,'истрибутив')>0 OR"
                     + " instr(o.name,'омплект носител')>0 THEN 2 WHEN o.license_type='new' THEN 0"
                     + " ELSE 1 END";
+    private static final String GROUP_KEY = "coalesce(o.family_key,o.entity_key)";
     private static final String COLUMNS =
             "o.offer_id,o.family_key,o.category_id,o.vendor_id,o.sku_raw AS"
                 + " sku,o.available,o.price_minor,o.old_price_minor,o.currency,o.url,o.name,o.base_model,o.version,o.edition,o.license_type,v.name"
@@ -126,6 +127,15 @@ final class SearchCatalog implements AutoCloseable {
                 List.of(q, q));
     }
 
+    List<Row> identifier(String kind, String value) throws SQLException {
+        if ("id".equals(kind)) {
+            Row offer = entity("offer", value);
+            return offer == null ? List.of() : List.of(offer);
+        }
+        return rows("SELECT e.* FROM offer o JOIN entity e USING(entity_key) WHERE o.sku_norm=? ORDER BY o.offer_id",
+                List.of(SearchIndex.normalizeSku(value)));
+    }
+
     private static final String PRINTER_CATEGORY = "o.category_id IN (SELECT id FROM entity WHERE kind='category' AND (id='93995' OR name LIKE '%ринтер%' OR name LIKE '%МФУ%'))";
     private static final String SERVER_OFFER = "(o.category_id IN ('86563','87093','87268','87276') AND (o.name LIKE '%ервер%' OR lower(o.name) LIKE '%server%' OR (o.vendor_id='depo' AND lower(o.base_model) LIKE 'storm %')))";
 
@@ -160,6 +170,7 @@ final class SearchCatalog implements AutoCloseable {
         if (keys.isEmpty()) return null;
         var where = new Where();
         where.oneOf("entity_key", keys);
+        where.add("(kind<>'category' OR EXISTS (SELECT 1 FROM offer o WHERE o.category_id=entity.id AND o.family_key IS NOT NULL))");
         return rows("SELECT * FROM entity WHERE " + where.sql()
                 + " ORDER BY CASE kind WHEN 'collection' THEN 0 WHEN 'vendor' THEN 1"
                 + " WHEN 'family' THEN 2 WHEN 'category' THEN 3 ELSE 4 END,id", where.args)
@@ -181,8 +192,10 @@ final class SearchCatalog implements AutoCloseable {
     }
 
     boolean mentionsVendor(String text) throws SQLException {
+        String padded = " " + text + " ";
         for (var row : rows("SELECT e.name,v.vendor_id FROM vendor v JOIN entity e USING(entity_key)", List.of())) {
-            if (text.contains(SearchInput.normalize(row.str("name"))) || text.contains(row.str("vendor_id"))) return true;
+            if (padded.contains(" " + SearchInput.normalize(row.str("name")) + " ")
+                    || padded.contains(" " + row.str("vendor_id") + " ")) return true;
         }
         return false;
     }
@@ -257,12 +270,15 @@ final class SearchCatalog implements AutoCloseable {
                 """;
         String sql = """
                 WITH matches(entity_key,priority) AS (
-                  SELECT entity_key,1 FROM alias WHERE term>=?1 AND term<?2 AND scope IN ('*',?3)
+                  SELECT entity_key,0 FROM offer WHERE offer_id=?1
+                  UNION ALL SELECT entity_key,1 FROM alias WHERE term>=?1 AND term<?2 AND scope IN ('*',?3)
                   UNION ALL SELECT entity_key,CASE WHEN sku_norm=?4 THEN 0 ELSE 2 END
                     FROM offer WHERE sku_norm>=?4 AND sku_norm<?6
                   UNION ALL SELECT value,3 FROM json_each(?7)
                 ), candidates AS (SELECT entity_key,min(priority) AS priority FROM matches GROUP BY entity_key)
-                SELECT e.kind,e.id,e.name,%s AS preferred FROM candidates c JOIN entity e USING(entity_key)
+                SELECT e.kind,e.id,CASE WHEN e.kind='offer' AND EXISTS (SELECT 1 FROM offer s WHERE s.offer_id<>?1 AND s.sku_norm=?4)
+                   AND EXISTS (SELECT 1 FROM offer i WHERE i.offer_id=?1) AND c.priority=0
+                   THEN e.name || CASE WHEN e.id=?1 THEN ' · ID ' ELSE ' · артикул ' END || ?1 ELSE e.name END AS name,%s AS preferred FROM candidates c JOIN entity e USING(entity_key)
                 WHERE %s AND (e.kind<>'category' OR EXISTS (
                     SELECT 1 FROM offer o WHERE o.category_id=e.id AND o.family_key IS NOT NULL))
                 ORDER BY c.priority,preferred DESC,
@@ -377,10 +393,21 @@ final class SearchCatalog implements AutoCloseable {
 
     // All SQL fragments come from this enum. The model supplies neither SQL nor product IDs.
     private static String predicate(QueryPlan.Purpose purpose) {
+        if (purpose == QueryPlan.Purpose.WEBINAR)
+            return "(o.category_id IN (SELECT id FROM entity WHERE kind='category' AND "
+                    + "(name LIKE '%ебинар%' OR name LIKE '%идеоконференц%')) OR "
+                    + "(o.category_id='7388' AND o.vendor_id='webinar' AND o.product_type='софт') OR (o.vendor_id='trueconf' AND o.family_key='family/50590'))";
         String category = switch (purpose) {
             case BACKUP -> "id='1033' OR name LIKE '%езервное копирование%'";
-            case WEBINAR -> "name LIKE '%ебинар%' OR name LIKE '%идеоконференц%'";
-            case REMOTE_ACCESS -> "name LIKE '%даленный доступ%' OR name LIKE '%далённый доступ%' OR name LIKE '%даленное администрирование%'";
+            case OCR -> "id='6' OR name LIKE '%аспознавания текста%'";
+            case VIDEO_EDITOR -> "id='495' OR name LIKE '%идеоредактор%'";
+            case PHOTO_EDITOR -> "id IN ('186','241') OR name LIKE '%рафические редакторы%'";
+            case VIRTUALIZATION -> "id IN ('2500','222321') OR name LIKE '%иртуализаци%'";
+            case ARCHIVER -> "id='717' OR name LIKE '%рхиватор%'";
+            case UPS -> "id='82080' OR name LIKE '%сточники бесперебойного питания%'";
+            case SWITCH -> "id='85741' OR name='Коммутаторы'";
+            case MONITOR -> "id='80843' OR name='Мониторы'";
+            case REMOTE_ACCESS -> "id IN ('327029','327030') OR name LIKE '%даленный доступ%' OR name LIKE '%далённый доступ%' OR name LIKE '%даленное администрирование%'";
             case ANTIVIRUS -> "name LIKE '%нтивирус%'";
             case PRINTER -> "id='93995' OR name LIKE '%ринтер%' OR name LIKE '%МФУ%'";
             default -> null;
@@ -393,6 +420,11 @@ final class SearchCatalog implements AutoCloseable {
             case SERVER_SOFTWARE -> "(o.category_id='369' OR (o.group_id IS NOT NULL AND (o.name LIKE '%ервер%' OR lower(o.name) LIKE '%server%')))";
             default -> "0";
         };
+    }
+
+    boolean hasPurpose(QueryPlan.Purpose purpose) throws SQLException {
+        return !rows("SELECT 1 FROM offer o WHERE o.family_key IS NOT NULL AND " + predicate(purpose)
+                + " LIMIT 1", List.of()).isEmpty();
     }
 
     private Where candidateWhere(Map<String, Object> filters, Selection selection, List<String> families) {
@@ -435,7 +467,8 @@ final class SearchCatalog implements AutoCloseable {
             w.add("o.family_key=?", target.str("entity_key"));
         if (target != null && "offer".equals(target.str("kind")))
             w.add("o.offer_id=?", target.str("id"));
-        w.add("o.family_key IS NOT NULL");
+        if (selection.offerIds() == null && (target == null || !"offer".equals(target.str("kind"))))
+            w.add("o.family_key IS NOT NULL");
         if (selection.support() && selection.offerIds() == null && (target == null || !"offer".equals(target.str("kind"))))
             w.add(SUPPORT_TITLE);
         return w;
@@ -452,15 +485,15 @@ final class SearchCatalog implements AutoCloseable {
         Where w = candidateWhere(filters, selection, families);
         String sql = """
                 WITH eligible AS (
-                    SELECT o.%s AS id,o.family_key,min(%s) AS tier FROM offer o
-                    WHERE %s GROUP BY o.%s,o.family_key
+                    SELECT o.%s AS id,%s AS group_key,min(%s) AS tier FROM offer o
+                    WHERE %s GROUP BY o.%s,group_key
                 ), ranked AS (
                     SELECT id,tier,min(tier) OVER (PARTITION BY id) AS best FROM eligible
                 )
                 SELECT r.id,e.name AS label,count(*) AS count FROM ranked r
                 JOIN entity e ON e.kind=? AND e.id=r.id WHERE r.tier=r.best
                 GROUP BY r.id,e.name ORDER BY count DESC,e.name,r.id
-                """.formatted(field, TIER, w.sql(), field);
+                """.formatted(field, GROUP_KEY, TIER, w.sql(), field);
         w.args.add(kind);
         return rows(sql, w.args);
     }
@@ -474,40 +507,35 @@ final class SearchCatalog implements AutoCloseable {
                 rows(
                         "SELECT * FROM (SELECT "
                                 + COLUMNS
-                                + ",row_number() OVER (PARTITION BY o.family_key ORDER BY "
+                                + "," + GROUP_KEY + " AS card_key,row_number() OVER (PARTITION BY " + GROUP_KEY + " ORDER BY "
                                 + TIER
                                 + ","
                                 + PURCHASE_ORDER
                                 + ",o.offer_id) AS rn FROM offer o JOIN entity v ON"
                                 + " v.entity_key='vendor/'||o.vendor_id WHERE "
                                 + w.sql()
-                                + ") WHERE rn=1 ORDER BY tier,family_key",
+                                + ") WHERE rn=1 ORDER BY tier,card_key",
                         w.args);
+        for (var row : hits) row.put("family_key", row.remove("card_key"));
         if (hits.isEmpty()) return hits;
         int best = hits.getFirst().number("tier");
         hits.removeIf(row -> row.number("tier") != best);
-        if (families != null) {
-            Map<String, Integer> order = new HashMap<>();
-            for (int i = 0; i < families.size(); i++) order.putIfAbsent(families.get(i), i);
-            Comparator<Row> byRank =
-                    Comparator.comparingInt(
-                            row -> order.getOrDefault(row.str("family_key"), Integer.MAX_VALUE));
-            if (selection.fileRecovery()) {
-                // A recovery tool can help after the loss. A backup suite can recover an
-                // existing copy, so offer it after products with a direct recovery purpose.
-                byRank =
-                        Comparator.<Row>comparingInt(
-                                        row -> "1033".equals(row.str("category_id")) ? 1 : 0)
-                                .thenComparing(byRank)
-                                .thenComparingInt(
-                                        row ->
-                                                "family/301714".equals(row.str("family_key"))
-                                                        ? 0
-                                                        : 1);
-            }
-            hits.sort(byRank);
-        }
+        if (families != null) orderByFamilies(hits, families, selection.fileRecovery());
         return hits;
+    }
+
+    static void orderByFamilies(List<Row> hits, List<String> families, boolean fileRecovery) {
+        Map<String, Integer> order = new HashMap<>();
+        for (int i = 0; i < families.size(); i++) order.putIfAbsent(families.get(i), i);
+        Comparator<Row> byRank = Comparator.comparingInt(
+                row -> order.getOrDefault(row.str("family_key"), Integer.MAX_VALUE));
+        if (fileRecovery) {
+            // A backup suite needs an existing copy. Prefer products for recovery after a loss.
+            byRank = Comparator.<Row>comparingInt(row -> "1033".equals(row.str("category_id")) ? 1 : 0)
+                    .thenComparing(byRank)
+                    .thenComparingInt(row -> "family/301714".equals(row.str("family_key")) ? 0 : 1);
+        }
+        hits.sort(byRank);
     }
 
     List<Row> variants(Row target, Map<String, Object> filters) throws SQLException {
@@ -565,6 +593,7 @@ final class SearchCatalog implements AutoCloseable {
                 + " ORDER BY o.offer_id", where.args)) {
             detail.put(row.str("offer_id"), row.str("family_key"));
         }
+        for (var card : shown) detail.put((String) card.get("offer_id"), (String) card.get("family_key"));
         return detail;
     }
 

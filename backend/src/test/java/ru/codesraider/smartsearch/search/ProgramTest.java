@@ -79,6 +79,27 @@ class ProgramTest {
     }
 
     @Test
+    void strongClausesCompileWithoutModelAndKeepIntersectionStrict() throws Exception {
+        var union = run("Нужны вебинары или удаленный доступ", Map.of());
+        assertEquals("rules", union.at("/program/compiler").asString());
+        assertEquals("any", union.at("/program/join").asString());
+        assertEquals(5, union.get("direct_count").asInt());
+        var intersection = run("Нужны вебинары и удаленный доступ", Map.of());
+        assertEquals("all", intersection.at("/program/join").asString());
+        assertTrue(intersection.get("top4").isEmpty());
+        assertEquals(0, calls);
+    }
+
+    @Test
+    void fuzzyNamesOnlyChangeLetters() {
+        assertEquals("astra linux", QueryPlan.canonical("astra-linux", Set.of("astra linux")));
+        assertTrue(CatalogNames.oneEdit("suite 10", "sutie 10", true));
+        assertFalse(CatalogNames.oneEdit("suite 10", "suite 11", true));
+        assertFalse(CatalogNames.oneEdit("suite 10", "suite 1", true));
+        assertFalse(CatalogNames.oneEdit("suite-10", "suite 10", true));
+    }
+
+    @Test
     void exactCartridgeWithVendorIsAnOfferAndNotAPrinter() throws Exception {
         var result = run("Картридж Pantum PC-211P", Map.of());
         assertEquals("526683", result.at("/top4/0/offer_id").asString());
