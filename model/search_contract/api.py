@@ -16,10 +16,10 @@ from search_contract.schemas import (
     CatalogPage,
     CatalogQuery,
     Entity,
+    EntityQuery,
     ExplainRequest,
     Explanation,
     EventBatch,
-    Filters,
     Kind,
     PriceComparison,
     PublicHealth,
@@ -187,7 +187,7 @@ def browse_catalog(query: Annotated[CatalogQuery, Query()]):
 def get_entity(
     kind: Kind,
     id: Annotated[Text, Path(description="Строковый ID сущности выбранного kind.")],
-    filters: Annotated[Filters, Query()],
+    filters: Annotated[EntityQuery, Query()],
 ):
     """Повторно применяет фильтры поиска, переданные отдельными query-параметрами.
     Известная сущность с пустым списком удовлетворяющих фильтрам вариантов даёт 200."""

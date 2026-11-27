@@ -347,6 +347,7 @@ public class SearchController {
                 direct.sort(Comparator.comparing(row -> !category.equals(row.str("category_id"))));
             }
         }
+        int displayCount = direct.size();
         if (chat != null) {
             if (!replacedCards.isEmpty()) {
                 direct.sort(Comparator.comparing(row -> replacedCards.contains(row.str("offer_id"))));
@@ -355,26 +356,32 @@ public class SearchController {
                 chatMessage = "Подобрал другие товары для той же задачи. Условия поиска сохранены.";
             }
             var cards = chat.cards(direct);
-            if (replacedCards.isEmpty() && chat.session() != null && events.repeatsChatCards(chat.session(), index.version(), cards, Instant.now())) {
+            Set<String> seen = chat.wantsMore() && chat.session() != null
+                    ? events.shownChatCards(chat.session(), index.version()) : Set.of();
+            if (!seen.isEmpty() || (replacedCards.isEmpty() && chat.session() != null
+                    && events.repeatsChatCards(chat.session(), index.version(), cards, Instant.now()))) {
                 diagnostics.put("chat_repetition", true);
-                if (input.sort().equals("relevance")) {
-                    chatMessage = chat.diversify(direct, q, model, diagnostics);
-                    cards = chat.cards(direct);
+                boolean relevance = input.sort().equals("relevance");
+                if (!seen.isEmpty() || relevance) {
+                    int remaining = chat.diversify(direct, seen.isEmpty() ? Set.copyOf(cards) : seen, q, relevance, model, diagnostics);
+                    if (!seen.isEmpty() && remaining > 0) displayCount = remaining;
+                    chatMessage = remaining == 0 ? "Все подходящие товары уже показаны. Других совпадений при этих условиях не нашлось. Что вы хотели бы изменить в подборе?"
+                            : "Вот другие совпадения из каталога по тем же условиям.";
                 } else {
                     chatMessage = "Эти товары снова первыми по выбранной сортировке. Какой критерий подбора изменить?";
                 }
             }
-            diagnostics.put("chat_cards", cards);
+            diagnostics.put("chat_cards", chat.cards(direct.subList(0, displayCount)));
+            if (chat.wantsMore()) diagnostics.put("chat_more", true);
             diagnostics.put("chat_query", input.query());
         }
-        List<Row> anchors = direct.subList(0, Math.min(4, direct.size()));
+        List<Row> anchors = direct.subList(0, Math.min(4, displayCount));
         Row recommendationAnchor = anchors.isEmpty() ? null : anchors.getFirst();
-        Map<String, Object> recommendationFilters = filters;
         List<Map<String, Object>> top = new ArrayList<>(),
                 more = new ArrayList<>(),
                 alternatives = new ArrayList<>();
         boolean offerLookup = "EXACT_SKU".equals(reason) || (target != null && "offer".equals(target.str("kind")));
-        for (int i = 0; i < Math.min(input.limit(), direct.size()); i++) {
+        for (int i = 0; i < Math.min(input.limit(), displayCount); i++) {
             var row = direct.get(i);
             boolean versionIdentifiesOffer = (filters.containsKey("version") || constraints.editionYear != null)
                     && row.number("offer_count") == 1;
@@ -416,7 +423,6 @@ public class SearchController {
             for (Row sku : db.representatives(relaxed, selection, families)) {
                 if (recommendationAnchor == null) {
                     recommendationAnchor = sku;
-                    recommendationFilters = relaxed;
                 }
                 var alternative = sku.card("alternative", "FUNCTIONAL_ALTERNATIVE");
                 alternative.put("differences", List.of("Версия " + constraints.namedVersions.get(sku.str("offer_id"))
@@ -433,7 +439,7 @@ public class SearchController {
             int capacity = MAX_RECOMMENDATIONS;
 
             var evaluations = new ArrayList<Map<String, Object>>();
-            var verified = db.complements(anchors, filters, capacity, evaluations).stream()
+            var verified = db.complements(anchors, filters, constraints, capacity, evaluations).stream()
                     .filter(card -> shownFamilies.add((String) card.get("family_key"))).toList();
             // Keep the established top4 contract. The independent upsell block also works with four direct hits.
             top.addAll(verified.subList(0, Math.min(4 - top.size(), verified.size())));
@@ -446,30 +452,27 @@ public class SearchController {
                     if (!input.filters().containsKey(key)) merchandisingFilters.remove(key);
             }
             if (!merchandisingFilters.equals(filters) && upsell.size() < capacity) {
-                for (var card : db.complements(anchors, merchandisingFilters, capacity, evaluations)) {
+                for (var card : db.complements(anchors, merchandisingFilters, constraints, capacity, evaluations)) {
                     if (shownFamilies.add((String) card.get("family_key"))) upsell.add(card);
                     if (upsell.size() == capacity) break;
                 }
             }
             if (!evaluations.isEmpty()) diagnostics.put("relation_checks", evaluations.stream().distinct().toList());
             if (upsell.size() < capacity) {
-                upsell.addAll(db.catalogConsumables(anchors, merchandisingFilters, shownFamilies, capacity - upsell.size()));
+                upsell.addAll(db.catalogConsumables(anchors, merchandisingFilters, constraints, shownFamilies, capacity - upsell.size()));
             }
             if (recommendationAnchor != null && upsell.size() < capacity) {
                 String category = recommendationAnchor.str("category_id");
                 var ranked = index.rank(recommendationAnchor.str("name"),
-                        (String) recommendationFilters.get("vendor_id"), category, true);
-                upsell.addAll(db.similarOffers(category, recommendationFilters, ranked.families(),
+                        (String) filters.get("vendor_id"), category, true);
+                upsell.addAll(db.similarOffers(category, filters, constraints, ranked.families(),
                         shownFamilies, capacity - upsell.size()));
             }
         }
-        if (recommendationsEnabled && upsell.isEmpty()) {
-            var editorialFilters = new LinkedHashMap<>(input.filters());
-            for (String key : List.of("available_only", "max_price_minor", "currency"))
-                if (filters.containsKey(key)) editorialFilters.put(key, filters.get(key));
+        if (!conflict && recommendationsEnabled && upsell.isEmpty()) {
             UUID seed = UUID.nameUUIDFromBytes(input.normalized().getBytes(StandardCharsets.UTF_8));
             int count = 4 + Math.floorMod(seed.getMostSignificantBits(), MAX_RECOMMENDATIONS - 3);
-            upsell.addAll(db.curatedSuggestions(editorialFilters, shownFamilies, curatedOffers,
+            upsell.addAll(db.curatedSuggestions(filters, constraints, direct.isEmpty() ? q : null, shownFamilies, curatedOffers,
                     seed.getLeastSignificantBits(), count));
         }
         Map<String, Object> result = new LinkedHashMap<>();
@@ -624,7 +627,15 @@ public class SearchController {
             throws SQLException {
         if (!SearchInput.KINDS.contains(kind)) throw SearchInput.invalid("kind");
         SearchInput.text(id, "id");
-        var filters = SearchInput.filters(query, true);
+        var params = new LinkedHashMap<>(query);
+        String originSearch = params.remove("origin_search_id");
+        String originSession = params.remove("origin_session_id");
+        if ((originSearch == null) != (originSession == null)) throw SearchInput.invalid("origin_search_id");
+        if (originSearch != null) {
+            SearchInput.text(originSearch, "origin_search_id");
+            SearchInput.text(originSession, "origin_session_id");
+        }
+        var filters = SearchInput.filters(params, true);
         try (var db = open()) {
             Row target = db.entity(kind, id);
             if (target == null)
@@ -642,8 +653,12 @@ public class SearchController {
                 var variants = db.variants(target, scope);
                 result.put("offers", db.detailedOffers(variants));
                 if (kind.equals("offer") && !variants.isEmpty()) {
-                    result.put("related_offers", db.complements(
-                            List.of(variants.getFirst()), Map.of(), 4, new ArrayList<>()));
+                    var related = db.complements(List.of(variants.getFirst()), filters, new Requirements(), 4, new ArrayList<>());
+                    result.put("related_offers", related);
+                    if (originSearch != null && !related.isEmpty()
+                            && events.registerOfferUpsell(originSearch, originSession, index.version(), id, related)) {
+                        result.put("related_search_id", originSearch);
+                    }
                 }
                 if (kind.equals("offer")
                         && !variants.isEmpty()

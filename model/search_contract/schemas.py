@@ -217,6 +217,17 @@ class SearchFacets(DTO):
     categories: list[SearchFacet]
 
 
+class EntityQuery(Filters):
+    origin_search_id: Text | None = Field(None, description="ID поиска, из которого открыта карточка.")
+    origin_session_id: Text | None = Field(None, description="Сессия этого поиска. Передаётся вместе с origin_search_id.")
+
+    @model_validator(mode="after")
+    def paired_origin(self):
+        if (self.origin_search_id is None) != (self.origin_session_id is None):
+            raise ValueError("Передайте оба идентификатора источника перехода.")
+        return self
+
+
 class CatalogQuery(Filters):
     page: int = Field(1, ge=1, le=2147483647, description="Страница за пределами выдачи округляется до последней.")
     page_size: int = Field(8, ge=1, le=48)
@@ -321,6 +332,10 @@ class Entity(DTO):
     related_offers: list[ComplementCard] = Field(
         default_factory=list, max_length=4,
         description="Для карточки товара — товары с подтверждённой совместимостью."
+    )
+    related_search_id: Text | None = Field(
+        None, description="Подтверждённый поиск для показа и клика по related_offers. "
+        "Используйте block=upsell и позицию внутри related_offers, начиная с 1."
     )
 
 

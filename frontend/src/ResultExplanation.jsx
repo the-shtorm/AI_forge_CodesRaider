@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, safeLink } from "./api";
+import { api, sourceLink } from "./api";
 
 export default function ResultExplanation({ searchId, offerId }) {
   const [open, setOpen] = useState(false);
@@ -15,7 +15,7 @@ export default function ResultExplanation({ searchId, offerId }) {
     return () => controller.abort();
   }, [open, result, searchId, offerId]);
 
-  const source = safeLink(result?.source_url);
+  const source = sourceLink(result?.source_url);
   return <details className="proof" onToggle={event => {
     setOpen(event.currentTarget.open);
     if (event.currentTarget.open) setError("");

@@ -67,6 +67,19 @@ export function safeLink(url) {
   return url.startsWith("/") && !url.startsWith("//") ? url : undefined;
 }
 
+// Evidence can come from an external manufacturer's website or from the catalog.
+export function sourceLink(url) {
+  if (typeof url !== "string" || /[\s\\\u0000-\u001f\u007f]/u.test(url)) return undefined;
+  if (url.startsWith("/")) return safeLink(url);
+  if (!/^https:\/\/[^/]/i.test(url)) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.username || parsed.password ? undefined : parsed.href;
+  } catch {
+    return undefined;
+  }
+}
+
 const errors = {
   UNKNOWN_TARGET: "Эта подсказка устарела. Выберите обновлённую подсказку или повторите поиск.",
   ENTITY_NOT_FOUND: "Карточка отсутствует в текущем каталоге.",
@@ -98,6 +111,11 @@ export async function api(path, { body, ...options } = {}) {
   return response.json();
 }
 
-export function getEntity(target, filters, signal) {
-  return api(`/v1/entities/${encodeURIComponent(target.kind)}/${encodeURIComponent(target.id)}?${filterParams(filters)}`, { signal });
+export function getEntity(target, filters, signal, origin) {
+  const params = filterParams(filters);
+  if (target.kind === "offer" && origin?.searchId && eventSession(origin) === origin.session) {
+    params.set("origin_search_id", origin.searchId);
+    params.set("origin_session_id", origin.session);
+  }
+  return api(`/v1/entities/${encodeURIComponent(target.kind)}/${encodeURIComponent(target.id)}?${params}`, { signal });
 }

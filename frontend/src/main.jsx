@@ -89,7 +89,7 @@ function App() {
     setCart(current => current.some(row => row.item.offer_id === item.offer_id)
       ? current : [...current, { item, origin: attributed ? origin : null }]);
     const events = [];
-    if (attributed && origin.familyKey) events.push({
+    if (attributed && origin.familyKey && origin.clickedOfferId !== item.offer_id) events.push({
       type: "click", block: "details", search_id: origin.searchId, offer_id: item.offer_id, family_key: origin.familyKey,
     });
     events.push({ type: "add_to_cart", offer_id: item.offer_id, search_id: attributed ? origin.searchId : null });

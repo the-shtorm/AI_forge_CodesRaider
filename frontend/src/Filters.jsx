@@ -1,13 +1,14 @@
 import { useId, useState } from "react";
 
-function FacetSelect({ label, value, options, onChange }) {
+function FacetSelect({ label, value, options, busy, onChange }) {
   const id = useId();
   const known = options.some(option => option.id === value);
   const retained = value && !known;
   return (
     <div className="filter-field">
       <label htmlFor={id}>{label}</label>
-      <select id={id} value={value} onChange={event => onChange(event.target.value)} disabled={!options.length && !retained}>
+      <select id={id} value={value} onChange={event => onChange(event.target.value)} aria-busy={busy}
+        disabled={!busy && !options.length && !retained}>
         <option value="">Все</option>
         {retained && <option value={value}>{value}</option>}
         {options.map(option => <option key={option.id} value={option.id}>{option.label} ({option.count})</option>)}
@@ -72,8 +73,8 @@ export default function Filters({ filters, facets, update, reset, busy }) {
         </div>
       </div>
       <form className="filter-form" id={panelId} onSubmit={apply}>
-        <FacetSelect label="Категория" value={filters.category_id ?? ""} options={facets.categories} onChange={value => update({ category_id: value || undefined })} />
-        <FacetSelect label="Производитель" value={filters.vendor_id ?? ""} options={facets.vendors} onChange={value => update({ vendor_id: value || undefined })} />
+        <FacetSelect label="Категория" value={filters.category_id ?? ""} options={facets.categories} busy={busy} onChange={value => update({ category_id: value || undefined })} />
+        <FacetSelect label="Производитель" value={filters.vendor_id ?? ""} options={facets.vendors} busy={busy} onChange={value => update({ vendor_id: value || undefined })} />
         <label className="filter-field">
           <span>Цена до, ₽</span>
           <input type="number" min="0" max="1000000000" step="0.01" inputMode="decimal" placeholder="Без ограничения" value={fields.price} onChange={event => edit("price", event.target.value)} />

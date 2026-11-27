@@ -83,6 +83,44 @@ class UpsellSuggestionsTest {
     }
 
     @Test
+    void editorialPicksRespectParsedAndStructuredLicenseRequirements(@TempDir Path dir) throws Exception {
+        StringBuilder offers = new StringBuilder();
+        for (int devices : List.of(3, 5)) {
+            offers.append(offer("boxed" + devices, null, "1", 20, true,
+                    "Антивирус в коробочной версии").replace("</offer>",
+                    "<param name=\"Количество устройств\">" + devices + "</param>"
+                    + "<param name=\"Срок (мес.)\">12</param></offer>"));
+        }
+        offers.append(offer("mouse", null, "1", 10, true, "Мышь")
+                .replace("Acme", "Ромашка").replace("/acme", "/romashka"));
+        Path feed = dir.resolve("feed.xml"), snapshots = dir.resolve("snapshots");
+        Files.writeString(feed, "<yml_catalog><shop><categories><category id=\"1\">Каталог</category></categories>"
+                + "<offers>" + offers + "</offers></shop></yml_catalog>");
+        String offline = "http://127.0.0.1:1";
+        try (var encoder = new EncoderClient(offline); var index = new SearchIndex(snapshots.toString(), offline, "lexical", 10)) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+            index.open();
+            var json = JsonMapper.builder().build();
+            var search = new SearchController(index, new EventStore(dir.resolve("events.db").toString(), json),
+                    new ModelClient("", "softline", "", 3000), List.of("boxed3", "mouse", "boxed5"));
+            for (var request : List.<Map<String,Object>>of(
+                    Map.of("q", "Неизвестный товар на пять устройств на год"),
+                    Map.of("q", "Неизвестный товар", "filters", Map.of("device_count", 5, "term_months", 12)))) {
+                var picks = json.valueToTree(search.search(request)).path("upsell");
+                assertEquals(List.of("boxed5"), picks.valueStream().map(c -> c.path("offer_id").asString()).toList());
+            }
+            var conflicting = json.valueToTree(search.search(Map.of("q", "на пять устройств на год",
+                    "filters", Map.of("term_months", 24))));
+            assertTrue(conflicting.path("top4").isEmpty());
+            assertTrue(conflicting.path("upsell").isEmpty());
+            var unknownModel = json.valueToTree(search.search(Map.of("q", "sku:Ромашка-9999",
+                    "filters", Map.of("device_count", 5, "term_months", 12))));
+            assertEquals(0, unknownModel.path("direct_count").asInt());
+            assertTrue(unknownModel.path("upsell").isEmpty());
+        }
+    }
+
+    @Test
     void recommendsDistinctRankedOffersFromTheCategoryOfTheDirectMatch(@TempDir Path dir) throws Exception {
         String offers = offer("anchor", "anchor-family", "77", 400, true, "Акустический датчик вибрации")
                 + offer("same-family", "anchor-family", "77", 410, true, "Акустический датчик вибрации с комплектом")
