@@ -85,8 +85,6 @@ h1, h2, h3, p, ul, dl, dd { margin: 0; }
 .suggestions li:hover, .suggestions li[aria-selected="true"] { background: var(--accent-soft); }
 
 .catalog-workspace { margin-top: 24px; }
-.task-queries { margin-top: 12px; }
-.task-queries .button { min-height: 30px; padding: 4px 9px; font-weight: 400; }
 .product-photo .product-placeholder, .assistant-product-image .product-placeholder {
   display: block; width: 100%; height: 100%; object-fit: contain;
 }
@@ -158,7 +156,6 @@ h1, h2, h3, p, ul, dl, dd { margin: 0; }
 .sort-control select { width: auto; }
 .result-state { padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
 .result-state p + p, .result-state p + a { display: block; margin-top: 8px; }
-.example-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .shortfall { color: var(--muted); font-size: .875rem; }
 .primary-target { width: fit-content; font-weight: 630; }
 

@@ -4,7 +4,7 @@ import ProductCard from "./ProductCard";
 import RelatedProducts from "./RelatedProducts";
 import ResultExplanation from "./ResultExplanation";
 import { api, entityHref, filterParams, sessionId, targetLabels } from "./api";
-import { catalogHref, readCatalogRoute, tabs, taskQueries } from "./catalogRoute";
+import { catalogHref, readCatalogRoute, tabs } from "./catalogRoute";
 import { cardEvent, trackEvents } from "./events";
 
 const emptyFacets = { vendors: [], categories: [] };
@@ -205,12 +205,6 @@ export default function CatalogPage({ route, go, navigate }) {
     <SearchBox key={route.q} route={route} update={update} submit={(q, suggestion) => update({
       q, page: 1, tab: "products", target: suggestion && { kind: suggestion.kind, target_id: suggestion.target_id },
     })} />
-    <div className="example-links task-queries">
-      {taskQueries.map(q => {
-        const href = catalogHref({ q, profileId: route.profileId });
-        return <a className="button secondary" href={href} onClick={event => navigate(event, href)} key={q}>{q}</a>;
-      })}
-    </div>
     <div className="catalog-workspace">
       <div className="result-heading">
         <h1>{route.q ? `Результаты по запросу «${route.q}»` : "Каталог"}</h1>

@@ -1,9 +1,5 @@
 import { entityKinds, filterParams, filtersFromParams } from "./api";
 
-export const taskQueries = [
-  "astra linux", "Microsoft Office для дома и бизнеса", "kaspersky small office security",
-  "крипто про csp 5.0", "anydesk", "кибер бэкап", "сканер-вс", "мтс", "max patrol", "365",
-];
 export const sorts = ["relevance", "price_asc", "price_desc"];
 export const tabs = [["products", "Товары"], ["vendors", "Производители"], ["categories", "Категории"]];
 
