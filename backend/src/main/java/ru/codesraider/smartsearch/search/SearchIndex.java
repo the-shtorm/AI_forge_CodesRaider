@@ -78,6 +78,9 @@ public class SearchIndex implements AutoCloseable {
     private boolean legacy;
     private ScheduledExecutorService monitor;
     private volatile boolean compatible;
+    @Value("${SEARCH_TASK_SEMANTICS:false}")
+    private boolean suggestTaskMeanings;
+    private volatile TaskMeanings taskMeanings;
 
     public SearchIndex(@Value("${search.snapshots-dir:${SNAPSHOTS_DIR:data/snapshots}}") String snapshots,
                        @Value("${MODEL_BASE_URL:http://model:8000}") String baseUrl,
@@ -158,6 +161,13 @@ public class SearchIndex implements AutoCloseable {
         } catch (IOException | RuntimeException failure) {
             compatible = false;
         }
+        if (suggestTaskMeanings && compatible && taskMeanings == null) {
+            try {
+                taskMeanings = TaskMeanings.load(encoder, profile);
+            } catch (IOException | RuntimeException unavailable) {
+                LOG.debug("Task descriptions unavailable", unavailable);
+            }
+        }
     }
 
     public boolean ready() { return searcher != null; }
@@ -182,8 +192,26 @@ public class SearchIndex implements AutoCloseable {
         return prepareRanking(query, allowSemantic).in(vendorId, categoryId);
     }
 
-    interface QueryRanking {
-        Ranked in(String vendorId, String categoryId) throws IOException;
+    final class QueryRanking {
+        private final String query;
+        private final boolean requireAll;
+        private final CompletableFuture<float[]> vector;
+
+        QueryRanking(String query, boolean requireAll, CompletableFuture<float[]> vector) {
+            this.query = query;
+            this.requireAll = requireAll;
+            this.vector = vector;
+        }
+
+        Ranked in(String vendorId, String categoryId) throws IOException {
+            return SearchIndex.this.rank(query, vendorId, categoryId, vector, requireAll);
+        }
+
+        QueryPlan.Purpose suggestedPurpose() {
+            var meanings = taskMeanings;
+            if (meanings == null || vector == null || !vector.isDone() || vector.isCompletedExceptionally()) return null;
+            return meanings.nearest(vector.join());
+        }
     }
 
     /** Reuse the same embedding when the storefront removes a filter for a facet. */
@@ -195,7 +223,7 @@ public class SearchIndex implements AutoCloseable {
         if (!ready()) throw new IOException("No active catalog snapshot");
         CompletableFuture<float[]> vector = allowSemantic && semanticReady()
                 ? encoder.encodeQuery(profile, query) : null;
-        return (vendorId, categoryId) -> rank(query, vendorId, categoryId, vector, requireAll);
+        return new QueryRanking(query, requireAll, vector);
     }
 
     private Ranked rank(String query, String vendorId, String categoryId, CompletableFuture<float[]> vector, boolean requireAll)

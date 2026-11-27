@@ -34,9 +34,9 @@ def relevant(intent, category, name):
     return category in CATEGORIES[intent] or (intent in title_matches and bool(re.search(title_matches[intent], name)))
 
 
-def read_catalog(path):
+def read_catalog(path, judge=relevant, intents=None):
     products = {}
-    eligible = {intent: set() for intent in (*CATEGORIES, "server", "meet")}
+    eligible = {intent: set() for intent in (intents or (*CATEGORIES, "server", "meet"))}
     with path.open("rb") as raw:
         compressed = raw.read(2) == b"\x1f\x8b"
         raw.seek(0)
@@ -47,7 +47,7 @@ def read_catalog(path):
                     if node.get("available") == "true" and float(node.findtext("price") or 0) > 0:
                         family = node.get("group_id") or node.findtext("group_id") or node.attrib["id"]
                         for intent, groups in eligible.items():
-                            if len(groups) < 4 and relevant(intent, *products[node.attrib["id"]]):
+                            if len(groups) < 4 and judge(intent, *products[node.attrib["id"]]):
                                 groups.add(family)
                     node.clear()
     return products, {intent: dcg([1] * len(groups)) for intent, groups in eligible.items()}
@@ -57,7 +57,7 @@ def dcg(bits):
     return sum(bit / math.log2(position + 2) for position, bit in enumerate(bits))
 
 
-def measure(cases, endpoint, fingerprint, products, ideals, repeat):
+def measure(cases, endpoint, fingerprint, products, ideals, repeat, judge=relevant):
     for repetition in range(repeat):
         ordered = cases.copy()
         random.Random(211 + repetition).shuffle(ordered)
@@ -76,7 +76,7 @@ def measure(cases, endpoint, fingerprint, products, ideals, repeat):
                 yield {**case, "repeat": repetition, "top1": None, "hit4": None, "ndcg4": None,
                        "empty": int(not ids), "ids": "|".join(ids), "ms": latency}
                 continue
-            bits = [int(relevant(case["intent"], *products[id_])) for id_ in ids]
+            bits = [int(judge(case["intent"], *products[id_])) for id_ in ids]
             yield {**case, "repeat": repetition, "top1": int(bool(bits and bits[0])),
                    "hit4": int(any(bits)), "ndcg4": dcg(bits) / ideals[case["intent"]] if ideals[case["intent"]] else 0,
                    "empty": int(not ids), "ids": "|".join(ids), "ms": latency}
@@ -88,15 +88,33 @@ def main():
     parser.add_argument("--url", default="http://localhost:8080")
     parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--csv", type=Path, required=True)
+    parser.add_argument("--task-goals", nargs="?", const="development", choices=("development", "holdout"),
+                        help="Check standalone product titles and unrelated requests on the new task set")
     args = parser.parse_args()
     if args.repeat < 1:
         parser.error("--repeat must be positive")
-    with Path(__file__).with_name("catalog_tasks.tsv").open() as f:
+    judge = relevant
+    intents = None
+    filename = "catalog_tasks.tsv"
+    if args.task_goals:
+        filename = "task_goal_holdout.tsv" if args.task_goals == "holdout" else "task_goal_cases.tsv"
+        patterns = json.loads(Path(__file__).with_name("task_goal_titles.json").read_text())
+        excluded = re.compile(patterns.pop("exclude"))
+        titles = {key: re.compile(value) for key, value in patterns.items()}
+        intents = titles.keys()
+
+        def judge(intent, category, name):
+            return bool(titles[intent].search(name)) and not excluded.search(name)
+
+    with Path(__file__).with_name(filename).open() as f:
         cases = list(csv.DictReader(f, delimiter="\t"))
+    if args.task_goals:
+        for case in cases:
+            case["split"] = "abstention" if case["intent"] == "absent" else "task-goals"
     with args.feed.open("rb") as f:
         fingerprint = hashlib.file_digest(f, "sha256").hexdigest()[:16]
-    products, ideals = read_catalog(args.feed)
-    rows = list(measure(cases, args.url, fingerprint, products, ideals, args.repeat))
+    products, ideals = read_catalog(args.feed, judge, intents)
+    rows = list(measure(cases, args.url, fingerprint, products, ideals, args.repeat, judge))
     with args.csv.open("w", newline="") as output:
         writer = csv.DictWriter(output, fieldnames=rows[0])
         writer.writeheader()

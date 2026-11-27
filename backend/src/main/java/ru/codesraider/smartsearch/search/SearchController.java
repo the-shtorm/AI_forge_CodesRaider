@@ -218,7 +218,7 @@ public class SearchController {
         }
         if (direct.isEmpty() && families != null && families.isEmpty() && selection.program() != null
                 && plan.purpose() == QueryPlan.Purpose.WORDS && plan.compiler().equals("rules")) {
-            var interpreted = TaskInterpreter.interpret(terms, aliases, db, model);
+            var interpreted = TaskInterpreter.interpret(terms, aliases, db, model, ranking);
             if (interpreted != null) {
                 plan = interpreted;
                 selection = new Selection(null, null, selection.support(), false, false, plan, constraints);

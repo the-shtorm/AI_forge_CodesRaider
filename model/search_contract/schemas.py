@@ -193,7 +193,7 @@ Purpose = Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
 
 
 class SearchProgram(DTO):
-    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained", "catalog_fallback", "llm_paraphrase", "llm_rewrite"]
+    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained", "catalog_fallback", "task_rules", "llm_paraphrase", "llm_rewrite", "llm_semantic"]
     purpose: Purpose
     additional_purposes: list[Purpose] = Field(max_length=1)
     join: Literal["all", "any"]

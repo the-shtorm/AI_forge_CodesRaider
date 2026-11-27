@@ -9,6 +9,7 @@ services:
       SEARCH_EVENTS_DB: /app/data/events/events.db
       CATALOG_PATH: /catalog.xml
       SEMANTIC_MODE: ${SEMANTIC_MODE:-auto}
+      SEARCH_TASK_SEMANTICS: ${SEARCH_TASK_SEMANTICS:-false}
       MODEL_QUERY_TIMEOUT_MS: ${MODEL_QUERY_TIMEOUT_MS:-200}
     volumes:
       - snapshots:/app/data/snapshots

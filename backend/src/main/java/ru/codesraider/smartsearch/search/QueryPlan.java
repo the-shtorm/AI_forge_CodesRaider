@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> additionalPurposes, String join) {
     enum Purpose {
         WORDS("", ""),
-        BACKUP("бэкап|бекап|резервн[а-я]* коп|копи[юяий]|дубликат", "документ|файл|диск"),
+        BACKUP("бэкап|бекап|резервн[а-я]* коп", "документ|файл|диск"),
         WEBINAR("вебинар|видеовстреч|видеоконференц|онлайн[- ]встреч|лекци|презентаци.*слушател",
                 "встреч|слушател|презентаци"),
         REMOTE_ACCESS("удаленн[а-я]* (?:доступ|администрир|управлен)|управля[а-я]* .*компьютер|подключ[а-я]* .*рабоч[а-я]* стол|экран[а-я]* другого"
@@ -39,7 +39,7 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         }
 
         int evidence(String query) {
-            if (strong.matcher(query).find()) return 2;
+            if (strong.matcher(query).find() || TaskGoals.matches(this, query)) return 2;
             return weak.matcher(query).find() ? 1 : 0;
         }
 
@@ -112,6 +112,7 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         return normalized.length() <= 512
                         && normalized.replaceAll("(?U)\\b(?:rack|zip|rar|ocr|ethernet)\\b", "").matches("[а-я -]*")
                         && !UNSUPPORTED_DETAIL.matcher(normalized).find()
+                        && !TaskGoals.literalRequest(normalized)
                         && aliases.stream().noneMatch(normalized::contains);
     }
 
@@ -119,6 +120,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             throws SQLException {
         String exclusions = normalized.contains("чтобы") && Purpose.UPS.evidence(normalized) == 2
                 ? normalized.replaceAll("(?U)\\bне выключал[а-я]*\\b", "") : normalized;
+        if (TaskGoals.matches(Purpose.OCR, normalized))
+            exclusions = TaskGoals.MANUAL_ENTRY.matcher(exclusions).replaceAll("");
         if (Pattern.compile("(?U)\\b(не|без|кроме|исключая)\\b").matcher(exclusions).find())
             return new QueryPlan("rules", Purpose.UNKNOWN, normalized, List.of(), "all");
         Purpose purpose = INTENTS.get(normalized);
@@ -144,7 +147,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             // capability. A compound instruction needs evidence for two different capabilities.
             long capabilities = Arrays.stream(Purpose.values()).filter(op -> op.evidence(normalized) > 0).count();
             if ((!compound || capabilities == 1) && best == 2 && grounded.size() == 1)
-                return new QueryPlan("rules", grounded.getFirst(), normalized, List.of(), "all");
+                return new QueryPlan(TaskGoals.matches(grounded.getFirst(), normalized) ? "task_rules" : "rules",
+                        grounded.getFirst(), normalized, List.of(), "all");
             if (compound && best == 2) {
                 var clauses = normalized.split(" (?:или|и) ");
                 if (clauses.length == 2) {
@@ -184,11 +188,11 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
     }
 
     boolean interpretedTask() {
-        return compiler.equals("llm_paraphrase") || compiler.equals("llm_rewrite");
+        return compiler.equals("task_rules") || compiler.equals("llm_paraphrase") || compiler.equals("llm_rewrite") || compiler.equals("llm_semantic");
     }
 
     boolean appliedModel() {
-        return compiler.equals("llm") || interpretedTask();
+        return compiler.equals("llm") || (interpretedTask() && !compiler.equals("task_rules"));
     }
 
     boolean isSinglePurpose() {

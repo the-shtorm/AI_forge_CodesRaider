@@ -81,12 +81,13 @@ final class TaskInterpreter {
         return va >= 10_000;
     }
 
-    static QueryPlan interpret(String terms, Set<String> aliases, SearchCatalog catalog, ModelClient model)
+    static QueryPlan interpret(String terms, Set<String> aliases, SearchCatalog catalog, ModelClient model,
+                               SearchIndex.QueryRanking ranking)
             throws SQLException {
         if (!model.configured() || !terms.contains(" ") || !QueryPlan.freeForm(terms, aliases)
                 || ALTERNATIVE.matcher(terms).find()) return null;
         var topics = TOPICS.stream().filter(topic -> topic.subject().matcher(terms).find()).toList();
-        if (topics.isEmpty() || catalog.mentionsVendor(terms)) return null;
+        if (catalog.mentionsVendor(terms)) return null;
         var candidates = topics.stream().filter(topic -> topic.context().matcher(terms).find()).toList();
         if (candidates.size() == 1) {
             var candidate = candidates.getFirst();
@@ -94,6 +95,13 @@ final class TaskInterpreter {
             return model.confirmsTool(candidate.tool(), terms) ? plan("llm_paraphrase", candidate, terms) : null;
         }
         if (!TASK.matcher(terms).find()) return null;
+        var suggestion = ranking.suggestedPurpose();
+        if (suggestion != null) {
+            var candidate = topics.stream().filter(topic -> topic.purpose() == suggestion).findFirst().orElse(null);
+            if (candidate != null && catalog.hasInterpretablePurpose(suggestion))
+                return model.confirmsTool(candidate.tool(), terms) ? plan("llm_semantic", candidate, terms) : null;
+        }
+        if (topics.isEmpty()) return null;
         String name = model.toolName(terms);
         if (name == null) return null;
         for (var topic : topics) {

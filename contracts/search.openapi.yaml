@@ -2591,8 +2591,10 @@ components:
           - llm_fallback
           - llm_abstained
           - catalog_fallback
+          - task_rules
           - llm_paraphrase
           - llm_rewrite
+          - llm_semantic
           title: Compiler
         purpose:
           type: string

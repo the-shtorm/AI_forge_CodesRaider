@@ -427,6 +427,11 @@ final class SearchCatalog implements AutoCloseable {
     private static String interpretedPredicate(QueryPlan.Purpose purpose) {
         String category = predicate(purpose);
         String identity = switch (purpose) {
+            case BACKUP -> """
+                    (lower(o.name) LIKE '%backup%' OR o.name LIKE '%экап%' OR o.name LIKE '%екап%')
+                    AND lower(o.name) NOT LIKE '%plug-in%' AND o.name NOT LIKE '%исковое пространство%'
+                    AND o.name NOT LIKE '%ехподдержк%' AND o.name NOT LIKE '%бновлени%'
+                    """;
             case VIDEO_EDITOR -> """
                     lower(o.name) LIKE '%video editor%' OR o.name LIKE '%идеоредактор%' OR o.name LIKE '%идеомонтаж%'
                     OR o.name LIKE '%идеоМОНТАЖ%' OR (o.vendor_id='wondershare' AND lower(o.name) LIKE 'wondershare filmora (%')

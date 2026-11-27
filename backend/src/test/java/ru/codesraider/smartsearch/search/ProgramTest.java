@@ -81,7 +81,7 @@ class ProgramTest {
 
     @Test
     void emptyTextSearchUsesOnlyTheConfirmedOperationAndKeepsSkuFilters() throws Exception {
-        String q = "Хранить запасной экземпляр базы";
+        String q = "Сохранить содержимое базы";
         instruction = "Yes.";
         var hit = run(q, Map.of());
         assertEquals("llm_paraphrase", hit.at("/program/compiler").asString());
@@ -139,7 +139,7 @@ class ProgramTest {
 
     @Test
     void openEndedTranslationMustNameAKnownToolForTheOriginalSubject() throws Exception {
-        String q = "Застраховать базу от утраты";
+        String q = "Подстраховать базу на всякий случай";
         instruction = "{\"tool\":\"Backup software\"}";
         var result = run(q, Map.of());
         assertEquals("llm_rewrite", result.at("/program/compiler").asString());
@@ -155,16 +155,53 @@ class ProgramTest {
     void rejectedAndMalformedParaphrasesKeepTheOriginalResult() throws Exception {
         for (String reply : List.of("no", "yes, if you buy something else", "invalid")) {
             instruction = reply;
-            var result = run("Хранить запасной экземпляр базы", Map.of());
+            var result = run("Сохранить содержимое базы", Map.of());
             assertEquals("WORDS", result.at("/program/purpose").asString());
             assertFalse(result.get("llm_applied").asBoolean());
             assertEquals(0, result.get("direct_count").asInt());
         }
         assertEquals(3, calls);
         run("Склеить видеофрагменты", Map.of()); // Demo snapshot has no video editors.
-        run("Хранить запасной экземпляр базы без шифрования", Map.of());
+        run("Сохранить содержимое базы без шифрования", Map.of());
         run("Купить питание для ребенка", Map.of());
         assertEquals(3, calls);
+    }
+
+    @Test
+    void explicitTaskBeatsAnIncidentalServerAndPreservesRestrictions() throws Exception {
+        String query = "Делать запасной экземпляр содержимого сервера по расписанию";
+        var found = run(query, Map.of());
+        assertEquals("BACKUP", found.at("/program/purpose").asString());
+        assertEquals("task_rules", found.at("/program/compiler").asString());
+        assertFalse(found.get("llm_applied").asBoolean());
+        assertTrue(found.get("direct_count").asInt() > 0);
+        assertEquals(0, run(query, Map.of("vendor_id", "pantum")).get("direct_count").asInt());
+        assertEquals("BACKUP", run("Дубликат документов на случай сбоя", Map.of()).at("/program/purpose").asString());
+        assertEquals(0, calls);
+    }
+
+    @Test
+    void manualEntryIsAnOcrGoalOnlyWhenTheRestOfTheTaskSupportsIt() throws Exception {
+        String query = "Перенести текст со снимка без ручного набора";
+        try (var db = new SearchCatalog(index.catalogPath())) {
+            var ocr = QueryPlan.compile(query.toLowerCase(Locale.ROOT), Set.of(), db, null);
+            assertEquals(QueryPlan.Purpose.OCR, ocr.purpose());
+            assertEquals(QueryPlan.Purpose.UNKNOWN,
+                    QueryPlan.compile(query.toLowerCase(Locale.ROOT) + " без шифрования", Set.of(), db, null).purpose());
+        }
+        assertFalse(TaskGoals.matches(QueryPlan.Purpose.ARCHIVER, "извлечь архивную справку"));
+    }
+
+    @Test
+    void askingForSuppliesOrAServiceDoesNotSelectATool() throws Exception {
+        for (String query : List.of("Купить фотобумагу для печати портрета",
+                "Заказать нотариальную копию документа", "Записаться на фотосессию с размытым фоном")) {
+            var result = run(query, Map.of());
+            assertEquals("WORDS", result.at("/program/purpose").asString());
+            assertFalse(result.get("llm_applied").asBoolean());
+            assertEquals(0, result.get("direct_count").asInt());
+        }
+        assertEquals(0, calls);
     }
 
     @Test
