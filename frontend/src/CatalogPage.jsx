@@ -13,7 +13,7 @@ const catalogPageSize = 8;
 
 function SearchBox({ route, submit, update }) {
   const [draft, setDraft] = useState(route.q);
-  const [focused, setFocused] = useState(false);
+  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(-1);
   const [list, setList] = useState(null);
   const listId = useId();
@@ -22,10 +22,10 @@ function SearchBox({ route, submit, update }) {
   if (route.profileId) params.set("profile_id", route.profileId);
   if (route.filters.category_id) params.set("category_id", route.filters.category_id);
   const key = params.toString();
-  const visible = focused && list?.key === key && list.items.length > 0;
+  const visible = open && !!query && list?.key === key && list.items.length > 0;
 
   useEffect(() => {
-    if (!focused || query.length < 2 || route.q === query) return;
+    if (!open || !query) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       api(`/v1/suggest?${key}`, { signal: controller.signal })
@@ -33,13 +33,16 @@ function SearchBox({ route, submit, update }) {
         .catch(() => { if (!controller.signal.aborted) setList(null); });
     }, 160);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [focused, key, query, route.q]);
+  }, [open, key, query]);
+
+  function close() {
+    setOpen(false);
+    setSelected(-1);
+  }
 
   function choose(suggestion) {
     if (!query) return;
-    setFocused(false);
-    setSelected(-1);
-    setList(null);
+    close();
     submit(query, suggestion);
   }
 
@@ -55,16 +58,18 @@ function SearchBox({ route, submit, update }) {
       </select>
     </label>
     <div className="input-group" onBlur={event => {
-      if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      if (!event.currentTarget.contains(event.relatedTarget)) close();
     }}>
       <label className="sr-only" htmlFor="search-input">Товар, артикул или задача</label>
       <input id="search-input" type="search" role="combobox" aria-autocomplete="list" aria-expanded={!!visible}
         aria-controls={visible ? listId : undefined} aria-activedescendant={visible && selected >= 0 ? `${listId}-${selected}` : undefined}
         autoComplete="off" maxLength={1000} placeholder="Товар, производитель или артикул" value={draft}
-        onFocus={() => setFocused(true)} onChange={event => {
-          setDraft(event.target.value); setList(null); setSelected(-1); setFocused(true);
+        onFocus={() => setOpen(draft !== route.q)} onChange={event => {
+          setDraft(event.target.value);
+          setSelected(-1);
+          setOpen(true);
         }} onKeyDown={event => {
-          if (event.key === "Escape") { setFocused(false); setSelected(-1); }
+          if (event.key === "Escape") close();
           if (!visible || !["ArrowDown", "ArrowUp"].includes(event.key)) return;
           event.preventDefault();
           const length = list.items.length;
