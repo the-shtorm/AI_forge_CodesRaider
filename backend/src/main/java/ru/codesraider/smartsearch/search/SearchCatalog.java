@@ -807,44 +807,20 @@ final class SearchCatalog implements AutoCloseable {
                 w.args);
     }
 
-    List<Map<String, Object>> upsellSuggestions(List<Row> anchors, Map<String, Object> shoppingFilters,
-            Set<String> excludedFamilies, String profile, int capacity, Row contextHint) throws SQLException {
-        var seeds = new ArrayList<Row>();
-        for (var anchor : anchors) {
-            seeds.addAll(rows("SELECT o.offer_id,c.name AS category FROM offer o"
-                    + " JOIN entity c ON c.entity_key='category/'||o.category_id WHERE o.offer_id=?",
-                    List.of(anchor.str("offer_id"))));
-        }
-        var contexts = seeds.isEmpty() && contextHint != null ? List.of(contextHint) : seeds;
-        var cards = new ArrayList<Map<String, Object>>();
-        var pairedCategories = new HashSet<String>();
-        for (var context : contexts) {
-            for (String category : Merchandising.pairedCategories(context.str("category"))) {
-                if (!pairedCategories.add(category)) continue;
-                Row candidate = suggestedOffer(shoppingFilters, excludedFamilies, category, null);
-                if (candidate == null) continue;
-                boolean anchored = !seeds.isEmpty();
-                cards.add(related(candidate, anchored ? "paired_category" : "catalog_pick", anchored ? context : null,
-                        "Товар из смежного раздела «" + category + "»."));
-                excludedFamilies.add(candidate.cardKey());
-                if (cards.size() == capacity) return cards;
-            }
-        }
+    List<Map<String, Object>> similarOffers(String category, Map<String, Object> filters,
+            List<String> rankedFamilies, Set<String> excluded, int capacity) throws SQLException {
+        var eligibleKeys = rankedFamilies.stream().filter(key -> !excluded.contains(key)).toList();
+        if (eligibleKeys.isEmpty()) return List.of();
 
-        if (!seeds.isEmpty() && profile != null) {
-            String type = Merchandising.preferredType(null, profile);
-            if (type != null) {
-                for (String category : Merchandising.catalogSections(type)) {
-                    Row candidate = suggestedOffer(shoppingFilters, excludedFamilies, category, type);
-                    if (candidate == null) continue;
-                    cards.add(related(candidate, "catalog_pick", null,
-                            "Предложение из раздела «" + category + "» для выбранного профиля."));
-                    excludedFamilies.add(candidate.cardKey());
-                    if (cards.size() == capacity) break;
-                }
-            }
-        }
-        return cards;
+        Where w = recommendationWhere(filters);
+        w.add("o.category_id=?", category);
+        w.oneOf(GROUP_KEY, eligibleKeys);
+        var offers = rows(representativeSql(w, ""), w.args);
+        for (var offer : offers) offer.put("family_key", offer.remove("card_key"));
+        orderByFamilies(offers, eligibleKeys, false);
+        return offers.stream().limit(capacity)
+                .map(offer -> related(offer, "catalog_pick", "Похожее предложение из той же категории."))
+                .toList();
     }
 
     private static final String SUGGESTION_FROM = " FROM offer o"
@@ -854,18 +830,6 @@ final class SearchCatalog implements AutoCloseable {
         Where w = where(filters);
         w.add("o.available=1 AND o.price_minor>0 AND o.currency=?", filters.getOrDefault("currency", "RUB"));
         return w;
-    }
-
-    private Row suggestedOffer(Map<String, Object> filters, Set<String> excluded, String category,
-            String productType) throws SQLException {
-        Where w = recommendationWhere(filters);
-        if (!excluded.isEmpty()) w.add(GROUP_KEY + " NOT IN (SELECT value FROM json_each(?))",
-                JSON.writeValueAsString(excluded));
-        w.add("o.category_id IN (SELECT id FROM entity WHERE kind='category' AND name=?)", category);
-        if (productType != null) w.add("o.product_type=?", productType);
-        return rows("SELECT " + COLUMNS + SUGGESTION_FROM + " WHERE " + w.sql() + " ORDER BY "
-                + PURCHASE_ORDER + "," + Merchandising.preferredTitleOrder(category) + "o.price_minor,o.offer_id LIMIT 1",
-                w.args).stream().findFirst().orElse(null);
     }
 
     List<Map<String, Object>> curatedSuggestions(Map<String, Object> filters, Set<String> excluded,
@@ -882,18 +846,17 @@ final class SearchCatalog implements AutoCloseable {
         for (int i = 0; i < pool.size() && cards.size() < capacity; i++) {
             Row candidate = available.get(pool.get((start + i) % pool.size()));
             if (candidate != null && excluded.add(candidate.cardKey())) {
-                cards.add(related(candidate, "curated_fallback", null,
+                cards.add(related(candidate, "curated_fallback",
                         "Предложение из подборки повседневных товаров и программ."));
             }
         }
         return cards;
     }
 
-    private static Map<String, Object> related(Row candidate, String kind, Row anchor, String reason) {
+    private static Map<String, Object> related(Row candidate, String kind, String reason) {
         var card = candidate.card("related", kind.toUpperCase(Locale.ROOT));
         card.put("recommendation_kind", kind);
         card.put("recommendation_reason", reason);
-        if (anchor != null) card.put("anchor_offer_id", anchor.str("offer_id"));
         return card;
     }
 
@@ -981,27 +944,6 @@ final class SearchCatalog implements AutoCloseable {
             }
         }
         return out;
-    }
-
-    /** When no direct offer was shown the known category can still guide a separate catalog pick. */
-    Row upsellContext(Row target, List<Map<String,Object>> alternatives,
-                      String browsingCategory) throws SQLException {
-        String kind = target == null ? "" : target.str("kind");
-        String field, value;
-        if (kind.equals("offer") || !alternatives.isEmpty()) {
-            field = "offer_id";
-            value = kind.equals("offer") ? target.str("id") : (String) alternatives.getFirst().get("offer_id");
-        } else if (kind.equals("family")) {
-            field = "family_key";
-            value = target.str("entity_key");
-        } else {
-            field = "category_id";
-            value = kind.equals("category") ? target.str("id") : browsingCategory;
-        }
-        if (value == null) return null;
-        return rows("SELECT c.name AS category FROM offer o JOIN entity c"
-                + " ON c.entity_key='category/'||o.category_id WHERE o." + field + "=? LIMIT 1", List.of(value))
-                .stream().findFirst().orElse(null);
     }
 
     /** Feed evidence is evaluated on the individual offers, including on older snapshots. */

@@ -54,13 +54,15 @@ class PublishedExamplesTest(unittest.TestCase):
         responses = response_examples(search, "/v1/search", "post")
         pantum = SearchResponse.model_validate(responses["pantum"]["value"])
         self.assertEqual([c.offer_id for c in pantum.upsell], [c.offer_id for c in pantum.top4 if c.role == "complement"])
-        result = SearchResponse.model_validate(responses["absent"]["value"])
+        absent = SearchResponse.model_validate(responses["absent"]["value"])
+        self.assertEqual(absent.upsell, [])
+        result = SearchResponse.model_validate(responses["noise"]["value"])
         self.assertEqual((result.direct_count, result.top4), (0, []))
         self.assertGreaterEqual(len(result.upsell), 4)
         self.assertTrue(all(card.recommendation_kind == "curated_fallback" and card.recommendation_reason
                             for card in result.upsell))
-        for invalid in (dict(responses["absent"]["value"], upsell=result.upsell[:1] * 9),
-                        dict(responses["absent"]["value"], top4=result.upsell)):
+        for invalid in (dict(responses["noise"]["value"], upsell=result.upsell[:1] * 9),
+                        dict(responses["noise"]["value"], top4=result.upsell)):
             with self.assertRaises(ValueError):
                 SearchResponse.model_validate(invalid)
 
