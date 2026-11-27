@@ -61,10 +61,25 @@ class UpsellSuggestionsTest {
             assertTrue(filtered.path("upsell").isEmpty());
             for (String query : List.of("цветной лазерный принтер A3", "sku:UNKNOWN-1234")) {
                 JsonNode meaningful = json.valueToTree(search.search(Map.of("q", query)));
+                assertEquals(0, meaningful.path("direct_count").asInt());
                 assertEquals("NO_DIRECT_MATCH", meaningful.path("shortfall_reason").asString());
-                assertTrue(meaningful.path("upsell").isEmpty(), query);
+                assertCurated(meaningful.path("upsell"));
             }
+            JsonNode matched = json.valueToTree(search.search(Map.of("q", "id:anchor")));
+            assertEquals(1, matched.path("direct_count").asInt());
+            assertCurated(matched.path("upsell"));
+            assertTrue(matched.path("upsell").valueStream().noneMatch(card ->
+                    "family/anchor-family".equals(card.path("family_key").asString())));
+            JsonNode optedOut = json.valueToTree(search.search(Map.of("q", "id:anchor без рекомендаций")));
+            assertEquals(1, optedOut.path("direct_count").asInt());
+            assertTrue(optedOut.path("upsell").isEmpty());
         }
+    }
+
+    private static void assertCurated(JsonNode cards) {
+        assertTrue(cards.size() >= 4 && cards.size() <= 8);
+        assertTrue(cards.valueStream().allMatch(card -> "related".equals(card.path("role").asString())
+                && "curated_fallback".equals(card.path("recommendation_kind").asString())));
     }
 
     @Test

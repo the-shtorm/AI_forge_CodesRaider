@@ -3,12 +3,12 @@ import { cardTarget, entityHref, targetLabels } from "./api";
 import { priceLabel } from "./ProductCard";
 import ProductImage from "./ProductImage";
 
-export default function RelatedProducts({ heading = "С этим товаром ещё покупают", items, filters, onVisit }) {
+export default function RelatedProducts({ heading = "С этим товаром ещё покупают", items, filters, onVisit, emptyMessage }) {
   const title = useId();
-  if (!items.length) return null;
+  if (!items.length && !emptyMessage) return null;
   return <section className="result-group" aria-labelledby={title}>
     <h2 id={title}>{heading}</h2>
-    <div className="related-grid">
+    {items.length ? <div className="related-grid">
       {items.map(item => {
         const target = cardTarget(item);
         return <a className="product-card related-product" key={item.offer_id} href={entityHref(target, filters)}
@@ -25,6 +25,6 @@ export default function RelatedProducts({ heading = "С этим товаром 
           <p className="price">{priceLabel(item.price_minor, item.currency)}</p>
         </a>;
       })}
-    </div>
+    </div> : <p className="result-state">{emptyMessage}</p>}
   </section>;
 }

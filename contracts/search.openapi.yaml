@@ -27,7 +27,7 @@ paths:
 
         Похожие предложения берутся из категории прямого товара или проверенного аналога.
 
-        Для ввода вроде «???» подборка curated_fallback сохраняет direct_count=0.
+        При отсутствии подходящих рекомендаций сервер использует редакционный список curated_fallback.
 
 
         Отсутствие совпадений даёт 200 и пустой top4. При недоступности модели поиск переходит в lexical.
@@ -101,10 +101,6 @@ paths:
                 summary: Пустая выдача
                 value:
                   q: несуществующая-модель-000
-              noise:
-                summary: Ввод из знаков
-                value:
-                  q: ???
         required: true
       responses:
         '200':
@@ -445,27 +441,12 @@ paths:
                     upsell: []
                     shortfall_reason: NO_DIRECT_MATCH
                 absent:
-                  summary: Модель отсутствует, подходящих рекомендаций нет
+                  summary: Модель отсутствует, показана редакционная подборка
                   value:
                     search_id: example-search-1
                     index_version: 2026-11-25T14:12
                     mode: lexical
                     normalized_q: несуществующая-модель-000
-                    applied_filters: {}
-                    primary_target: null
-                    direct_count: 0
-                    top4: []
-                    more_results: []
-                    alternatives: []
-                    upsell: []
-                    shortfall_reason: NO_DIRECT_MATCH
-                noise:
-                  summary: Для ввода из знаков показана редакционная подборка
-                  value:
-                    search_id: example-search-1
-                    index_version: 2026-11-25T14:12
-                    mode: lexical
-                    normalized_q: ???
                     applied_filters: {}
                     primary_target: null
                     direct_count: 0

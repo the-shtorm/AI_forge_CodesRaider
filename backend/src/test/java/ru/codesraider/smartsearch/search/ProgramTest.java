@@ -372,7 +372,8 @@ class ProgramTest {
         assertEquals("UNKNOWN", unknown.at("/program/purpose").asString());
         assertEquals(AssistantTurn.CLARIFY, unknown.get("assistant_message").asString());
         assertTrue(unknown.get("top4").isEmpty());
-        assertTrue(unknown.get("upsell").isEmpty());
+        assertTrue(unknown.get("upsell").valueStream().allMatch(card ->
+                "curated_fallback".equals(card.path("recommendation_kind").asString())));
         assertEquals(first.get("assistant_message"), chat("alice", sku, List.of()).get("assistant_message"));
         chat("alice", sku, List.of());
         var third = chat("alice", sku, List.of());
@@ -479,7 +480,8 @@ class ProgramTest {
             instruction = invalid;
             var result = chat("unsure", "Как мне шмякнуть шурумбик", List.of());
             assertTrue(result.get("top4").isEmpty());
-            assertTrue(result.get("upsell").isEmpty());
+            assertTrue(result.get("upsell").valueStream().allMatch(card ->
+                    "curated_fallback".equals(card.path("recommendation_kind").asString())));
             assertEquals(AssistantTurn.CLARIFY, result.get("assistant_message").asString());
         }
     }

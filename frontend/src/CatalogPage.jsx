@@ -164,15 +164,20 @@ export default function CatalogPage({ route, go, navigate }) {
   }, [key, attempt]);
 
   useEffect(() => {
-    if (!data?.search_id || route.tab !== "products") return;
-    const marker = `${data.search_id}/${current}`;
-    if (shown.current.has(marker)) return;
-    shown.current.add(marker);
-    const pageRows = [...entries(data.top4, "top4").filter(({ item }) => item.role === "direct"), ...entries(data.more_results, "more_results")]
-      .slice((current - 1) * pageSize, current * pageSize);
-    if (current === 1) {
+    if (!data?.search_id) return;
+    const pageRows = [];
+    const recommendationMarker = `${data.search_id}/upsell`;
+    if (!shown.current.has(recommendationMarker)) {
+      shown.current.add(recommendationMarker);
       pageRows.push(...upsellCards(data));
-      pageRows.push(...entries(data.alternatives ?? [], "alternatives"));
+    }
+    const pageMarker = `${data.search_id}/${current}`;
+    if (route.tab === "products" && !shown.current.has(pageMarker)) {
+      shown.current.add(pageMarker);
+      const directRows = [...entries(data.top4, "top4").filter(({ item }) => item.role === "direct"),
+        ...entries(data.more_results, "more_results")];
+      pageRows.push(...directRows.slice((current - 1) * pageSize, current * pageSize));
+      if (current === 1) pageRows.push(...entries(data.alternatives ?? [], "alternatives"));
     }
     trackEvents(data.session, pageRows.map(({ item, block, position }) => cardEvent("impression", item, block, position, data.search_id)));
   }, [data, current, route.tab]);
@@ -239,12 +244,8 @@ export default function CatalogPage({ route, go, navigate }) {
               onClick={event => visit(event, primary)}>{`Открыть: ${primary.label ?? targetLabels[primary.kind]}`}</a>}
             {rows.length ? grid(rows) : <p className="result-state">{route.q ? "Точных совпадений не найдено." : "Подходящих товаров не найдено."}</p>}
             <Pagination current={current} count={pageCount} href={page => catalogHref({ ...route, page })} navigate={navigate} />
-            {current === 1 && <>
-              {!!data.alternatives?.length && <section className="result-group"><h2>Альтернативы</h2>{grid(entries(data.alternatives, "alternatives"))}</section>}
-              <RelatedProducts heading={recommendations.every(({ anchor }) => anchor) ? "Покупают вместе" : "Возможно, вас заинтересует"}
-                items={recommendations.map(({ item }) => item)}
-                onVisit={(event, target, picked) => visit(event, target, recommendations.find(({ item }) => item === picked), {})} />
-            </>}
+            {current === 1 && !!data.alternatives?.length &&
+              <section className="result-group"><h2>Альтернативы</h2>{grid(entries(data.alternatives, "alternatives"))}</section>}
             {data.direct_count > total && <p className="summary-text">Показаны первые {total} результатов. Уточните запрос или фильтры.</p>}
           </>}
           {data && route.tab !== "products" && (facets[route.tab].length ? <ul className="facet-results">
@@ -252,6 +253,10 @@ export default function CatalogPage({ route, go, navigate }) {
               tab: "products", page: 1, filters: { ...route.filters, [route.tab === "vendors" ? "vendor_id" : "category_id"]: facet.id },
             })}><span>{facet.label}</span><span>{facet.count}</span></button></li>)}
           </ul> : <p className="result-state">По этим условиям ничего не найдено.</p>)}
+          {route.q && <RelatedProducts heading="Возможно, вас заинтересует"
+            items={recommendations.map(({ item }) => item)}
+            emptyMessage={pending ? "Подбираем рекомендации…" : error ? "Подборка временно недоступна." : "Сейчас нет доступных предложений для подборки."}
+            onVisit={(event, target, picked) => visit(event, target, recommendations.find(({ item }) => item === picked), {})} />}
         </section>
       </div>
     </div>
