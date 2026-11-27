@@ -6,6 +6,7 @@ import ResultExplanation from "./ResultExplanation";
 import { api, entityHref, filterParams, sessionId, targetLabels } from "./api";
 import { catalogHref, readCatalogRoute, tabs } from "./catalogRoute";
 import { cardEvent, trackEvents } from "./events";
+import { upsellCards } from "./upsell";
 
 const emptyFacets = { vendors: [], categories: [] };
 const pageSize = 20;
@@ -132,7 +133,7 @@ export default function CatalogPage({ route, go, navigate }) {
   const facets = data?.facets ?? emptyFacets;
   const top = entries(data?.top4 ?? [], "top4");
   const direct = [...top.filter(({ item }) => item.role === "direct"), ...entries(data?.more_results ?? [], "more_results")];
-  const complements = top.filter(({ item }) => item.role === "complement");
+  const recommendations = upsellCards(data).slice(0, 4);
   const total = data?.total ?? direct.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const current = data?.page ?? Math.min(route.page, pageCount);
@@ -167,10 +168,10 @@ export default function CatalogPage({ route, go, navigate }) {
     const marker = `${data.search_id}/${current}`;
     if (shown.current.has(marker)) return;
     shown.current.add(marker);
-    const pageRows = [...entries(data.top4.filter(item => item.role === "direct"), "top4"), ...entries(data.more_results, "more_results")]
+    const pageRows = [...entries(data.top4, "top4").filter(({ item }) => item.role === "direct"), ...entries(data.more_results, "more_results")]
       .slice((current - 1) * pageSize, current * pageSize);
     if (current === 1) {
-      pageRows.push(...entries(data.top4, "top4").filter(({ item }) => item.role === "complement"));
+      pageRows.push(...upsellCards(data).slice(0, 4));
       pageRows.push(...entries(data.alternatives ?? [], "alternatives"));
     }
     trackEvents(data.session, pageRows.map(({ item, block, position }) => cardEvent("impression", item, block, position, data.search_id)));
@@ -238,8 +239,9 @@ export default function CatalogPage({ route, go, navigate }) {
             {rows.length ? grid(rows) : <p className="result-state">Подходящих товаров не найдено.</p>}
             <Pagination current={current} count={pageCount} href={page => catalogHref({ ...route, page })} navigate={navigate} />
             {current === 1 && <>
-              <RelatedProducts heading="Покупают вместе" items={complements.map(({ item }) => item)}
-                onVisit={(event, target) => visit(event, target, complements.find(({ item }) => item.offer_id === target.id), {})} />
+              <RelatedProducts heading={recommendations.some(({ anchor }) => anchor) ? "Покупают вместе" : "Предложения каталога"}
+                items={recommendations.map(({ item }) => item)}
+                onVisit={(event, target) => visit(event, target, recommendations.find(({ item }) => item.offer_id === target.id), {})} />
               {!!data.alternatives?.length && <section className="result-group"><h2>Альтернативы</h2>{grid(entries(data.alternatives, "alternatives"))}</section>}
             </>}
             {data.direct_count > total && <p className="summary-text">Показаны первые {total} результатов. Уточните запрос или фильтры.</p>}

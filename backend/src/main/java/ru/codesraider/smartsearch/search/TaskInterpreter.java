@@ -60,6 +60,8 @@ final class TaskInterpreter {
 
     private static final Pattern TASK = Pattern.compile("(?U)\\b(?:как|чем|чтобы|[а-я]{2,}(?:ть|ться|ти|чь))\\b");
 
+    private static final Pattern REFERENCE = prefixes("руководств|инструкц|учебник|книг|курс|стать[яию]|запис[ьи] лекци");
+
     private static final Pattern PERSONAL_COMPUTER = Pattern.compile("(?U)\\b(?:пк|компьютер[ау]?|ноутбук[ау]?)\\b");
     private static final Pattern SERVER_ROOM = Pattern.compile("(?U)\\b(?:сервер|стойк|подстанц|цод|трехфаз)");
     private static final Pattern UPS_RATING = Pattern.compile(
@@ -81,19 +83,41 @@ final class TaskInterpreter {
         return va >= 10_000;
     }
 
-    static QueryPlan interpret(String terms, Set<String> aliases, SearchCatalog catalog, ModelClient model)
+    static QueryPlan interpret(String text, Set<String> aliases, SearchCatalog catalog, ModelClient model,
+                               SearchIndex.QueryRanking ranking, List<SearchCatalog.Row> direct)
             throws SQLException {
+        String terms = QueryPlan.sentenceText(text);
         if (!model.configured() || !terms.contains(" ") || !QueryPlan.freeForm(terms, aliases)
                 || ALTERNATIVE.matcher(terms).find()) return null;
         var topics = TOPICS.stream().filter(topic -> topic.subject().matcher(terms).find()).toList();
-        if (topics.isEmpty() || catalog.mentionsVendor(terms)) return null;
+        if (catalog.mentionsVendor(terms)) return null;
         var candidates = topics.stream().filter(topic -> topic.context().matcher(terms).find()).toList();
+        if (!direct.isEmpty()) {
+            if (!TASK.matcher(terms).find() || REFERENCE.matcher(terms).find() || topics.isEmpty()) return null;
+            var plausible = candidates.isEmpty() ? topics : candidates;
+            if (catalog.hasPurposeAmongTopCards(direct, plausible.stream().map(Topic::purpose).toList())) return null;
+            // The returned cards match words but none can perform a plausible operation. Let Qwen
+            // describe the tool itself; only a recognized operation can replace the original list.
+            return rewrite(terms, topics, catalog, model);
+        }
         if (candidates.size() == 1) {
             var candidate = candidates.getFirst();
             if (!catalog.hasInterpretablePurpose(candidate.purpose())) return null;
             return model.confirmsTool(candidate.tool(), terms) ? plan("llm_paraphrase", candidate, terms) : null;
         }
         if (!TASK.matcher(terms).find()) return null;
+        var suggestion = ranking.suggestedPurpose();
+        if (suggestion != null) {
+            var candidate = topics.stream().filter(topic -> topic.purpose() == suggestion).findFirst().orElse(null);
+            if (candidate != null && catalog.hasInterpretablePurpose(suggestion))
+                return model.confirmsTool(candidate.tool(), terms) ? plan("llm_semantic", candidate, terms) : null;
+        }
+        return rewrite(terms, topics, catalog, model);
+    }
+
+    private static QueryPlan rewrite(String terms, List<Topic> topics, SearchCatalog catalog, ModelClient model)
+            throws SQLException {
+        if (topics.isEmpty()) return null;
         String name = model.toolName(terms);
         if (name == null) return null;
         for (var topic : topics) {
@@ -101,6 +125,34 @@ final class TaskInterpreter {
                 return plan("llm_rewrite", topic, terms);
         }
         return null;
+    }
+
+    private static final Pattern ENGLISH_TASK = Pattern.compile("\\b(?:how|need|want|can|to)\\b");
+
+    static boolean describesTask(String terms) {
+        return !REFERENCE.matcher(terms).find() && (TASK.matcher(terms).find() || ENGLISH_TASK.matcher(terms).find());
+    }
+
+    static QueryPlan chatPlan(String terms, AssistantTurn chat, ModelClient model, SearchCatalog catalog,
+                              List<String> previousTitles) throws SQLException {
+        var instruction = model.chatInstruction(terms, chat, previousTitles);
+        if (instruction == null) return null;
+        String tool = instruction.tool();
+        for (var topic : TOPICS)
+            if (topic.names().contains(tool) && model.confirmsTool(topic.tool(), terms))
+                return plan("llm_chat", topic, terms);
+        var purpose = switch (tool) {
+            case "network switch", "ethernet switch" -> Purpose.SWITCH;
+            case "computer monitor", "monitor" -> Purpose.MONITOR;
+            case "rack server", "server hardware" -> Purpose.SERVER;
+            default -> Purpose.WORDS;
+        };
+        if (purpose != Purpose.WORDS && model.confirmsTool(tool, terms))
+            return new QueryPlan("llm_chat", purpose, terms, List.of(), "all");
+        String name = catalog.exactLeafCategoryName(instruction.category());
+        // A generic shop section cannot verify a concrete tool.
+        if (name == null || !model.confirmsTool(name, terms)) return null;
+        return new QueryPlan("llm_chat", Purpose.WORDS, name, List.of(), "all");
     }
 
     private static QueryPlan plan(String compiler, Topic topic, String terms) {

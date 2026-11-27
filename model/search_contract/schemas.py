@@ -5,7 +5,7 @@ from pydantic import AwareDatetime, Field, NonNegativeInt, PositiveInt, model_va
 from contract_http import DTO, Text
 
 Kind = Literal["offer", "family", "vendor", "category", "collection"]
-Role = Literal["direct", "complement", "alternative"]
+Role = Literal["direct", "complement", "alternative", "related"]
 Source = Literal["demo", "seed"]
 License = Literal["new", "renewal", "upgrade"]
 Currency = Annotated[str, Field(pattern="^[A-Z]{3}$")]
@@ -85,8 +85,9 @@ class SearchRequest(DTO):
         None, description="Выбранная подсказка. Сервер проверяет её ID и тип в текущем снимке."
     )
     strategy: Literal["standard", "llm"] = Field(
-        "standard", description="llm запрашивает интерпретацию намерения. Явные фильтры всегда обязательны."
+        "standard", description="llm включает диалоговый подбор. Сначала применяются правила, затем при необходимости локальная модель."
     )
+    assistant_card_limit: int = Field(3, ge=1, le=4, description="Число прямых карточек, видимых в чате.")
     assistant_history: list[AssistantTurn] | None = Field(
         None, max_length=8, description="Предыдущие сообщения чата от старых к новым. Текущий вопрос находится в q."
     )
@@ -138,7 +139,7 @@ class Offer(DTO):
 
 class Card(Offer):
     family_key: Text = Field(
-        description="Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}."
+        description="Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения без семейства — offer/{offer_id}."
     )
     reason_codes: list[Text] = Field(
         min_length=1,
@@ -154,9 +155,9 @@ class CompatibilityCheck(DTO):
     field: Text = Field(description="Проверенная характеристика или правило совместимости.")
     anchor_value: Text = Field(description="Значение основного SKU.")
     candidate_value: Text = Field(description="Значение дополнительного SKU.")
-    source_url: Link = Field(description="Источник правила или подтверждённой матрицы.")
+    source_url: Link = Field(description="Страница производителя или карточка каталога с явным подтверждением совместимости.")
     result: Literal["pass"] = Field(
-        description="В видимую допродажу попадают только прошедшие обязательные проверки."
+        description="Для совместимого дополнения все обязательные проверки должны пройти."
     )
 
 
@@ -164,6 +165,13 @@ class ComplementCard(Card):
     role: Literal["complement"]
     anchor_offer_id: Text = Field(description="offer_id прямой карточки из этой выдачи.")
     checks: list[CompatibilityCheck] = Field(min_length=1)
+
+
+class RelatedCard(Card):
+    role: Literal["related"]
+    recommendation_kind: Literal["paired_category", "upgrade", "catalog_pick"]
+    recommendation_reason: Text = Field(description="Основание предложения по сведениям каталога.")
+    anchor_offer_id: Text | None = Field(None, description="ID товара, для которого подобрано предложение, если он есть.")
 
 
 class AlternativeCard(Card):
@@ -174,6 +182,7 @@ class AlternativeCard(Card):
 
 
 TopCard = Annotated[DirectCard | ComplementCard, Field(discriminator="role")]
+UpsellCard = Annotated[ComplementCard | RelatedCard, Field(discriminator="role")]
 
 
 class SearchFacet(DTO):
@@ -207,7 +216,10 @@ Purpose = Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
 
 
 class SearchProgram(DTO):
-    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained", "catalog_fallback", "llm_paraphrase", "llm_rewrite"]
+    order: Literal["NEXT_MATCH", "OTHER_VENDOR", "LOWER_PRICE"] | None = Field(
+        None, description="Порядок альтернативных совпадений при третьем повторе в чате."
+    )
+    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained", "catalog_fallback", "task_rules", "llm_paraphrase", "llm_rewrite", "llm_semantic", "llm_chat"]
     purpose: Purpose
     additional_purposes: list[Purpose] = Field(max_length=1)
     join: Literal["all", "any"]
@@ -256,6 +268,10 @@ class SearchResponse(DTO):
     alternatives: list[AlternativeCard] = Field(
         description="Отдельный блок функциональных замен ниже основной выдачи."
     )
+    upsell: list[UpsellCard] = Field(
+        max_length=4,
+        description="Отдельный блок предложений к покупке. Дополнение с ролью complement может также присутствовать в top4. Показывайте его один раз.",
+    )
     shortfall_reason: Literal["NO_DIRECT_MATCH", "NOT_ENOUGH_VERIFIED_FAMILIES"] | None = Field(
         description="null при полной четвёрке. При нуле прямых совпадений — NO_DIRECT_MATCH, при недоборе проверенных семейств — NOT_ENOUGH_VERIFIED_FAMILIES."
     )
@@ -263,7 +279,7 @@ class SearchResponse(DTO):
         None, description="Варианты фильтров по прямым совпадениям. Для каждой группы учитывать все явные ограничения, кроме собственного фильтра."
     )
     llm_applied: bool | None = Field(
-        None, description="true, когда интерпретация LLM участвовала в поиске, false при деградации."
+        None, description="true, когда сервер применил план LLM или выбранный моделью порядок подходящих предложений."
     )
     assistant_message: Text | None = Field(
         None, max_length=2000, description="Ответ чата на основе найденных сведений или уточняющий вопрос."
@@ -304,7 +320,7 @@ class CardEvent(EventBase):
     offer_id: Text
     family_key: Text
     role: Role
-    block: Literal["top4", "more_results", "alternatives"]
+    block: Literal["top4", "more_results", "alternatives", "upsell"]
     position: PositiveInt = Field(description="Позиция с 1 внутри указанного блока.")
 
 

@@ -11,6 +11,18 @@ const chatDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "shor
 
 const storageKey = "softline-assistant-chats-v1";
 
+function AssistantProducts({ items, search, onVisit }) {
+  return <ul className="assistant-products">
+    {items.map(item => {
+      const href = entityHref({ kind: "offer", id: item.offer_id }, item.role === "direct" ? search?.filters : {});
+      return <li key={item.offer_id}>
+        <div className="assistant-product-image"><ProductImage /></div>
+        <a href={href} onClick={event => onVisit(event, href, item, search)}>{item.name}</a>
+      </li>;
+    })}
+  </ul>;
+}
+
 export default function AssistantChat({ navigate, profileId }) {
   const [chats, setChats] = useState(() => loadChats(storageKey));
   const [activeId, setActiveId] = useState(chats[0]?.id ?? null);
@@ -56,10 +68,12 @@ export default function AssistantChat({ navigate, profileId }) {
   useEffect(() => {
     const answer = activeChat?.messages.at(-1);
     const search = answer?.search;
-    if (!expanded || !search || search.searchId === lastImpression.current || !answer.products?.length) return;
+    if (!expanded || !search || search.searchId === lastImpression.current) return;
+    const cards = [...(answer.products ?? []), ...(answer.upsell ?? [])];
+    if (!cards.length) return;
     lastImpression.current = search.searchId;
     if (eventSession(search) === search.session) {
-      trackEvents(search.session, answer.products.map(item => cardEvent("impression", item, "top4", item.position, search.searchId)));
+      trackEvents(search.session, cards.map(item => cardEvent("impression", item, item.block ?? "top4", item.position, search.searchId)));
     }
   }, [activeChat, expanded]);
 
@@ -72,6 +86,13 @@ export default function AssistantChat({ navigate, profileId }) {
     setActiveId(id || null);
     setDraft("");
     setExpanded(true);
+  }
+
+  function visitProduct(event, href, item, search) {
+    const attributed = search && eventSession(search) === search.session;
+    if (attributed) trackEvents(search.session, [cardEvent("click", item, item.block ?? "top4", item.position, search.searchId)]);
+    navigate(event, href, attributed ? { ...search, familyKey: item.family_key } : null);
+    setExpanded(false);
   }
 
   async function send(text) {
@@ -92,15 +113,15 @@ export default function AssistantChat({ navigate, profileId }) {
     try {
       const answer = await requestAssistant(question, history, session, controller.signal, profileId);
       if (!controller.signal.aborted) {
-        const products = answer.products.map(({ offer_id, name, family_key, role, position }) =>
-          ({ offer_id, name, family_key, role, position }));
         const search = answer.searchId
           ? { searchId: answer.searchId, session, filters: answer.appliedFilters, assistant: true, at: Date.now() }
           : undefined;
         if (search && previous?.session === session) {
           trackEvents(session, [{ type: "reformulation", search_id: previous.searchId, next_search_id: search.searchId }]);
         }
-        setChats(current => appendMessage(current, id, { role: "assistant", text: answer.text, products, search }));
+        setChats(current => appendMessage(current, id, {
+          role: "assistant", text: answer.text, products: answer.products, upsell: answer.upsell, search,
+        }));
       }
     } catch {
       if (!controller.signal.aborted) setChats(current => appendMessage(current, id, { role: "assistant", error: true, text: "Помощник временно недоступен. Попробуйте ещё раз." }));
@@ -138,19 +159,11 @@ export default function AssistantChat({ navigate, profileId }) {
           {messages.map((message, index) => (
             <div className={`message message-${message.role}`} key={index}>
               <p>{message.text}</p>
-              {!!message.products?.length && <ul className="assistant-products">
-                {message.products.map(item => {
-                  const href = entityHref({ kind: "offer", id: item.offer_id }, message.search?.filters);
-                  return <li key={item.offer_id}><div className="assistant-product-image"><ProductImage /></div>
-                    <a href={href} onClick={event => {
-                      const search = message.search;
-                      const attributed = search && eventSession(search) === search.session;
-                      if (attributed) trackEvents(search.session, [cardEvent("click", item, "top4", item.position, search.searchId)]);
-                      navigate(event, href, attributed ? { ...search, familyKey: item.family_key } : null);
-                      setExpanded(false);
-                    }}>{item.name}</a></li>;
-                })}
-              </ul>}
+              {!!message.products?.length && <AssistantProducts items={message.products} search={message.search} onVisit={visitProduct} />}
+              {!!message.upsell?.length && <section className="assistant-recommendations">
+                <h3>{message.upsell.some(item => item.anchorId ?? item.anchorName) ? "Покупают вместе" : "Предложения каталога"}</h3>
+                <AssistantProducts items={message.upsell} search={message.search} onVisit={visitProduct} />
+              </section>}
             </div>
           ))}
           {pending && <p className="assistant-status" role="status">Подбираю варианты…</p>}

@@ -47,7 +47,7 @@ final class CatalogNames {
         return result;
     }
 
-    /** Catalog names preserve numbers and separators. Curated aliases also accept punctuation typos. */
+    /** A catalog title may contain a typo in a word, but a model token must match in full. */
     static boolean oneEdit(String a, String b, boolean lettersOnly) {
         if (a.length() > b.length()) return oneEdit(b, a, lettersOnly);
         if (b.length() - a.length() > 1) return false;
@@ -55,6 +55,13 @@ final class CatalogNames {
         while (i < a.length() && a.charAt(i) == b.charAt(i)) i++;
         if (i == b.length()) return true;
         if (lettersOnly && !Character.isLetter(b.charAt(i))) return false;
+        if (lettersOnly) {
+            int end = b.indexOf(' ', i);
+            int start = b.lastIndexOf(' ', i - 1) + 1;
+            for (int k = start; k < (end < 0 ? b.length() : end); k++) {
+                if (Character.isDigit(b.charAt(k))) return false;
+            }
+        }
         if (a.length() < b.length()) return b.regionMatches(i + 1, a, i, a.length() - i);
         if (lettersOnly && !Character.isLetter(a.charAt(i))) return false;
         if (a.regionMatches(i + 1, b, i + 1, a.length() - i - 1)) return true;

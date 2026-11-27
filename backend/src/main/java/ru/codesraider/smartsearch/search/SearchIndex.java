@@ -71,6 +71,7 @@ public class SearchIndex implements AutoCloseable {
     private FSDirectory directory;
     private DirectoryReader reader;
     private IndexSearcher searcher;
+    private ProductSpelling spelling;
     private CatalogNames catalogNames;
     private Path catalog;
     private String version;
@@ -78,6 +79,9 @@ public class SearchIndex implements AutoCloseable {
     private boolean legacy;
     private ScheduledExecutorService monitor;
     private volatile boolean compatible;
+    @Value("${SEARCH_TASK_SEMANTICS:false}")
+    private boolean suggestTaskMeanings;
+    private volatile TaskMeanings taskMeanings;
 
     public SearchIndex(@Value("${search.snapshots-dir:${SNAPSHOTS_DIR:data/snapshots}}") String snapshots,
                        @Value("${MODEL_BASE_URL:http://model:8000}") String baseUrl,
@@ -146,6 +150,7 @@ public class SearchIndex implements AutoCloseable {
             }
             catalog = db;
             version = active;
+            spelling = new ProductSpelling(reader);
             searcher = candidateSearcher;
         } catch (IOException | SQLException | RuntimeException invalid) {
             LOG.warn("Search snapshot unavailable: {}", invalid.getMessage());
@@ -157,6 +162,13 @@ public class SearchIndex implements AutoCloseable {
             compatible = profile.equals(encoder.readyProfile());
         } catch (IOException | RuntimeException failure) {
             compatible = false;
+        }
+        if (suggestTaskMeanings && compatible && taskMeanings == null) {
+            try {
+                taskMeanings = TaskMeanings.load(encoder, profile);
+            } catch (IOException | RuntimeException unavailable) {
+                LOG.debug("Task descriptions unavailable", unavailable);
+            }
         }
     }
 
@@ -182,8 +194,26 @@ public class SearchIndex implements AutoCloseable {
         return prepareRanking(query, allowSemantic).in(vendorId, categoryId);
     }
 
-    interface QueryRanking {
-        Ranked in(String vendorId, String categoryId) throws IOException;
+    final class QueryRanking {
+        private final String query;
+        private final boolean requireAll;
+        private final CompletableFuture<float[]> vector;
+
+        QueryRanking(String query, boolean requireAll, CompletableFuture<float[]> vector) {
+            this.query = query;
+            this.requireAll = requireAll;
+            this.vector = vector;
+        }
+
+        Ranked in(String vendorId, String categoryId) throws IOException {
+            return SearchIndex.this.rank(query, vendorId, categoryId, vector, requireAll);
+        }
+
+        QueryPlan.Purpose suggestedPurpose() {
+            var meanings = taskMeanings;
+            if (meanings == null || vector == null || !vector.isDone() || vector.isCompletedExceptionally()) return null;
+            return meanings.nearest(vector.join());
+        }
     }
 
     /** Reuse the same embedding when the storefront removes a filter for a facet. */
@@ -195,14 +225,20 @@ public class SearchIndex implements AutoCloseable {
         if (!ready()) throw new IOException("No active catalog snapshot");
         CompletableFuture<float[]> vector = allowSemantic && semanticReady()
                 ? encoder.encodeQuery(profile, query) : null;
-        return (vendorId, categoryId) -> rank(query, vendorId, categoryId, vector, requireAll);
+        return new QueryRanking(query, requireAll, vector);
     }
 
     private Ranked rank(String query, String vendorId, String categoryId, CompletableFuture<float[]> vector, boolean requireAll)
             throws IOException {
-        List<String> lexical = lexical(words(normalize(query), requireAll), vendorId, categoryId);
+        String normalized = normalize(query);
+        List<String> lexical = lexical(words(normalized, requireAll), vendorId, categoryId);
         if (requireAll && lexical.isEmpty()) {
-            lexical = lexical(titleEvidence(query), vendorId, categoryId);
+            Query correction = spelling.titleQuery(normalized);
+            if (correction != null) {
+                var corrected = lexical(correction, vendorId, categoryId);
+                if (corrected.size() == 1) lexical = corrected;
+            }
+            if (lexical.isEmpty()) lexical = lexical(titleEvidence(normalized), vendorId, categoryId);
         }
         if (vector != null) {
             try {
@@ -302,8 +338,12 @@ public class SearchIndex implements AutoCloseable {
     private static final Pattern REQUEST_WORDS = Pattern.compile(
             "(?U)\\b(?:как|хочу|хотим|нужно|нужны|надо|купить|ищу|подобрать|подбираю|заказать|чем|"
                     + "программа|программу|программы|сервис|средство|офисный|рабочий)\\b");
+    private static final Pattern FIREWALL_TERM = Pattern.compile("(?U)\\b(?:ngfw|firewall)\\b");
+    private static final Pattern FIREWALL_RU = Pattern.compile("(?U)\\bмежсетев[а-я]*\\s+экран[а-я]*\\b");
 
     private Query titleEvidence(String text) throws IOException {
+        // NGFW and firewall titles already identify the product type spelled out in Russian.
+        if (FIREWALL_TERM.matcher(text).find()) text = FIREWALL_RU.matcher(text).replaceAll(" ");
         var terms = tokens(REQUEST_WORDS.matcher(text).replaceAll(" "));
         if (terms.isEmpty()) return new MatchNoDocsQuery();
         var query = new BooleanQuery.Builder();
@@ -320,6 +360,15 @@ public class SearchIndex implements AutoCloseable {
         // Require two thirds of the content words in the title, not scattered in descriptions.
         query.setMinimumNumberShouldMatch((optional * 2 + 2) / 3);
         return query.build();
+    }
+
+    boolean matchesDirectTitle(String query, List<SearchCatalog.Row> direct) throws IOException {
+        var words = tokens(REQUEST_WORDS.matcher(query).replaceAll(" "));
+        if (words.isEmpty()) return false;
+        for (var row : direct.subList(0, Math.min(4, direct.size()))) {
+            if (tokens(normalize(row.str("name"))).containsAll(words)) return true;
+        }
+        return false;
     }
 
     private Set<String> tokens(String text) throws IOException {

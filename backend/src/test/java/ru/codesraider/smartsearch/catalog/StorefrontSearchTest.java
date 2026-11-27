@@ -24,12 +24,66 @@ class StorefrontSearchTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static String offer(int id, int family, String vendor, int category, int price) {
+        return offer(id, family, vendor, category, price, "Редактор " + id);
+    }
+
+    private static String offer(int id, int family, String vendor, int category, int price, String name) {
         return """
-                <offer id="%1$d" group_id="%2$d" available="true"><name>Редактор %1$d</name>
+                <offer id="%1$d" group_id="%2$d" available="true"><name>%6$s</name>
                 <url>https://example.org/p/%1$d</url><vendor>%3$s</vendor>
                 <vendorUrl>https://example.org/%3$s/</vendorUrl><vendorCode>SKU-%1$d</vendorCode>
                 <categoryId>%4$d</categoryId><price>%5$d</price><currencyId>RUR</currencyId></offer>
-                """.formatted(id, family, vendor, category, price);
+                """.formatted(id, family, vendor, category, price, name);
+    }
+
+    @Test
+    void purposeSearchFindsVerifiedWebinarAndRemoteAccessOffersInTheFullCatalogTaxonomy() throws Exception {
+        Path feed = temp.resolve("catalog.xml"), snapshots = temp.resolve("snapshots");
+        Files.writeString(feed, """
+                <yml_catalog><shop><categories>
+                <category id="7388">Связь</category>
+                <category id="327030">Другие решения удаленного доступа</category>
+                </categories><offers>%s</offers></shop></yml_catalog>
+                """.formatted(String.join("",
+                offer(535950, 414326, "webinar", 7388, 100, "МТС Линк Optimum, до 30 участников вебинара"),
+                offer(541589, 447242, "webinar", 7388, 200, "МТС Линк Стандарт"),
+                offer(541591, 447243, "webinar", 7388, 300, "МТС Линк Про"),
+                offer(222275, 146933, "sarsys", 7388, 10, "SpRobot SIP-канал Автообзвона"),
+                offer(100, 101, "webinar", 7388, 10, "Поддержка телефонии"),
+                offer(402265, 306539, "anydesk", 327030, 400, "AnyDesk Solo"))));
+        String offline = "http://127.0.0.1:1";
+        try (var encoder = new EncoderClient(offline);
+             var index = new SearchIndex(snapshots.toString(), offline, "lexical", 10)) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+            index.open();
+            var controller = new SearchController(index, new EventStore(temp.resolve("events.db").toString(), JSON));
+            assertAll(
+                    () -> {
+                        JsonNode result = JSON.valueToTree(controller.search(Map.of("q", "вебинар")));
+                        assertEquals("WEBINAR", result.at("/program/purpose").asString());
+                        assertEquals(3, result.required("direct_count").asInt());
+                        var offerIds = result.required("top4").valueStream()
+                                .map(card -> card.required("offer_id").asString()).sorted().toList();
+                        assertEquals(List.of("535950", "541589", "541591"), offerIds);
+                    },
+                    () -> {
+                        JsonNode result = JSON.valueToTree(controller.search(Map.of("q", "удалённый доступ")));
+                        assertEquals("REMOTE_ACCESS", result.at("/program/purpose").asString());
+                        assertEquals(1, result.required("direct_count").asInt());
+                        assertEquals("402265", result.at("/top4/0/offer_id").asString());
+                    });
+            for (String query : List.of("вебинар", "удалённый доступ")) {
+                for (var filters : List.of(Map.of("max_price_minor", 1), Map.of("version", "9.9"))) {
+                    JsonNode result = JSON.valueToTree(controller.search(Map.of("q", query, "filters", filters)));
+                    assertEquals(0, result.required("direct_count").asInt());
+                    assertTrue(result.required("top4").isEmpty());
+                }
+            }
+            JsonNode capacity = JSON.valueToTree(controller.search(Map.of("q", "Чем провести онлайн-семинар для группы из 30 слушателей?")));
+            assertEquals(1, capacity.required("direct_count").asInt());
+            assertEquals("535950", capacity.at("/top4/0/offer_id").asString());
+            assertEquals(0, controller.search(Map.of("q", "Вебинар на 31 участника")).get("direct_count"));
+        }
     }
 
     @Test
@@ -42,6 +96,7 @@ class StorefrontSearchTest {
                 <category id="2">Приложения</category></categories><offers>
                 """ + standalone + offer(500, 72, "beta", 2, 50).replace("Редактор 500", "Acme Studio (годовая лицензия)")
                 + offer(503, 75, "beta", 2, 80).replace("Редактор 503", "Видеоредактор Studio")
+                        .replace("SKU-503", "460000 085 54")
                 + "</offers></shop></yml_catalog>");
         String offline = "http://127.0.0.1:1";
         try (var encoder = new EncoderClient(offline);
@@ -63,6 +118,9 @@ class StorefrontSearchTest {
             assertEquals("201", search.explain(Map.of("search_id", sku.path("search_id").asString(),
                     "offer_id", "201")).get("offer_id"));
             assertEquals(0, search.search(Map.of("q", "sku:500", "filters", Map.of("vendor_id", "beta"))).get("direct_count"));
+            for (String query : List.of("460000 085 54", "sku: 460000 085 54", "артикул 460000 085 54")) {
+                assertEquals("503", JSON.valueToTree(search.search(Map.of("q", query))).at("/primary_target/id").asString());
+            }
             for (String name : List.of("Acme Studio", "Acme Stduio")) {
                 assertEquals("72", JSON.valueToTree(search.search(Map.of("q", name))).at("/primary_target/id").asString());
             }

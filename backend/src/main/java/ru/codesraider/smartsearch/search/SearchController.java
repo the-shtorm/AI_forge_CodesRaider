@@ -26,9 +26,12 @@ public class SearchController {
             Pattern.compile("(?U)[\\p{L}\\d]+(?:-[\\p{L}\\d]+)*-\\d{3,}");
     private static final Pattern PANTUM_MODEL = Pattern.compile("\\b(?:p|bm|bp)\\d{4}[a-z]*\\b");
 
-    private static final Pattern IDENTIFIER = Pattern.compile("(?U)^(id|sku|артикул)[:# ]+([^ ]+)$");
+    private static final Pattern IDENTIFIER = Pattern.compile("(?U)^(id|sku|артикул)[:# ]+(.+)$");
 
     private final ModelClient model;
+    // SQLite journals responses across restarts. Serialize the read/choose/journal cycle for
+    // simultaneous sends from the same chat without retaining unbounded session identifiers.
+    private final Object[] chatLocks = java.util.stream.Stream.generate(Object::new).limit(256).toArray();
 
     public SearchController(SearchIndex index, EventStore events) {
         this(index, events, new ModelClient("", "softline", "", 3000));
@@ -50,16 +53,36 @@ public class SearchController {
     public Map<String, Object> search(@RequestBody Map<String, Object> request)
             throws SQLException, IOException {
         long start = System.nanoTime();
-        Instant time = Instant.now();
         SearchInput input = SearchInput.parse(request);
+        var chat = input.strategy().equals("llm") ? AssistantTurn.from(request) : null;
+        if (chat != null && chat.session() != null) {
+            synchronized (chatLocks[Math.floorMod(chat.session().hashCode(), chatLocks.length)]) {
+                return run(request, input, chat, start);
+            }
+        }
+        return run(request, input, chat, start);
+    }
+
+    private Map<String, Object> run(Map<String, Object> request, SearchInput input, AssistantTurn chat, long start)
+            throws SQLException, IOException {
+        Instant time = Instant.now();
         Map<String, Object> response;
         var diagnostics = new LinkedHashMap<String, Object>();
         var detailOffers = new LinkedHashMap<String, String>();
         try (var db = open()) {
-            response = search(input, db, diagnostics, detailOffers);
+            var effective = input;
+            if (chat != null && input.target().isEmpty()) {
+                String query = chat.resolve(input.query(), () -> chat.session() == null ? null
+                        : events.lastChatQuery(chat.session(), index.version()));
+                if (!query.equals(input.query()))
+                    effective = new SearchInput(query, SearchInput.normalize(query), input.limit(), input.sort(),
+                            input.strategy(), input.context(), input.filters(), input.target());
+            }
+            response = search(effective, db, diagnostics, detailOffers, chat);
+            response.put("normalized_q", input.normalized());
         }
         try {
-            events.logSearch(request, response, diagnostics, detailOffers, time, (System.nanoTime() - start) / 1_000_000);
+            events.logSearch(request, response, diagnostics, detailOffers, chat == null ? time : Instant.now(), (System.nanoTime() - start) / 1_000_000);
         } catch (ApiProblem failure) {
             throw ApiProblem.searchJournal(failure);
         }
@@ -67,19 +90,27 @@ public class SearchController {
     }
 
     private Map<String, Object> search(SearchInput input, SearchCatalog db,
-                                       Map<String, Object> diagnostics, Map<String, String> detailOffers)
+                                       Map<String, Object> diagnostics, Map<String, String> detailOffers, AssistantTurn chat)
             throws SQLException, IOException {
-        String q = input.normalized();
+        String q = input.productQuery();
         Row target = null;
         String reason = "LEXICAL_MATCH", mode = "lexical";
         List<String> ids = null, families = null;
         boolean includeServerSoftware = false;
+        String spelling = null;
         String missingModel = null;
         Requirements constraints = new Requirements();
+        constraints.task = CatalogTask.parse(q);
+        String licensingQuery = constraints.task instanceof InventoryIntent inventory ? inventory.licensingQuery() : q;
         QueryPlan plan = QueryPlan.words(q);
         String terms = q;
         Set<String> aliases = Set.of();
-        if (!input.target().isEmpty()) {
+        if (chat != null && input.target().isEmpty() && chat.needsClarification(q)) {
+            constraints.task = null;
+            ids = List.of();
+            plan = new QueryPlan("rules", QueryPlan.Purpose.UNKNOWN, q, List.of(), "all");
+        } else if (!input.target().isEmpty()) {
+            constraints.extractQuery(licensingQuery);
             target =
                     db.entity(
                             (String) input.target().get("kind"),
@@ -101,29 +132,33 @@ public class SearchController {
             } else {
                 String category = (String) input.filters().getOrDefault("category_id", input.context().get("category_id"));
                 // Resolve hard constraints on the same SKU before grouping or counting facets.
-                try {
-                    terms = constraints.extract(q.replaceAll("(?<=\\d),(?=\\d)", ".").replaceAll("[?!,;]+", " "));
-                } catch (ArithmeticException | NumberFormatException invalid) {
-                    throw SearchInput.invalid("quantity");
-                }
-                if (input.skipsConsumables())
-                    terms = Requirements.take(terms, "(?:без|кроме)\\s+(?:расходник\\w*|расходных материалов|картридж\\w*)", m -> {});
+                terms = constraints.extractQuery(licensingQuery);
                 target = db.purchaseTarget(terms);
                 terms = terms.replaceAll("(?U)\\b(?:покажи|найди|мне|нужен|нужна|купить|пожалуйста)\\b", " ")
                         .strip().replaceAll(" +", " ");
                 aliases = db.aliasTerms(category);
                 terms = QueryPlan.canonical(terms, aliases);
+                if (constraints.edition != null && terms.matches("[a-z][a-z0-9 -]+ (?:19|20)\\d{2}"))
+                    constraints.editionYear = terms.substring(terms.length() - 4);
                 if (target == null) target = db.alias(q, category);
                 if (target == null) target = db.alias(terms, category);
                 if (target == null) target = db.qualifiedSku(terms);
-                if (target == null && !input.requestsCompleteServer() && !input.requestsFileRecovery())
+                if (target == null && constraints.task == null && !input.requestsCompleteServer() && !input.requestsFileRecovery()) {
                     target = db.exactName(terms, index.exactNames(terms));
-                if (target == null && !terms.isEmpty() && !input.requestsFileRecovery()
-                        && !MODEL_CODE.matcher(terms).matches() && !CATALOG_CODE.matcher(terms).matches()) {
-                    String family = index.namedFamily(terms);
-                    if (family != null) target = db.byKey(family);
+                    if (target == null && !terms.isEmpty() && !MODEL_CODE.matcher(terms).matches()
+                            && !CATALOG_CODE.matcher(terms).matches()) {
+                        String family = index.namedFamily(terms);
+                        if (family != null) target = db.byKey(family);
+                    }
                 }
-                plan = target == null && !input.requestsFileRecovery()
+                if (target == null && constraints.task == null) {
+                    spelling = spellingIfUnknown(terms, aliases);
+                    if (spelling != null) {
+                        terms = spelling;
+                        target = db.alias(terms, category);
+                    }
+                }
+                plan = target == null && constraints.task == null && !input.requestsFileRecovery()
                         ? QueryPlan.compile(terms, aliases, db, model) : QueryPlan.words(terms);
             }
         }
@@ -131,7 +166,7 @@ public class SearchController {
         boolean requiredConflict = merge(required, constraints.values) || constraints.conflict;
         // Legacy phrasing without «на» (e.g. «2 года») is still accepted.
         if (target == null || !"offer".equals(target.str("kind"))) {
-            var inferred = input.inferredFilters();
+            var inferred = input.inferredFilters(licensingQuery);
             if (!constraints.excludedLicenses.isEmpty()) inferred.remove("license_type");
             if (!constraints.excludedVersions.isEmpty()) inferred.remove("version");
             if (plan.purpose() == QueryPlan.Purpose.SERVER_SOFTWARE && db.entity("category", "369") == null) inferred.remove("category_id");
@@ -170,11 +205,15 @@ public class SearchController {
                         case "collection" -> "COLLECTION_MATCH";
                         default -> "CATEGORY_MATCH";
                     };
+        } else if (ids == null && constraints.task != null) {
+            if (constraints.task.purpose() != QueryPlan.Purpose.WORDS)
+                plan = new QueryPlan("task_rules", constraints.task.purpose(), terms, List.of(), "all");
+            reason = "PRODUCT_TYPE_MATCH";
         } else if (ids == null && !conflict && (input.requestsCompleteServer() || terms.equals("сервер") || terms.equals("серверы"))) {
             ids = db.serverOfferIds();
             reason = "PRODUCT_TYPE_MATCH";
             // Only the bare term is ambiguous. "Готовый сервер" still requests a device.
-            includeServerSoftware = (q.equals("сервер") || q.equals("серверы"))
+            includeServerSoftware = (q.equals("сервер") || q.equals("серверы") || ("сервер".equals(spelling) && !q.contains(" ")))
                     && ("software_admin".equals(input.context().get("profile_id"))
                         || "369".equals(filters.get("category_id"))
                         || "369".equals(input.context().get("category_id")));
@@ -198,17 +237,22 @@ public class SearchController {
             }
         }
         boolean fileRecovery = target == null && ids == null && input.requestsFileRecovery();
+        if (!conflict && target == null && ids == null && constraints.values.containsKey("version")
+                && families != null && families.size() == 1) {
+            ProductTitle product = ProductTitle.from(terms);
+            if (product != null) constraints.namedVersions = db.namedVersions(families.getFirst(), product);
+        }
         var selection = new Selection(target, ids,
-                q.contains("поддержк") || q.contains("сопровожден") || q.contains("support"),
-                fileRecovery, includeServerSoftware,
-                target == null && ids == null && !fileRecovery ? plan : null, constraints);
+                input.requestsSupport(),
+                fileRecovery, fileRecovery && input.requestsStandaloneFileRecovery(), includeServerSoftware,
+                target == null && ids == null && !fileRecovery && constraints.task == null ? plan : null, constraints);
         List<Row> direct = conflict ? List.of() : db.representatives(filters, selection, families);
         if (direct.isEmpty() && !conflict && selection.program() != null && plan.isSinglePurpose()
                 && !db.hasPurpose(plan.purpose())) {
             // Missing taxonomy in this snapshot. Keep every SKU constraint and require text evidence.
             diagnostics.put("unavailable_purpose", plan.purpose().name());
             plan = new QueryPlan("catalog_fallback", QueryPlan.Purpose.WORDS, terms, List.of(), "all");
-            selection = new Selection(null, null, selection.support(), false, false, plan, constraints);
+            selection = new Selection(null, null, selection.support(), false, false, false, plan, constraints);
             ranking = index.prepareRanking(terms, true, true);
             var ranked = ranking.in((String) filters.get("vendor_id"), (String) filters.get("category_id"));
             families = ranked.families();
@@ -216,18 +260,56 @@ public class SearchController {
             reason = mode.equals("hybrid") ? "HYBRID_MATCH" : "LEXICAL_MATCH";
             direct = db.representatives(filters, selection, families);
         }
-        if (direct.isEmpty() && families != null && families.isEmpty() && selection.program() != null
+        // Reassess an empty result or an off-topic relevance ranking. Explicit targets bypass this path.
+        if (!conflict && (direct.isEmpty() || input.sort().equals("relevance"))
+                && constraints.task == null && families != null && selection.program() != null
                 && plan.purpose() == QueryPlan.Purpose.WORDS && plan.compiler().equals("rules")) {
-            var interpreted = TaskInterpreter.interpret(terms, aliases, db, model);
+            var interpreted = TaskInterpreter.interpret(terms, aliases, db, model, ranking, direct);
             if (interpreted != null) {
-                plan = interpreted;
-                selection = new Selection(null, null, selection.support(), false, false, plan, constraints);
-                // Both facets and cards now execute the same verified operation and original SKU filters.
-                ranking = null;
-                families = null;
-                mode = "lexical";
-                reason = "PURPOSE_MATCH";
-                direct = db.representatives(filters, selection, null);
+                var alternative = new Selection(null, null, selection.support(), false, false, false, interpreted, constraints);
+                var eligible = db.representatives(filters, alternative, null);
+                if (direct.isEmpty() || !eligible.isEmpty()) {
+                    diagnostics.put("interpretation_trigger", direct.isEmpty() ? "empty" : "purpose_mismatch");
+                    plan = interpreted;
+                    selection = alternative;
+                    ranking = null;
+                    families = null;
+                    mode = "lexical";
+                    reason = "PURPOSE_MATCH";
+                    direct = eligible;
+                }
+            }
+        }
+        String chatMessage = null;
+        var replacedCards = new HashSet<String>();
+        if (chat != null && !conflict && !fileRecovery && families != null && selection.program() != null
+                && plan.purpose() == QueryPlan.Purpose.WORDS && constraints.namedVersions.isEmpty()) {
+            boolean weak = direct.isEmpty() || !index.matchesDirectTitle(terms, direct);
+            // When all eligible families fit on screen, a mere change of order cannot help.
+            // Only a free-form lexical task may be recompiled. A known target keeps its identity.
+            boolean retry = !weak && !plan.appliedModel() && chat.session() != null && !direct.isEmpty()
+                    && direct.size() <= chat.cardLimit() && input.sort().equals("relevance")
+                    && TaskInterpreter.describesTask(terms) && chat.canRewrite(terms)
+                    && events.repeatsChatCards(chat.session(), index.version(), chat.cards(direct), Instant.now());
+            if ((weak || retry) && !db.mentionsVendor(terms) && !aliases.contains(terms)) {
+                var priorTitles = retry ? direct.stream().map(row -> row.str("name")).toList() : List.<String>of();
+                QueryPlan proposal = chat.canRewrite(terms) && model.configured()
+                        ? TaskInterpreter.chatPlan(terms, chat, model, db, priorTitles) : null;
+                var candidate = proposal != null ? proposal
+                        : new QueryPlan("rules", QueryPlan.Purpose.UNKNOWN, terms, List.of(), "all");
+                var alternative = new Selection(null, null, selection.support(), false, false, false, candidate, constraints);
+                var eligible = db.representatives(filters, alternative, null);
+                var priorIds = retry ? chat.cards(direct) : List.<String>of();
+                if (!retry || eligible.stream().anyMatch(row -> !priorIds.contains(row.str("offer_id")))) {
+                    plan = candidate;
+                    selection = alternative;
+                    ranking = null;
+                    families = null;
+                    mode = "lexical";
+                    reason = plan.purpose() == QueryPlan.Purpose.WORDS ? "CATEGORY_MATCH" : "PURPOSE_MATCH";
+                    direct = eligible;
+                    replacedCards.addAll(priorIds);
+                }
             }
         }
         if (selection.program() != null && plan.isSinglePurpose() && direct.size() > 1
@@ -238,15 +320,37 @@ public class SearchController {
             if (TaskInterpreter.wantsDesktopUps(plan))
                 direct.sort(Comparator.comparing(row -> TaskInterpreter.highCapacityUps(row.str("name"))));
         }
-        if (includeServerSoftware && direct.size() > 1 && input.sort().equals("relevance"))
-            direct.sort(Comparator.comparing(row -> !"369".equals(row.str("category_id"))));
-        else if (input.sort().equals("relevance") && input.context().get("category_id") instanceof String category)
-            direct.sort(Comparator.comparing(row -> !category.equals(row.str("category_id"))));
-        if (direct.size() > 1 && !input.sort().equals("relevance")) {
-            Comparator<Long> byPrice = input.sort().equals("price_asc")
-                    ? Comparator.naturalOrder() : Comparator.reverseOrder();
-            direct.sort(Comparator.comparing(row -> Row.positive(row.get("price_minor")),
-                    Comparator.nullsLast(byPrice)));
+        if (direct.size() > 1) {
+            if (!input.sort().equals("relevance")) {
+                Comparator<Long> byPrice = input.sort().equals("price_asc")
+                        ? Comparator.naturalOrder() : Comparator.reverseOrder();
+                direct.sort(Comparator.comparing(row -> Row.positive(row.get("price_minor")),
+                        Comparator.nullsLast(byPrice)));
+            } else if (includeServerSoftware) {
+                direct.sort(Comparator.comparing(row -> !"369".equals(row.str("category_id"))));
+            } else if (input.context().get("category_id") instanceof String category) {
+                direct.sort(Comparator.comparing(row -> !category.equals(row.str("category_id"))));
+            }
+        }
+        if (chat != null) {
+            if (!replacedCards.isEmpty()) {
+                direct.sort(Comparator.comparing(row -> replacedCards.contains(row.str("offer_id"))));
+                diagnostics.put("chat_repetition", true);
+                diagnostics.put("chat_order", "NEXT_MATCH");
+                chatMessage = "Подобрал другие товары для той же задачи. Условия поиска сохранены.";
+            }
+            var cards = chat.cards(direct);
+            if (replacedCards.isEmpty() && chat.session() != null && events.repeatsChatCards(chat.session(), index.version(), cards, Instant.now())) {
+                diagnostics.put("chat_repetition", true);
+                if (input.sort().equals("relevance")) {
+                    chatMessage = chat.diversify(direct, q, model, diagnostics);
+                    cards = chat.cards(direct);
+                } else {
+                    chatMessage = "Эти товары снова первыми по выбранной сортировке. Какой критерий подбора изменить?";
+                }
+            }
+            diagnostics.put("chat_cards", cards);
+            diagnostics.put("chat_query", input.query());
         }
         List<Row> anchors = direct.subList(0, Math.min(4, direct.size()));
         List<Map<String, Object>> top = new ArrayList<>(),
@@ -271,11 +375,6 @@ public class SearchController {
             }
             (i < 4 ? top : more).add(card);
         }
-        if (!anchors.isEmpty() && top.size() < 4 && !input.skipsConsumables()) {
-            var evaluations = new ArrayList<Map<String, Object>>();
-            top.addAll(db.complements(anchors, filters, 4 - top.size(), evaluations));
-            if (!evaluations.isEmpty()) diagnostics.put("relation_checks", evaluations);
-        }
         if (!conflict && direct.isEmpty() && missingModel != null && q.contains("принтер")) {
             for (Row item : db.printerAlternatives(filters, missingModel, q)) {
                 var card = item.card("alternative", "FUNCTIONAL_ALTERNATIVE");
@@ -290,11 +389,61 @@ public class SearchController {
                 alternatives.add(card);
             }
         }
+        if (direct.isEmpty() && !constraints.namedVersions.isEmpty() && !input.filters().containsKey("version")) {
+            var relaxed = new LinkedHashMap<>(filters);
+            String requested = relaxed.remove("version").toString();
+            for (Row sku : db.representatives(relaxed, selection, families)) {
+                var alternative = sku.card("alternative", "FUNCTIONAL_ALTERNATIVE");
+                alternative.put("differences", List.of("Версия " + constraints.namedVersions.get(sku.str("offer_id"))
+                        + " вместо запрошенной " + requested + "."));
+                alternatives.add(alternative);
+            }
+        }
+        List<Map<String, Object>> upsell = List.of();
+        if (!conflict && !input.skipsUpsell() && (chat == null || !direct.isEmpty())) {
+            Set<String> shownFamilies = new HashSet<>();
+            for (var block : List.of(top, more, alternatives))
+                for (var card : block) shownFamilies.add((String) card.get("family_key"));
+
+            var evaluations = new ArrayList<Map<String, Object>>();
+            var verified = db.complements(anchors, filters, 4, evaluations).stream()
+                    .filter(card -> shownFamilies.add((String) card.get("family_key"))).toList();
+            // Keep the established top4 contract. The independent upsell block also works with four direct hits.
+            top.addAll(verified.subList(0, Math.min(4 - top.size(), verified.size())));
+            var suggestions = new ArrayList<>(verified);
+            // A category or vendor navigation target scopes the main results. A stand can belong to
+            // a different category than the laptops on that page. Keep explicit shopper filters.
+            var merchandisingFilters = new LinkedHashMap<>(filters);
+            if (!anchors.isEmpty()) {
+                for (String key : List.of("category_id", "vendor_id"))
+                    if (!input.filters().containsKey(key)) merchandisingFilters.remove(key);
+            }
+            if (!merchandisingFilters.equals(filters) && suggestions.size() < 4) {
+                for (var card : db.complements(anchors, merchandisingFilters, 4, evaluations)) {
+                    if (shownFamilies.add((String) card.get("family_key"))) suggestions.add(card);
+                    if (suggestions.size() == 4) break;
+                }
+            }
+            if (!evaluations.isEmpty()) diagnostics.put("relation_checks", evaluations.stream().distinct().toList());
+            if (suggestions.size() < 4) {
+                suggestions.addAll(db.catalogConsumables(anchors, merchandisingFilters, shownFamilies, 4 - suggestions.size()));
+            }
+            if (suggestions.isEmpty()) {
+                var shoppingFilters = new LinkedHashMap<>(input.filters());
+                for (String key : List.of("available_only", "max_price_minor", "currency"))
+                    if (filters.containsKey(key)) shoppingFilters.put(key, filters.get(key));
+                Row contextHint = anchors.isEmpty() ? db.upsellContext(target, alternatives, families,
+                        (String) input.context().get("category_id")) : null;
+                suggestions.addAll(db.upsellSuggestions(anchors, merchandisingFilters, shoppingFilters, shownFamilies,
+                        (String) input.context().get("profile_id"), 4, contextHint));
+            }
+            upsell = suggestions;
+        }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("search_id", UUID.randomUUID().toString());
         result.put("index_version", index.version());
         result.put("mode", mode);
-        result.put("normalized_q", q);
+        result.put("normalized_q", input.normalized());
         var applied = new LinkedHashMap<>(filters);
         applied.putIfAbsent("available_only", false);
         applied.putIfAbsent("currency", "RUB");
@@ -304,6 +453,7 @@ public class SearchController {
         result.put("top4", top);
         result.put("more_results", more);
         result.put("alternatives", alternatives);
+        result.put("upsell", upsell);
         Map<String, List<Row>> facets = new LinkedHashMap<>();
         for (String field : List.of("vendor_id", "category_id")) {
             var explicit = new LinkedHashMap<>(input.filters());
@@ -321,14 +471,26 @@ public class SearchController {
             facets.put(field.equals("vendor_id") ? "vendors" : "categories", options);
         }
         result.put("facets", facets);
-        var trace = plan.trace(constraints);
+        var trace = new LinkedHashMap<>(plan.trace(constraints));
+        if (diagnostics.containsKey("chat_order")) trace.put("order", diagnostics.get("chat_order"));
         result.put("program", trace);
         diagnostics.put("program", trace);
         result.put("llm_applied", plan.appliedModel());
-        if (input.strategy().equals("llm")) {
-            result.put("assistant_message", direct.isEmpty()
-                    ? "По текущей фразе каталог не нашёл товаров. Введите название, артикул или уточните задачу."
-                    : "Показаны совпадения каталога по текущей фразе. Для уточнения примените фильтры.");
+        if (chat != null) {
+            String message = "Показаны совпадения каталога по текущей фразе. Для уточнения примените фильтры.";
+            if (direct.isEmpty()) {
+                message = plan.purpose() == QueryPlan.Purpose.UNKNOWN || (plan.purpose() == QueryPlan.Purpose.WORDS
+                        && !plan.appliedModel() && target == null && ids == null && constraints.task == null && !fileRecovery && !conflict)
+                        ? AssistantTurn.CLARIFY : AssistantTurn.FILTERED;
+                if (!alternatives.isEmpty()) {
+                    var first = alternatives.getFirst();
+                    var differences = (List<?>) first.get("differences");
+                    message = "Точного совпадения нет. В каталоге есть замена — " + first.get("name")
+                            + ". " + differences.getFirst();
+                }
+            }
+            result.put("assistant_message", chatMessage == null ? message : chatMessage);
+            if (diagnostics.containsKey("chat_model_order")) result.put("llm_applied", true);
         }
         result.put(
                 "shortfall_reason",
@@ -343,6 +505,7 @@ public class SearchController {
         var shown = new ArrayList<>(top);
         shown.addAll(more);
         shown.addAll(alternatives);
+        shown.addAll(upsell);
         db.addAttributes(shown);
         detailOffers.putAll(db.detailOffers(shown, filters));
         return result;
@@ -363,6 +526,12 @@ public class SearchController {
         return conflict;
     }
 
+    private String spellingIfUnknown(String text, Set<String> aliases) throws IOException {
+        String suggestion = QueryPlan.missingLetter(text, aliases);
+        if (suggestion == null || !index.exactNames(text).isEmpty()) return null;
+        return index.rank(text, null, null, false).families().isEmpty() ? suggestion : null;
+    }
+
     @GetMapping("/suggest")
     public List<Map<String, Object>> suggest(
             @RequestParam("q") String q,
@@ -373,7 +542,20 @@ public class SearchController {
         if (category != null) SearchInput.text(category, "category_id");
         if (profile != null) SearchInput.text(profile, "profile_id");
         try (var db = open()) {
-            return db.suggest(prefix, category, profile, index.suggestNames(prefix));
+            var literal = db.suggest(prefix, category, profile, index.suggestNames(prefix));
+            if (!prefix.matches("[a-z]{4,47}") || !db.exact(prefix).isEmpty()) return literal;
+            var aliases = db.aliasTerms(category);
+            if (aliases.contains(prefix)) return literal;
+            String correction = spellingIfUnknown(prefix, aliases);
+            if (correction == null) return literal;
+            var corrected = db.suggest(correction, category, profile, index.suggestNames(correction));
+            if (literal.isEmpty()) return corrected;
+            // A shorter input can also be a real brand prefix (sever → Severcart).
+            var choices = new LinkedHashSet<Map<String, Object>>();
+            choices.add(literal.getFirst());
+            corrected.stream().limit(2).forEach(choices::add);
+            choices.addAll(literal);
+            return choices.stream().limit(6).toList();
         }
     }
 
@@ -461,7 +643,9 @@ public class SearchController {
         var c = events.shownCard(searchId, offerId);
         if (c == null || !c.has("url"))
             throw new ApiProblem(HttpStatus.NOT_FOUND, "CARD_NOT_FOUND", "Для этой карточки нет сохранённого показа с фактами.");
-        String reason = switch (c.path("reason_codes").path(0).asString("")) {
+        String reason = "related".equals(c.path("role").asString())
+                ? c.path("recommendation_reason").asString("Предложение из дополнительной подборки каталога.")
+                : switch (c.path("reason_codes").path(0).asString("")) {
             case "EXACT_SKU", "MODEL_MATCH" -> "Совпал артикул или идентификатор предложения.";
             case "COMPATIBLE_CONSUMABLE" -> "Для этой модели найден совместимый расходный материал.";
             case "PURPOSE_MATCH" -> "Каталожные признаки товара соответствуют задаче из запроса.";
@@ -481,9 +665,9 @@ public class SearchController {
             var check = c.path("checks").get(0);
             facts.put(
                     "pair",
-                    "В таблице производителя для "
+                    "Источник совместимости для "
                             + check.path("anchor_value").asString()
-                            + " указан "
+                            + " указывает "
                             + check.path("candidate_value").asString()
                             + ".");
         }
