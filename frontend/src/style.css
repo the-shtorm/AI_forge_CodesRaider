@@ -107,10 +107,10 @@ h1, h2, h3, p, ul, dl, dd { margin: 0; }
 .assistant-heading h2 { flex: 1; font-size: 1rem; }
 .assistant-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; background: var(--accent-soft); color: var(--accent); }
 .assistant-demo { color: var(--muted); font-size: .82rem; }
+.assistant-new-chat { width: 32px; min-height: 32px; padding: 0; font-size: 1.25rem; line-height: 1; }
 .assistant-toggle { white-space: nowrap; }
-.assistant-history { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 13px 0; }
+.assistant-history { display: grid; padding: 8px 13px 0; }
 .assistant-history select { min-width: 0; padding: 6px; font-size: .8125rem; text-overflow: ellipsis; }
-.assistant-history .text-button { white-space: nowrap; }
 .assistant-messages { display: flex; flex-direction: column; gap: 9px; max-height: min(45dvh, 330px); overflow-y: auto; overscroll-behavior: contain; padding: 13px; }
 .message { max-width: 95%; padding: 9px 10px; border-radius: 9px; font-size: .875rem; line-height: 1.45; overflow-wrap: anywhere; }
 .message-assistant { align-self: flex-start; background: #f5f0f3; }

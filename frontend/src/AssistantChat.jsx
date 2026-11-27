@@ -141,18 +141,24 @@ export default function AssistantChat({ navigate, profileId }) {
       <div className="assistant-heading">
         <span className="assistant-icon" aria-hidden="true">✦</span>
         <h2 id="assistant-title">Подбор с ИИ</h2>
+        <button className="button secondary assistant-new-chat" type="button" aria-label="Новый чат" title="Новый чат"
+          disabled={pending} onClick={() => {
+            chooseChat(null);
+            input.current?.focus();
+          }}>
+          <span aria-hidden="true">+</span>
+        </button>
         <button className="text-button assistant-toggle" type="button" onClick={collapse}>Свернуть</button>
       </div>
       <div className="assistant-body">
         {!!chats.length && <div className="assistant-history">
-          <label className="sr-only" htmlFor="assistant-chat-history">История чатов</label>
+          <label className="sr-only" htmlFor="assistant-chat-history">Выбор чата</label>
           <select id="assistant-chat-history" disabled={pending} value={activeChat?.id ?? ""} onChange={event => chooseChat(event.target.value)}>
-            <option value="">История чатов</option>
+            <option value="" disabled>Новый чат</option>
             {chats.map(chat => <option key={chat.id} value={chat.id}>
               {chatDate.format(chat.updatedAt)} · {chat.messages.find(message => message.role === "user").text.slice(0, 42)}
             </option>)}
           </select>
-          <button className="text-button" type="button" onClick={() => chooseChat(null)} disabled={pending || !activeChat}>Новый чат</button>
         </div>}
         <div className="assistant-messages" ref={conversation} role="log" aria-label="Диалог с помощником">
           <p className="message message-assistant">{greeting}</p>
