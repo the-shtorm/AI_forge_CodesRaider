@@ -2590,6 +2590,9 @@ components:
           - llm
           - llm_fallback
           - llm_abstained
+          - catalog_fallback
+          - llm_paraphrase
+          - llm_rewrite
           title: Compiler
         purpose:
           type: string
@@ -2602,6 +2605,14 @@ components:
           - SERVER
           - SERVER_SOFTWARE
           - PRINTER
+          - OCR
+          - VIDEO_EDITOR
+          - PHOTO_EDITOR
+          - VIRTUALIZATION
+          - ARCHIVER
+          - UPS
+          - SWITCH
+          - MONITOR
           - UNKNOWN
           title: Purpose
         additional_purposes:
@@ -2616,6 +2627,14 @@ components:
             - SERVER
             - SERVER_SOFTWARE
             - PRINTER
+            - OCR
+            - VIDEO_EDITOR
+            - PHOTO_EDITOR
+            - VIRTUALIZATION
+            - ARCHIVER
+            - UPS
+            - SWITCH
+            - MONITOR
             - UNKNOWN
           type: array
           maxItems: 1

@@ -78,6 +78,7 @@ public class SearchController {
         Requirements constraints = new Requirements();
         QueryPlan plan = QueryPlan.words(q);
         String terms = q;
+        Set<String> aliases = Set.of();
         if (!input.target().isEmpty()) {
             target =
                     db.entity(
@@ -110,7 +111,7 @@ public class SearchController {
                 target = db.purchaseTarget(terms);
                 terms = terms.replaceAll("(?U)\\b(?:покажи|найди|мне|нужен|нужна|купить|пожалуйста)\\b", " ")
                         .strip().replaceAll(" +", " ");
-                Set<String> aliases = db.aliasTerms(category);
+                aliases = db.aliasTerms(category);
                 terms = QueryPlan.canonical(terms, aliases);
                 if (target == null) target = db.alias(q, category);
                 if (target == null) target = db.alias(terms, category);
@@ -215,11 +216,27 @@ public class SearchController {
             reason = mode.equals("hybrid") ? "HYBRID_MATCH" : "LEXICAL_MATCH";
             direct = db.representatives(filters, selection, families);
         }
+        if (direct.isEmpty() && families != null && families.isEmpty() && selection.program() != null
+                && plan.purpose() == QueryPlan.Purpose.WORDS && plan.compiler().equals("rules")) {
+            var interpreted = TaskInterpreter.interpret(terms, aliases, db, model);
+            if (interpreted != null) {
+                plan = interpreted;
+                selection = new Selection(null, null, selection.support(), false, false, plan, constraints);
+                // Both facets and cards now execute the same verified operation and original SKU filters.
+                ranking = null;
+                families = null;
+                mode = "lexical";
+                reason = "PURPOSE_MATCH";
+                direct = db.representatives(filters, selection, null);
+            }
+        }
         if (selection.program() != null && plan.isSinglePurpose() && direct.size() > 1
                 && input.sort().equals("relevance")) {
             // The catalog decides eligibility. BM25 breaks ties inside the verified purpose.
             var ranked = index.rank(terms, (String) filters.get("vendor_id"), (String) filters.get("category_id"), false);
             SearchCatalog.orderByFamilies(direct, ranked.families(), false);
+            if (TaskInterpreter.wantsDesktopUps(plan))
+                direct.sort(Comparator.comparing(row -> TaskInterpreter.highCapacityUps(row.str("name"))));
         }
         if (includeServerSoftware && direct.size() > 1 && input.sort().equals("relevance"))
             direct.sort(Comparator.comparing(row -> !"369".equals(row.str("category_id"))));
@@ -307,7 +324,7 @@ public class SearchController {
         var trace = plan.trace(constraints);
         result.put("program", trace);
         diagnostics.put("program", trace);
-        result.put("llm_applied", plan.compiler().equals("llm"));
+        result.put("llm_applied", plan.appliedModel());
         if (input.strategy().equals("llm")) {
             result.put("assistant_message", direct.isEmpty()
                     ? "По текущей фразе каталог не нашёл товаров. Введите название, артикул или уточните задачу."

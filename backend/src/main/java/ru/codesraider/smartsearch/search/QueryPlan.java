@@ -108,6 +108,13 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         return new QueryPlan("rules", Purpose.WORDS, text, List.of(), "all");
     }
 
+    static boolean freeForm(String normalized, Set<String> aliases) {
+        return normalized.length() <= 512
+                        && normalized.replaceAll("(?U)\\b(?:rack|zip|rar|ocr|ethernet)\\b", "").matches("[а-я -]*")
+                        && !UNSUPPORTED_DETAIL.matcher(normalized).find()
+                        && aliases.stream().noneMatch(normalized::contains);
+    }
+
     static QueryPlan compile(String normalized, Set<String> aliases, SearchCatalog db, ModelClient llm)
             throws SQLException {
         String exclusions = normalized.contains("чтобы") && Purpose.UPS.evidence(normalized) == 2
@@ -116,13 +123,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             return new QueryPlan("rules", Purpose.UNKNOWN, normalized, List.of(), "all");
         Purpose purpose = INTENTS.get(normalized);
         if (purpose != null) return new QueryPlan("rules", purpose, normalized, List.of(), "all");
-        boolean freeForm =
-                normalized.length() <= 512
-                        && normalized.replaceAll("(?U)\\b(?:rack|zip|rar|ocr|ethernet)\\b", "").matches("[а-я -]*")
-                        && !UNSUPPORTED_DETAIL.matcher(normalized).find()
-                        && aliases.stream().noneMatch(normalized::contains);
         String compiler = "rules";
-        if (freeForm) {
+        if (freeForm(normalized, aliases)) {
             // Ground the instruction vocabulary in the request before asking the model to choose.
             // Specific capability words outrank ambiguous objects such as files or computers.
             int best =
@@ -179,6 +181,14 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
 
     private static List<Purpose> strongPurposes(String clause) {
         return Arrays.stream(Purpose.values()).filter(p -> p.evidence(clause) == 2).toList();
+    }
+
+    boolean interpretedTask() {
+        return compiler.equals("llm_paraphrase") || compiler.equals("llm_rewrite");
+    }
+
+    boolean appliedModel() {
+        return compiler.equals("llm") || interpretedTask();
     }
 
     boolean isSinglePurpose() {

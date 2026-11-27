@@ -422,8 +422,47 @@ final class SearchCatalog implements AutoCloseable {
         };
     }
 
+    /** A mixed media category also contains effects, add-ons and utilities. For an inferred task
+     * require a tool name or a standalone product line before selecting a license or counting facets. */
+    private static String interpretedPredicate(QueryPlan.Purpose purpose) {
+        String category = predicate(purpose);
+        String identity = switch (purpose) {
+            case VIDEO_EDITOR -> """
+                    lower(o.name) LIKE '%video editor%' OR o.name LIKE '%идеоредактор%' OR o.name LIKE '%идеомонтаж%'
+                    OR o.name LIKE '%идеоМОНТАЖ%' OR (o.vendor_id='wondershare' AND lower(o.name) LIKE 'wondershare filmora (%')
+                    OR (o.vendor_id='cyberlink-corp' AND lower(o.name) LIKE '% powerdirector %')
+                    """;
+            case PHOTO_EDITOR -> """
+                    lower(o.name) LIKE '%photo editor%' OR o.name LIKE '%оторедактор%' OR o.name LIKE '%отоМАСТЕР%'
+                    OR (o.vendor_id='cyberlink-corp' AND lower(o.name) LIKE '% photodirector %')
+                    OR (o.vendor_id='corel' AND lower(o.name) LIKE '% paintshop pro %')
+                    """;
+            case OCR -> """
+                    instr(' '||lower(o.name)||' ',' ocr ')>0 OR o.name LIKE '%аспознаван%текст%'
+                    OR (o.vendor_id='wondershare' AND lower(o.name) LIKE 'wondershare pdfelement%professional%')
+                    """;
+            default -> null;
+        };
+        if (identity == null) return category;
+        String eligible = "(" + category + " AND (" + identity + "))";
+        if (purpose == QueryPlan.Purpose.OCR) {
+            // FineReader is catalogued under document management in the full feed.
+            eligible = "(" + eligible + " OR (o.vendor_id='contentai' AND lower(o.name) LIKE 'content ai finereader %'))";
+        }
+        return eligible + " AND lower(o.name) NOT LIKE '%plug-in%' AND lower(o.name) NOT LIKE '%plugin%'"
+                + " AND o.name NOT LIKE '%лагин%'";
+    }
+
+    boolean hasInterpretablePurpose(QueryPlan.Purpose purpose) throws SQLException {
+        return hasCandidates(interpretedPredicate(purpose));
+    }
+
     boolean hasPurpose(QueryPlan.Purpose purpose) throws SQLException {
-        return !rows("SELECT 1 FROM offer o WHERE o.family_key IS NOT NULL AND " + predicate(purpose)
+        return hasCandidates(predicate(purpose));
+    }
+
+    private boolean hasCandidates(String condition) throws SQLException {
+        return !rows("SELECT 1 FROM offer o WHERE o.family_key IS NOT NULL AND " + condition
                 + " LIMIT 1", List.of()).isEmpty();
     }
 
@@ -435,7 +474,7 @@ final class SearchCatalog implements AutoCloseable {
         if (selection.program() != null) {
             var plan = selection.program();
             var predicates = new ArrayList<String>();
-            predicates.add(predicate(plan.purpose()));
+            predicates.add(plan.interpretedTask() ? interpretedPredicate(plan.purpose()) : predicate(plan.purpose()));
             for (var op : plan.additionalPurposes()) predicates.add(predicate(op));
             w.add("(" + String.join(plan.join().equals("any") ? " OR " : " AND ", predicates) + ")");
         }

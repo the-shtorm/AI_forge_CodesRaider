@@ -15,6 +15,7 @@ import ru.codesraider.smartsearch.analytics.EventStore;
 import ru.codesraider.smartsearch.modelclient.EncoderClient;
 import ru.codesraider.smartsearch.web.ApiProblem;
 import java.net.InetSocketAddress;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -42,7 +43,7 @@ class ProgramTest {
                 exchange -> {
                     calls++;
                     var payload = json.readTree(exchange.getRequestBody());
-                    assertTrue(payload.has("response_format"));
+                    assertEquals(payload.path("max_tokens").asInt() == 80, payload.has("response_format"));
                     byte[] body =
                             json.writeValueAsBytes(
                                     Map.of(
@@ -76,6 +77,94 @@ class ProgramTest {
     JsonNode run(String q, Map<String, Object> filters) throws Exception {
         return json.valueToTree(
                 search.search(Map.of("q", q, "filters", filters, "limit", 8)));
+    }
+
+    @Test
+    void emptyTextSearchUsesOnlyTheConfirmedOperationAndKeepsSkuFilters() throws Exception {
+        String q = "Хранить запасной экземпляр базы";
+        instruction = "Yes.";
+        var hit = run(q, Map.of());
+        assertEquals("llm_paraphrase", hit.at("/program/compiler").asString());
+        assertEquals("BACKUP", hit.at("/program/purpose").asString());
+        assertTrue(hit.get("llm_applied").asBoolean());
+        assertTrue(hit.get("direct_count").asInt() > 0);
+        assertEquals("1033", hit.at("/facets/categories/0/id").asString());
+
+        var filtered = run(q, Map.of("vendor_id", "pantum"));
+        assertEquals("BACKUP", filtered.at("/program/purpose").asString());
+        assertEquals(0, filtered.get("direct_count").asInt());
+        assertTrue(filtered.at("/facets/vendors").size() > 0);
+        assertEquals(2, calls);
+    }
+
+    @Test
+    void inferredVideoTaskSelectsEditorsAndCountsOnlyEligibleFacets() throws Exception {
+        var xml = new StringBuilder("<yml_catalog><shop><categories><category id='495'>Видеоредакторы</category>"
+                + "</categories><offers>");
+        var names = List.of("Studio Video Editor Pro", "Lens Effects", "Subtitle plug-in for Studio Video Editor");
+        for (int i = 0; i < names.size(); i++) {
+            xml.append("""
+                    <offer id="%1$d" group_id="%1$d" available="true"><name>%2$s</name>
+                    <url>https://example.org/p/%1$d/</url><vendor>Studio</vendor>
+                    <vendorUrl>https://example.org/studio/</vendorUrl><categoryId>495</categoryId>
+                    <price>100</price><currencyId>RUR</currencyId></offer>
+                    """.formatted(i + 1, names.get(i)));
+        }
+        Path feed = temp.resolve("editors.xml"), snapshots = temp.resolve("media");
+        Files.writeString(feed, xml.append("</offers></shop></yml_catalog>"));
+        try (var encoder = new EncoderClient("http://127.0.0.1:1")) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+        }
+        String version = Files.readString(snapshots.resolve("active")).strip();
+        try (var db = new SearchCatalog(snapshots.resolve(version).resolve("catalog.db"))) {
+            var plan = new QueryPlan("llm_rewrite", QueryPlan.Purpose.VIDEO_EDITOR, "ролики", List.of(), "all");
+            var selection = new SearchCatalog.Selection(null, null, false, false, false, plan, new Requirements());
+            var offers = db.representatives(Map.of(), selection, null);
+            assertEquals(List.of("1"), offers.stream().map(row -> row.str("offer_id")).toList());
+            assertEquals(1, db.facet("category_id", Map.of(), selection, null).getFirst().number("count"));
+        }
+    }
+
+    @Test
+    void industrialUpsIsLowerPriorityForAnInferredSinglePcLoad() {
+        for (String name : List.of("ИБП 30000Вт 30000ВА", "ИБП 30 kVA", "UPS 10 000 ВA"))
+            assertTrue(TaskInterpreter.highCapacityUps(name), name);
+        for (String name : List.of("APC 800VA", "ИБП 1,5 кВА", "BX1600MI", "ИБП 20000 Вт"))
+            assertFalse(TaskInterpreter.highCapacityUps(name), name);
+        for (String q : List.of("автономное питание пк", "питать компьютер при аварии"))
+            assertTrue(TaskInterpreter.wantsDesktopUps(new QueryPlan("llm_paraphrase", QueryPlan.Purpose.UPS, q, List.of(), "all")));
+        assertFalse(TaskInterpreter.wantsDesktopUps(new QueryPlan("llm_rewrite", QueryPlan.Purpose.UPS,
+                "запитать пк и серверную стойку", List.of(), "all")));
+    }
+
+    @Test
+    void openEndedTranslationMustNameAKnownToolForTheOriginalSubject() throws Exception {
+        String q = "Застраховать базу от утраты";
+        instruction = "{\"tool\":\"Backup software\"}";
+        var result = run(q, Map.of());
+        assertEquals("llm_rewrite", result.at("/program/compiler").asString());
+        assertEquals("BACKUP", result.at("/program/purpose").asString());
+        assertTrue(result.get("llm_applied").asBoolean());
+        for (String reply : List.of("printer", "backup software please", "unknown")) {
+            instruction = "{\"tool\":\"" + reply + "\"}";
+            assertEquals(0, run(q, Map.of()).get("direct_count").asInt());
+        }
+    }
+
+    @Test
+    void rejectedAndMalformedParaphrasesKeepTheOriginalResult() throws Exception {
+        for (String reply : List.of("no", "yes, if you buy something else", "invalid")) {
+            instruction = reply;
+            var result = run("Хранить запасной экземпляр базы", Map.of());
+            assertEquals("WORDS", result.at("/program/purpose").asString());
+            assertFalse(result.get("llm_applied").asBoolean());
+            assertEquals(0, result.get("direct_count").asInt());
+        }
+        assertEquals(3, calls);
+        run("Склеить видеофрагменты", Map.of()); // Demo snapshot has no video editors.
+        run("Хранить запасной экземпляр базы без шифрования", Map.of());
+        run("Купить питание для ребенка", Map.of());
+        assertEquals(3, calls);
     }
 
     @Test
