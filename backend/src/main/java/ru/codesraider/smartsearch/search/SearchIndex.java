@@ -362,6 +362,15 @@ public class SearchIndex implements AutoCloseable {
         return query.build();
     }
 
+    boolean matchesDirectTitle(String query, List<SearchCatalog.Row> direct) throws IOException {
+        var words = tokens(REQUEST_WORDS.matcher(query).replaceAll(" "));
+        if (words.isEmpty()) return false;
+        for (var row : direct.subList(0, Math.min(4, direct.size()))) {
+            if (tokens(normalize(row.str("name"))).containsAll(words)) return true;
+        }
+        return false;
+    }
+
     private Set<String> tokens(String text) throws IOException {
         if (legacy) text = text.replaceAll("(?U)\\b(?:найди|найдите|подбери|покажи|нужен|нужна|купить)\\b", " ");
         Set<String> terms = new LinkedHashSet<>();

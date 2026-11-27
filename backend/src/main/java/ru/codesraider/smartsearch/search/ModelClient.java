@@ -40,8 +40,12 @@ class ModelClient {
     // Each output is one instruction from a finite vocabulary. No executable model text is
     // evaluated.
     String choose(String task, Object data, List<String> choices) {
+        return choose(task, data, choices, 0);
+    }
+
+    String choose(String task, Object data, List<String> choices, double temperature) {
         var schema = objectSchema(Map.of("op", Map.of("type", "string", "enum", choices)));
-        var parsed = generate(task, data, schema);
+        var parsed = generate(task, data, schema, temperature);
         if (parsed == null || parsed.size() != 1) return null;
         String op = parsed.path("op").asString("");
         return choices.contains(op) ? op : null;
@@ -49,7 +53,7 @@ class ModelClient {
 
     boolean confirmsTool(String tool, String query) {
         String question = "Determine if " + tool + " would accomplish the user's requested task. Answer yes or no.";
-        String answer = complete(question, query, null, 4);
+        String answer = complete(question, query, null, 4, 0);
         if (answer == null) return false;
         String decision = answer.strip();
         return decision.equalsIgnoreCase("yes") || decision.equalsIgnoreCase("yes.");
@@ -68,6 +72,37 @@ class ModelClient {
         if (parsed == null || parsed.size() != 1 || !parsed.path("tool").isString()) return null;
         String name = parsed.get("tool").asString().strip().toLowerCase(Locale.ROOT);
         return name.length() <= 64 ? name : null;
+    }
+
+    record ChatPrompt(List<AssistantTurn.Message> history, String question) {}
+    record ChatInstruction(String tool, String category) {}
+
+    ChatInstruction chatInstruction(String question, AssistantTurn chat, List<String> previousTitles) {
+        String task = """
+                Identify the IT product the buyer needs to operate themselves. Return the common English
+                tool type in tool and its Russian shop category in the plural in category.
+                Example: cut footage into clips -> tool: video editor, category: Видеоредакторы.
+                If the question is vague, asks for content, a service, advice or anything other than
+                a product to use, return unknown in tool and an empty category.
+                History can resolve references. The current question sets the task.
+                """;
+        var fields = new LinkedHashMap<String, Object>();
+        fields.put("tool", Map.of("type", "string"));
+        fields.put("category", Map.of("type", "string"));
+        Object prompt = new ChatPrompt(chat.promptHistory(question), question);
+        if (!previousTitles.isEmpty()) {
+            task += " The prior text search keeps returning the same products. Seek another tool for exactly "
+                    + "the same task. Keep every stated requirement. Return unknown if no such interpretation fits.";
+            prompt = Map.of("request", prompt, "previous_titles", previousTitles);
+        }
+        var parsed = generate(task, prompt, objectSchema(fields), previousTitles.isEmpty() ? 0 : 0.4);
+        if (parsed == null || parsed.size() != 2 || !parsed.path("tool").isString()
+                || !parsed.path("category").isString()) return null;
+        String tool = SearchInput.normalize(parsed.get("tool").asString());
+        String category = parsed.get("category").asString().strip();
+        if (tool.equals("unknown") || tool.length() > 64 || category.length() > 80
+                || !tool.matches("[a-z][a-z0-9 -]+")) return null;
+        return new ChatInstruction(tool, category);
     }
 
     record Instructions(List<QueryPlan.Purpose> find, String join) {}
@@ -136,7 +171,11 @@ class ModelClient {
     }
 
     private JsonNode generate(String task, Object data, Map<String, Object> schema) {
-        String content = complete(task, data, schema, 80);
+        return generate(task, data, schema, 0);
+    }
+
+    private JsonNode generate(String task, Object data, Map<String, Object> schema, double temperature) {
+        String content = complete(task, data, schema, 80, temperature);
         if (content == null) return null;
         try {
             JsonNode parsed = json.readTree(content);
@@ -146,12 +185,12 @@ class ModelClient {
         }
     }
 
-    private String complete(String task, Object data, Map<String, Object> schema, int maxTokens) {
+    private String complete(String task, Object data, Map<String, Object> schema, int maxTokens, double temperature) {
         if (endpoint == null || !slots.tryAcquire()) return null;
         try {
             var payload = new LinkedHashMap<String, Object>();
             payload.put("model", model);
-            payload.put("temperature", 0);
+            payload.put("temperature", temperature);
             payload.put("max_tokens", maxTokens);
             payload.put("messages", List.of(Map.of("role", "system", "content", task),
                     Map.of("role", "user", "content", json.writeValueAsString(data))));

@@ -153,11 +153,6 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
 
     static QueryPlan compile(String terms, Set<String> aliases, SearchCatalog db, ModelClient llm)
             throws SQLException {
-        return compile(terms, aliases, db, llm, false);
-    }
-
-    static QueryPlan compile(String terms, Set<String> aliases, SearchCatalog db, ModelClient llm,
-                             boolean requestModel) throws SQLException {
         String normalized = sentenceText(terms);
         String exclusions = normalized.contains("чтобы") && Purpose.UPS.evidence(normalized) == 2
                 ? normalized.replaceAll("(?U)\\bне выключал[а-я]*\\b", "") : normalized;
@@ -188,7 +183,7 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             // capability. A compound instruction needs evidence for two different capabilities.
             long capabilities = Arrays.stream(Purpose.values()).filter(op -> op.evidence(normalized) > 0).count();
             boolean clearIntent = (!compound || capabilities == 1) && best == 2 && grounded.size() == 1;
-            if (clearIntent && (!requestModel || !llm.configured() || compound))
+            if (clearIntent)
                 return new QueryPlan(TaskGoals.matches(grounded.getFirst(), normalized) ? "task_rules" : "rules",
                         grounded.getFirst(), normalized, List.of(), "all");
             if (compound && best == 2) {
@@ -221,8 +216,6 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
                         program.join());
             }
             compiler = program == null ? "llm_fallback" : "llm_abstained";
-            if (clearIntent)
-                return new QueryPlan(compiler, grounded.getFirst(), normalized, List.of(), "all");
         }
         return new QueryPlan(compiler, Purpose.WORDS, normalized, List.of(), "all");
     }
@@ -232,7 +225,7 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
     }
 
     boolean interpretedTask() {
-        return compiler.equals("task_rules") || compiler.equals("llm_paraphrase") || compiler.equals("llm_rewrite") || compiler.equals("llm_semantic");
+        return compiler.equals("llm_chat") || compiler.equals("task_rules") || compiler.equals("llm_paraphrase") || compiler.equals("llm_rewrite") || compiler.equals("llm_semantic");
     }
 
     boolean appliedModel() {

@@ -242,6 +242,17 @@ final class SearchCatalog implements AutoCloseable {
         return terms;
     }
 
+    String exactLeafCategoryName(String proposed) throws SQLException {
+        if (proposed.isBlank()) return null;
+        String normalized = SearchInput.normalize(proposed);
+        for (var row : rows("""
+                SELECT e.name FROM category c JOIN entity e USING(entity_key)
+                WHERE NOT EXISTS (SELECT 1 FROM category child WHERE child.parent_id=c.category_id)
+                """, List.of()))
+            if (SearchInput.normalize(row.str("name")).equals(normalized)) return row.str("name");
+        return null;
+    }
+
     boolean mentionsVendor(String text) throws SQLException {
         String padded = " " + text + " ";
         for (var row : rows("SELECT e.name,v.vendor_id FROM vendor v JOIN entity e USING(entity_key)", List.of())) {
@@ -603,6 +614,8 @@ final class SearchCatalog implements AutoCloseable {
                 if (!filters.containsKey("license_type"))
                     w.add("(o.license_type IS NULL OR o.license_type='new')");
             }
+            if (plan.compiler().equals("llm_chat") && plan.purpose() == QueryPlan.Purpose.WORDS)
+                w.add("o.category_id IN (SELECT id FROM entity WHERE kind='category' AND name=?)", plan.text());
             var predicates = new ArrayList<String>();
             predicates.add(plan.interpretedTask() ? interpretedPredicate(plan.purpose()) : predicate(plan.purpose()));
             for (var op : plan.additionalPurposes()) predicates.add(predicate(op));

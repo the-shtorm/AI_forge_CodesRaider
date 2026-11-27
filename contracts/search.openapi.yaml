@@ -2757,6 +2757,16 @@ components:
       title: SearchFacets
     SearchProgram:
       properties:
+        order:
+          anyOf:
+          - type: string
+            enum:
+            - NEXT_MATCH
+            - OTHER_VENDOR
+            - LOWER_PRICE
+          - type: 'null'
+          title: Order
+          description: Порядок альтернативных совпадений при третьем повторе в чате.
         compiler:
           type: string
           enum:
@@ -2769,6 +2779,7 @@ components:
           - llm_paraphrase
           - llm_rewrite
           - llm_semantic
+          - llm_chat
           title: Compiler
         purpose:
           type: string
@@ -2882,8 +2893,16 @@ components:
           - standard
           - llm
           title: Strategy
-          description: llm запрашивает интерпретацию намерения. Явные фильтры всегда обязательны.
+          description: llm включает диалоговый подбор. Сначала применяются правила, затем при необходимости локальная
+            модель.
           default: standard
+        assistant_card_limit:
+          type: integer
+          maximum: 4.0
+          minimum: 1.0
+          title: Assistant Card Limit
+          description: Число прямых карточек, видимых в чате.
+          default: 3
         assistant_history:
           anyOf:
           - items:
@@ -3020,7 +3039,7 @@ components:
           - type: boolean
           - type: 'null'
           title: Llm Applied
-          description: true, когда интерпретация LLM участвовала в поиске, false при деградации.
+          description: true, когда сервер применил план LLM или выбранный моделью порядок подходящих предложений.
         assistant_message:
           anyOf:
           - type: string
