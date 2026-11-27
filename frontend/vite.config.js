@@ -13,8 +13,9 @@ export default defineConfig({
     },
   ],
   server: {
-    port: 5173,
+    port: 80,
     strictPort: true,
+    allowedHosts: ["search.hackquest.com"],
     proxy: { "/health": spring, "/v1": spring },
   },
 });
