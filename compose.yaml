@@ -5,15 +5,14 @@ services:
       target: app
     environment:
       MODEL_BASE_URL: http://model:8000
-      EVENTS_PATH: /data/events.db
-      SEARCH_LLM_URL: ${SEARCH_LLM_URL:-}
-      SEARCH_LLM_MODEL: ${SEARCH_LLM_MODEL:-softline}
-      SEARCH_LLM_TIMEOUT_MS: ${SEARCH_LLM_TIMEOUT_MS:-3000}
-      SEARCH_LLM_KEY: ${SEARCH_LLM_KEY:-}
-      CATALOG_PATH: ${CATALOG_CONTAINER_PATH:-}
+      SEARCH_SNAPSHOTS_DIR: /app/data/snapshots
+      SEARCH_EVENTS_DB: /app/data/events/events.db
+      CATALOG_PATH: /catalog.xml
+      SEMANTIC_MODE: ${SEMANTIC_MODE:-auto}
+      MODEL_QUERY_TIMEOUT_MS: ${MODEL_QUERY_TIMEOUT_MS:-200}
     volumes:
-      - search-data:/data
-      - ${CATALOG_DIR:-./backend/src/main/resources/search}:/catalog:ro
+      - snapshots:/app/data/snapshots
+      - events:/app/data/events
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:
@@ -21,7 +20,7 @@ services:
         condition: service_healthy
         required: false
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
+      test: ["CMD", "wget", "-Y", "off", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/actuator/health"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -29,7 +28,9 @@ services:
 
   model:
     profiles: [ml, dev]
-    build: ./model
+    build:
+      context: ./model
+      target: model
     expose:
       - "8000"
     healthcheck:
@@ -40,7 +41,9 @@ services:
 
   api-docs:
     profiles: [docs]
-    build: ./model
+    build:
+      context: ./model
+      target: docs
     command: ["uvicorn", "search_contract.api:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "127.0.0.1:${API_DOCS_PORT:-8001}:8000"
@@ -66,4 +69,5 @@ services:
       retries: 8
 
 volumes:
-  search-data:
+  snapshots:
+  events:

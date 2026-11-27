@@ -35,7 +35,7 @@ class Context(DTO):
     segment: Text | None = Field(None, description="Сегмент покупателя, например b2b.")
     profile_id: Text | None = Field(
         None,
-        description="ID демонстрационного профиля. Историю сессии сервер находит по session_id.",
+        description="Демонстрационный профиль hardware_buyer или software_admin. Для нового или отсутствующего ID действует обычный порядок.",
     )
 
 
@@ -67,6 +67,11 @@ class Filters(DTO):
     )
 
 
+class AssistantTurn(DTO):
+    role: Literal["user", "assistant"]
+    text: Text = Field(max_length=2000)
+
+
 class SearchRequest(DTO):
     q: Text = Field(
         description="Исходная строка покупателя, в том числе префикс при выборе подсказки."
@@ -78,6 +83,15 @@ class SearchRequest(DTO):
     filters: Filters = Field(default_factory=Filters)
     selected_target: SelectedTarget | None = Field(
         None, description="Выбранная подсказка. Сервер проверяет её ID и тип в текущем снимке."
+    )
+    strategy: Literal["standard", "llm"] = Field(
+        "standard", description="llm запрашивает интерпретацию намерения. Явные фильтры всегда обязательны."
+    )
+    assistant_history: list[AssistantTurn] | None = Field(
+        None, max_length=8, description="Предыдущие сообщения чата от старых к новым. Текущий вопрос находится в q."
+    )
+    sort: Literal["relevance", "price_asc", "price_desc"] = Field(
+        "relevance", description="Порядок прямых результатов. Точный SKU сохраняет приоритет, товары без цены идут в конце."
     )
     limit: int = Field(
         4,
@@ -103,6 +117,7 @@ class Offer(DTO):
     name: Text
     vendor: Text
     url: Link
+    image_url: Link | None = Field(None, description="Фотография предложения из каталога, если доступна.")
     available: bool = Field(description="Флаг наличия из снимка.")
     price_minor: PositiveInt | None = Field(
         description="Цена выбранного предложения в минимальных единицах. Неизвестная или нулевая цена фида возвращается как null."
@@ -122,7 +137,6 @@ class Offer(DTO):
 
 
 class Card(Offer):
-    explanation: Text | None = Field(None, description="Основание выбора предложения по данным снимка.")
     family_key: Text = Field(
         description="Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}."
     )
@@ -162,20 +176,29 @@ class AlternativeCard(Card):
 TopCard = Annotated[DirectCard | ComplementCard, Field(discriminator="role")]
 
 
+class SearchFacet(DTO):
+    id: Text
+    label: Text
+    count: NonNegativeInt = Field(description="Число подходящих прямых семейств.")
+
+
+class SearchFacets(DTO):
+    vendors: list[SearchFacet]
+    categories: list[SearchFacet]
+
+
+Purpose = Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
+                  "SERVER", "SERVER_SOFTWARE", "PRINTER", "UNKNOWN"]
+
+
 class SearchProgram(DTO):
     compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained"]
-    purpose: Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
-                     "SERVER", "SERVER_SOFTWARE", "PRINTER", "UNKNOWN"]
-    additional_purposes: list[str] = Field(default_factory=list, max_length=1)
-    join: Literal["all", "any"] = "all"
+    purpose: Purpose
+    additional_purposes: list[Purpose] = Field(max_length=1)
+    join: Literal["all", "any"]
     terms: str
-    scope: Target | None
-    models: list[str]
-    printer_features: list[str]
-    filters: Filters
-    excluded_versions: list[str] = Field(default_factory=list)
+    excluded_versions: list[str]
     excluded_licenses: list[License]
-    conflict: bool
 
 
 class ExplainRequest(DTO):
@@ -192,7 +215,7 @@ class Explanation(DTO):
 
 
 class SearchResponse(DTO):
-    program: SearchProgram | None = Field(None, description="Проверяемый план отбора SKU.")
+    program: SearchProgram | None = Field(None, description="Исполненная программа и исключения по SKU.")
     search_id: Text = Field(description="ID этого поиска, включая поиск с пустым результатом.")
     index_version: Text = Field(description="Версия снимка каталога и поискового индекса.")
     mode: Literal["lexical", "hybrid"] = Field(
@@ -220,6 +243,15 @@ class SearchResponse(DTO):
     )
     shortfall_reason: Literal["NO_DIRECT_MATCH", "NOT_ENOUGH_VERIFIED_FAMILIES"] | None = Field(
         description="null при полной четвёрке. При нуле прямых совпадений — NO_DIRECT_MATCH, при недоборе проверенных семейств — NOT_ENOUGH_VERIFIED_FAMILIES."
+    )
+    facets: SearchFacets | None = Field(
+        None, description="Варианты фильтров по прямым совпадениям. Для каждой группы учитывать все явные ограничения, кроме собственного фильтра."
+    )
+    llm_applied: bool | None = Field(
+        None, description="true, когда интерпретация LLM участвовала в поиске, false при деградации."
+    )
+    assistant_message: Text | None = Field(
+        None, max_length=2000, description="Ответ чата на основе найденных сведений или уточняющий вопрос."
     )
 
 

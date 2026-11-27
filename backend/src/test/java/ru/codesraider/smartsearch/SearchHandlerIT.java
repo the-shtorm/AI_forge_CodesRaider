@@ -172,6 +172,7 @@ class SearchHandlerIT {
             assertEquals(JSON.valueToTree(value), result.required("applied_filters").required(field));
             assertEmptyList(result, "top4");
             assertEmptyList(result, "more_results");
+            assertEmptyList(result, "alternatives");
             assertEquals(0, result.required("direct_count").asInt());
             assertShortfall(result, 0);
             JsonNode entity = request(ENTITY + "?" + field + "=" + value, null, 200);
@@ -228,6 +229,18 @@ class SearchHandlerIT {
         }
     }
 
+    @Test
+    void explicitExclusionAndUnverifiedPrinterRequirementsSurviveSelection() throws Exception {
+        var printer = search(Map.of("q", "Покажи устройство Pantum P2500W без картриджей"));
+        assertEquals(1, printer.required("top4").size());
+        assertEquals("direct", printer.required("top4").get(0).required("role").asString());
+        var unsupported = search(Map.of("q", "Нужен цветной лазерный принтер A3 Pantum P2507"));
+        assertEmptyList(unsupported, "top4");
+        assertEmptyList(unsupported, "alternatives");
+        var modelOnly = search(Map.of("q", "P2507"));
+        assertEmptyList(modelOnly, "top4");
+    }
+
     private static void assertPantumCards(JsonNode result, boolean bothDevices) {
         JsonNode cards = result.required("top4");
         Set<String> devices = bothDevices ? Set.of("P2500W", "BM1800W") : Set.of("P2500W");
@@ -274,5 +287,26 @@ class SearchHandlerIT {
         }
         assertEquals(devices, shownDevices.keySet());
         assertEquals(cartridges, shownCartridges);
+    }
+
+    @Test
+    void fileRecoveryKeepsOnlyRecoveryOrBackupOffersAndPreservesExplicitFilters() throws Exception {
+        Set<String> fixtureRecovery = new HashSet<>(BACKUP_FAMILIES.keySet());
+        fixtureRecovery.add("53955"); // Uranium Backup, same category, another vendor
+        for (String q : Set.of("Как восстановить файлы после сбоя?", "Как вернуть документы с повреждённого диска?")) {
+            var result = search(Map.of("q", q));
+            assertTrue(result.required("direct_count").asInt() > 0);
+            for (var card : result.required("top4")) {
+                assertTrue(fixtureRecovery.contains(card.required("offer_id").asString()));
+                assertTrue(card.required("reason_codes").valueStream()
+                        .anyMatch(code -> code.asString().equals("FILE_RECOVERY_CATEGORY")));
+            }
+            var conflict = search(Map.of("q", q, "filters", Map.of("category_id", "687")));
+            assertEmptyList(conflict, "top4");
+        }
+        var negated = search(Map.of("q", "Не хочу восстанавливать файлы, нужен принтер"));
+        for (var card : negated.required("top4"))
+            assertFalse(card.required("reason_codes").valueStream()
+                    .anyMatch(code -> code.asString().equals("FILE_RECOVERY_CATEGORY")));
     }
 }

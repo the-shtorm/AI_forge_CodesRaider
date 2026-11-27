@@ -10,22 +10,32 @@ import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import ru.codesraider.smartsearch.catalog.CatalogImporter;
+import ru.codesraider.smartsearch.analytics.EventStore;
+import ru.codesraider.smartsearch.modelclient.EncoderClient;
+import ru.codesraider.smartsearch.web.ApiProblem;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.*;
 
 class ProgramTest {
     @TempDir Path temp;
-    Catalog catalog;
+    SearchIndex index;
     HttpServer endpoint;
-    SearchEngine search;
+    SearchController search;
     private volatile String instruction;
     int calls;
     final JsonMapper json = JsonMapper.builder().build();
 
     @BeforeEach
     void start() throws Exception {
-        catalog = new Catalog("");
+        Path snapshots = temp.resolve("snapshots");
+        Path demo = Path.of(getClass().getResource("/search/demo.xml").toURI());
+        try (var encoder = new EncoderClient("http://127.0.0.1:1")) {
+            CatalogImporter.importSnapshot(demo, snapshots, false, encoder);
+        }
+        index = new SearchIndex(snapshots.toString(), "http://127.0.0.1:1", "lexical", 10);
+        index.open();
         endpoint = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         endpoint.createContext(
                 "/chat",
@@ -54,19 +64,18 @@ class ProgramTest {
                         "",
                         1000);
         search =
-                new SearchEngine(
-                        catalog, model, new SearchJournal(temp.resolve("events.db").toString()));
+                new SearchController(index, new EventStore(temp.resolve("events.db").toString(), json), model);
     }
 
     @AfterEach
     void close() throws Exception {
         endpoint.stop(0);
-        catalog.close();
+        index.close();
     }
 
     JsonNode run(String q, Map<String, Object> filters) throws Exception {
         return json.valueToTree(
-                search.search(new SearchEngine.Input(q, null, null, filters, null, 8)));
+                search.search(Map.of("q", q, "filters", filters, "limit", 8)));
     }
 
     @Test
@@ -148,15 +157,30 @@ class ProgramTest {
     }
 
     @Test
+    void purchaseVerbResolvesItsObjectWithoutDroppingRestrictions() throws Exception {
+        assertEquals("473582", run("Мы планируем заказать EP2-06605", Map.of()).at("/primary_target/id").asString());
+        assertEquals("526683", run("Хочу приобрести PC-211P", Map.of()).at("/primary_target/id").asString());
+        assertEquals(0, run("Мы не хотим купить EP2-06605", Map.of()).get("direct_count").asInt());
+        assertEquals(0, run("Хочу купить EP2-06605", Map.of("platform", "macOS")).get("direct_count").asInt());
+    }
+
+    @Test
+    void knownPrinterStillRequiresTheRequestedFeatures() throws Exception {
+        assertEquals(1, run("Монохромный лазерный принтер A4 Pantum P2500W", Map.of()).get("direct_count").asInt());
+        assertEquals(0, run("Цветной принтер A3 Pantum P2500W", Map.of()).get("direct_count").asInt());
+        assertEquals(0, run("Принтер Pantum P2500W без Windows", Map.of()).get("direct_count").asInt());
+    }
+
+    @Test
     void explanationOnlyUsesAShownCardAndApprovedEvidence() throws Exception {
         var response = run("EP2-06605", Map.of());
         String id = response.get("search_id").asString();
-        assertThrows(SearchEngine.Missing.class, () -> search.explain(id, "363882"));
+        assertThrows(ApiProblem.class, () -> search.explain(Map.of("search_id", id, "offer_id", "363882")));
         instruction = "{\"op\":\"availability\"}";
-        var explanation = search.explain(id, "473582");
+        var explanation = search.explain(Map.of("search_id", id, "offer_id", "473582"));
         assertEquals("llm", explanation.get("source"));
         instruction = "{\"op\":\"бесплатно\"}";
-        var fallback = search.explain(id, "473582");
+        var fallback = search.explain(Map.of("search_id", id, "offer_id", "473582"));
         assertEquals("template", fallback.get("source"));
         assertFalse(fallback.get("text").toString().contains("бесплатно"));
         assertEquals(2, calls);

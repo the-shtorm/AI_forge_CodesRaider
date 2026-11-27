@@ -1,9 +1,8 @@
 openapi: 3.1.0
 info:
   title: Умный поиск Softline · энкодер
-  description: Внутренний API для Spring Boot. GET /health сообщает о доступности HTTP-процесса. В каркасе энкодер
-    ещё не загружен. Для /ready и корректного вызова /internal/v1/embeddings предусмотрен ответ 503. Примеры со
-    статусом 200 описывают контракт готовой модели.
+  description: Внутренний API для Spring Boot. GET /health проверяет HTTP-процесс. После загрузки и прогрева CPU-модели
+    GET /ready возвращает profile_id для POST /internal/v1/embeddings. На отдельном справочном стенде модель отключена.
   version: 1.0.0
 paths:
   /health:
@@ -38,7 +37,7 @@ paths:
                 $ref: '#/components/schemas/Ready'
               example:
                 ready: true
-                profile_id: example-e5-profile
+                profile_id: e5-0f240d7cdf436ba4c4671abe97ae2b8cbbb5702a233fd334def019c5e0cb227d
                 dimension: 384
         '503':
           description: Профиль ещё недоступен
@@ -83,14 +82,14 @@ paths:
                 summary: Один запрос витрины
                 value:
                   input_type: query
-                  profile_id: example-e5-profile
+                  profile_id: e5-0f240d7cdf436ba4c4671abe97ae2b8cbbb5702a233fd334def019c5e0cb227d
                   texts:
                   - Как восстановить файлы после сбоя?
               passage:
                 summary: Пакет при импорте
                 value:
                   input_type: passage
-                  profile_id: example-e5-profile
+                  profile_id: e5-0f240d7cdf436ba4c4671abe97ae2b8cbbb5702a233fd334def019c5e0cb227d
                   texts:
                   - Средства резервного копирования
                   - Операционные системы
@@ -106,7 +105,7 @@ paths:
                 unit:
                   summary: Синтетический единичный вектор для проверки формата
                   value:
-                    profile_id: example-e5-profile
+                    profile_id: e5-0f240d7cdf436ba4c4671abe97ae2b8cbbb5702a233fd334def019c5e0cb227d
                     dimension: 384
                     vectors:
                     - - 1.0
@@ -549,6 +548,13 @@ paths:
                     status: 503
                     detail: Энкодер вернул некорректные векторы.
                     code: INVALID_MODEL_OUTPUT
+                INFERENCE_FAILED:
+                  value:
+                    type: about:blank
+                    title: Энкодер временно недоступен
+                    status: 503
+                    detail: Энкодер не смог завершить вычисление.
+                    code: INFERENCE_FAILED
 components:
   schemas:
     Embeddings:

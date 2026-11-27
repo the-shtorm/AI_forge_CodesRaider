@@ -89,15 +89,22 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--rules", required=True)
     ap.add_argument("--model", required=True)
+    ap.add_argument("--previous", help="Pre-integration compiler service on the same XML")
+    ap.add_argument("--reference", help="Upstream Spring/E5 service indexed on the same XML")
     ap.add_argument("--repeat", type=int, default=3)
     ap.add_argument("--csv", required=True, type=Path)
     args = ap.parse_args()
     fixture = DATA / "demo.xml"
-    version = "demo-" + hashlib.sha256(fixture.read_bytes()).hexdigest()[:16] + "-v1"
+    fingerprint = hashlib.sha256(fixture.read_bytes()).hexdigest()[:16]
     baseline = Baseline(fixture)
     rows = []
+    engines = [("BM25", None), ("rules", args.rules), ("model", args.model)]
+    if args.reference:
+        engines.append(("upstream", args.reference))
+    if args.previous:
+        engines.append(("previous", args.previous))
     for suite, q, relevant, url in cases():
-        for mode, host in [("BM25", None), ("rules", args.rules), ("model", args.model)]:
+        for mode, host in engines:
             times = []
             direct = []
             compiler = ""
@@ -109,10 +116,10 @@ def main():
                 start = time.perf_counter_ns()
                 if host:
                     response = search(host, q)
-                    assert response["index_version"] == version, "Different catalog snapshot"
+                    assert fingerprint in response["index_version"], "Different catalog snapshot"
                     direct = [c["offer_id"] for c in response["top4"] if c["role"] == "direct"]
                     target = (response["primary_target"] or {}).get("url", "")
-                    compiler = response["program"]["compiler"]
+                    compiler = response.get("program", {}).get("compiler", response["mode"])
                 else:
                     direct = baseline.search(q)
                     target = baseline.urls[direct[0]] if direct else ""
@@ -135,7 +142,7 @@ def main():
         writer = csv.DictWriter(file, fieldnames=rows[0], lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
-    for mode in ["BM25", "rules", "model"]:
+    for mode, _ in engines:
         subset = [r for r in rows if r["mode"] == mode]
         for k in ["hit", "top1", "ndcg", "correct_empty", "family_hit", "url_hit"]:
             vals = [r[k] for r in subset if r[k] != ""]

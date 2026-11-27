@@ -373,21 +373,21 @@
         <currencyId>RUR</currencyId>
         <description />
       </offer>
-      <offer id="477550" available="true" group_id="uranium">
+      <offer id="53955" available="true" group_id="uranium">
         <name>Uranium Backup</name>
         <vendor>Uranium</vendor>
         <vendorUrl>https://store.softline.ru/uranium-backup/</vendorUrl>
-        <url>/?kind=offer&amp;id=477550</url>
+        <url>/?kind=offer&amp;id=53955</url>
         <categoryId>1033</categoryId>
         <price>1000.0</price>
         <currencyId>RUR</currencyId>
         <description />
       </offer>
-      <offer id="53955" available="true" group_id="cyberos">
-        <name>Киберпротект ОС</name>
+      <offer id="477550" available="true" group_id="cyberfiles">
+        <name>Киберпротект Кибер Файлы</name>
         <vendor>Киберпротект</vendor>
         <vendorUrl>https://store.softline.ru/cyberprotect/</vendorUrl>
-        <url>/?kind=offer&amp;id=53955</url>
+        <url>/?kind=offer&amp;id=477550</url>
         <categoryId>687</categoryId>
         <price>1000.0</price>
         <currencyId>RUR</currencyId>
