@@ -21,6 +21,7 @@ from search_contract.schemas import (
     EventBatch,
     Filters,
     Kind,
+    PriceComparison,
     PublicHealth,
     SearchRequest,
     SearchResponse,
@@ -189,6 +190,24 @@ def get_entity(
 ):
     """Повторно применяет фильтры поиска, переданные отдельными query-параметрами.
     Известная сущность с пустым списком удовлетворяющих фильтрам вариантов даёт 200."""
+    return pending()
+
+
+@app.get(
+    "/v1/entities/offer/{id}/price-comparison",
+    operation_id="compareOfferPrice",
+    tags=["Каталог"],
+    summary="Сравнить цену товара с опубликованной ценой вендора",
+    response_model=PriceComparison,
+    responses={
+        204: {"description": "Подтверждённого сравнения для этой позиции сейчас нет."},
+        400: INVALID,
+        404: error_doc("Товар отсутствует", ENTITY_NOT_FOUND=(404, "В снимке нет товара с таким ID.")),
+        503: NO_CATALOG,
+    },
+)
+def compare_offer_price(id: Annotated[Text, Path(description="ID конкретного предложения.")]):
+    """Сравнивает цену из датированной выгрузки с публичной ценой или РРЦ той же позиции в рублях."""
     return pending()
 
 

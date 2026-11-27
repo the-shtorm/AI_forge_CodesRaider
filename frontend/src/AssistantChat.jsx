@@ -6,7 +6,7 @@ import { cardEvent, trackEvents } from "./events";
 import { appendMessage, loadChats, pruneChats, saveChats } from "./chatHistory";
 
 const greeting = "Расскажите, для чего нужна программа. Помогу подобрать ПО под вашу задачу и бюджет.";
-const suggestions = ["Офис без подписки", "Как восстановить файлы после сбоя?"];
+const suggestions = ["Офис без подписки"];
 const chatDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" });
 
 const storageKey = "softline-assistant-chats-v1";

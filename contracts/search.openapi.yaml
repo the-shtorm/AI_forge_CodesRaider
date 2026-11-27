@@ -1159,6 +1159,95 @@ paths:
                     status: 503
                     detail: Активный снимок каталога ещё не опубликован.
                     code: CATALOG_UNAVAILABLE
+  /v1/entities/offer/{id}/price-comparison:
+    get:
+      tags:
+      - Каталог
+      summary: Сравнить цену товара с опубликованной ценой вендора
+      description: Сравнивает цену из датированной выгрузки с публичной ценой или РРЦ той же позиции в рублях.
+      operationId: compareOfferPrice
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          pattern: \S
+          description: ID конкретного предложения.
+          title: Id
+        description: ID конкретного предложения.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PriceComparison'
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '204':
+          description: Подтверждённого сравнения для этой позиции сейчас нет.
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '404':
+          description: Товар отсутствует
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                ENTITY_NOT_FOUND:
+                  value:
+                    type: about:blank
+                    title: Товар отсутствует
+                    status: 404
+                    detail: В снимке нет товара с таким ID.
+                    code: ENTITY_NOT_FOUND
+        '503':
+          description: Каталог недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CATALOG_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Каталог недоступен
+                    status: 503
+                    detail: Активный снимок каталога ещё не опубликован.
+                    code: CATALOG_UNAVAILABLE
   /v1/events:
     post:
       tags:
@@ -2743,6 +2832,60 @@ components:
       - type
       - offer_id
       title: OrderLine
+    PriceComparison:
+      properties:
+        vendor:
+          type: string
+          minLength: 1
+          pattern: \S
+          title: Vendor
+        source_url:
+          type: string
+          pattern: ^https://
+          title: Source Url
+        reference_type:
+          type: string
+          enum:
+          - vendor_price
+          - rrp
+          title: Reference Type
+        currency:
+          type: string
+          const: RUB
+          title: Currency
+        store_price_minor:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Store Price Minor
+        vendor_price_minor:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Vendor Price Minor
+        difference_minor:
+          type: integer
+          title: Difference Minor
+          description: Цена вендора минус цена нашего каталога, в копейках.
+        catalog_date:
+          type: string
+          format: date
+          title: Catalog Date
+        checked_at:
+          type: string
+          format: date-time
+          title: Checked At
+      additionalProperties: false
+      type: object
+      required:
+      - vendor
+      - source_url
+      - reference_type
+      - currency
+      - store_price_minor
+      - vendor_price_minor
+      - difference_minor
+      - catalog_date
+      - checked_at
+      title: PriceComparison
     PublicHealth:
       properties:
         status:

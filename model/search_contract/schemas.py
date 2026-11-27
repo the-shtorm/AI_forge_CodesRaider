@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, Field, NonNegativeInt, PositiveInt, model_validator
@@ -22,6 +23,18 @@ class SelectedTarget(DTO):
     target_id: Text = Field(
         description="Строковый ID из ответа /v1/suggest, в пространстве выбранного kind."
     )
+
+
+class PriceComparison(DTO):
+    vendor: Text
+    source_url: Annotated[str, Field(pattern=r"^https://")]
+    reference_type: Literal["vendor_price", "rrp"]
+    currency: Literal["RUB"]
+    store_price_minor: PositiveInt
+    vendor_price_minor: PositiveInt
+    difference_minor: int = Field(description="Цена вендора минус цена нашего каталога, в копейках.")
+    catalog_date: date
+    checked_at: AwareDatetime
 
 
 class Suggestion(SelectedTarget):

@@ -9,6 +9,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.text.Normalizer;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -74,6 +76,7 @@ public class SearchIndex implements AutoCloseable {
     private ProductSpelling spelling;
     private CatalogNames catalogNames;
     private Path catalog;
+    private LocalDate catalogDate;
     private String version;
     private String profile;
     private boolean legacy;
@@ -149,6 +152,11 @@ public class SearchIndex implements AutoCloseable {
                 }
             }
             catalog = db;
+            try {
+                catalogDate = LocalDate.parse(manifest.path("date").asString("").split("[T ]", 2)[0]);
+            } catch (DateTimeParseException ignored) {
+                // Demo and undated snapshots have no published catalog price date.
+            }
             version = active;
             spelling = new ProductSpelling(reader);
             searcher = candidateSearcher;
@@ -176,6 +184,7 @@ public class SearchIndex implements AutoCloseable {
     public String version() { return version; }
     String namedFamily(String query) { return catalogNames == null ? null : catalogNames.family(query); }
     public Path catalogPath() { return catalog; }
+    LocalDate catalogDate() { return catalogDate; }
     public boolean semanticReady() { return compatible && ready(); }
     private static String sqliteUrl(Path db) { return "jdbc:sqlite:" + db.toUri().toASCIIString() + "?mode=ro"; }
 

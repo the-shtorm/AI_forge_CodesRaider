@@ -2,6 +2,7 @@ package ru.codesraider.smartsearch.search;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import ru.codesraider.smartsearch.analytics.EventStore;
@@ -20,6 +21,7 @@ import java.util.regex.Pattern;
 public class SearchController {
     private final SearchIndex index;
     private final EventStore events;
+    private final VendorPrices vendorPrices = new VendorPrices();
     private static final Pattern MODEL_CODE =
             Pattern.compile("(?iu)\\b[a-z][a-z-]*\\d{3,}[a-z\\d-]*\\b");
     private static final Pattern CATALOG_CODE =
@@ -634,6 +636,22 @@ public class SearchController {
             }
             return result;
         }
+    }
+
+    @GetMapping("/entities/offer/{id}/price-comparison")
+    public ResponseEntity<VendorPrices.Comparison> priceComparison(@PathVariable("id") String id)
+            throws SQLException {
+        SearchInput.text(id, "id");
+        Row offer;
+        try (var db = open()) {
+            var target = db.entity("offer", id);
+            if (target == null) throw new ApiProblem(
+                    HttpStatus.NOT_FOUND, "ENTITY_NOT_FOUND", "Товар отсутствует в активном снимке.");
+            if (index.catalogDate() == null) return ResponseEntity.noContent().build();
+            offer = db.variants(target, Map.of()).stream().findFirst().orElse(null);
+        }
+        var comparison = vendorPrices.compare(offer, index.catalogDate());
+        return comparison == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(comparison);
     }
     @PostMapping(path = "/explain", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> explain(@RequestBody Map<String, Object> request) {

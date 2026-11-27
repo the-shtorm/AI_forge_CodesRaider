@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { formatOfferAttribute, priceLabel } from "./ProductCard";
 import ProductImage from "./ProductImage";
+import PriceComparison from "./PriceComparison";
 
 function plainDescription(value) {
   if (!value) return "";
@@ -44,6 +45,7 @@ export default function OfferDetail({ item, saved, add }) {
           {saved ? "В корзине" : "В корзину"}
         </button>}
       </div>
+      {canBuy && item.currency === "RUB" && item.sku && <PriceComparison key={item.offer_id} offerId={item.offer_id} />}
       <section className="offer-description">
         <h2>Описание</h2>
         <p>{description || "Описание отсутствует в каталоге."}</p>

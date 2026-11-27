@@ -212,6 +212,12 @@ h1, h2, h3, p, ul, dl, dd { margin: 0; }
 .offer-content { min-width: 0; display: grid; gap: 16px; }
 .offer-price { display: grid; gap: 4px; }
 .offer-price .price { font-size: clamp(1.4rem, 3vw, 2rem); }
+.offer-comparison { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; }
+.offer-comparison h2 { font-size: 1rem; }
+.offer-comparison dl { display: grid; gap: 4px; font-size: .875rem; }
+.offer-comparison dl div { display: flex; justify-content: space-between; gap: 12px; }
+.offer-comparison dd { font-weight: 650; white-space: nowrap; }
+.offer-saving { color: var(--accent); font-weight: 650; }
 .offer-description { display: grid; gap: 6px; }
 .offer-description h2 { font-size: 1.1rem; }
 .offer-description p { line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
