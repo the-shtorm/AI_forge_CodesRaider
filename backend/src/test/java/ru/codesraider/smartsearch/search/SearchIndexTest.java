@@ -193,6 +193,20 @@ class SearchIndexTest {
     }
 
     @Test
+    void semanticSuggestionComparesDistinctPurposesAndCanAbstain() {
+        var descriptions = new TaskMeanings(
+                List.of(QueryPlan.Purpose.PHOTO_EDITOR, QueryPlan.Purpose.PHOTO_EDITOR,
+                        QueryPlan.Purpose.VIDEO_EDITOR, QueryPlan.Purpose.UNKNOWN),
+                List.of(unit(0), unit(0), unit(1), unit(2)));
+        assertEquals(QueryPlan.Purpose.PHOTO_EDITOR, descriptions.nearest(unit(0)));
+        assertNull(descriptions.nearest(unit(2)));
+        assertNull(descriptions.nearest(unit(3)));
+        var nearTie = new TaskMeanings(List.of(QueryPlan.Purpose.PHOTO_EDITOR, QueryPlan.Purpose.UNKNOWN),
+                List.of(new float[] {1, 0}, new float[] {.99f, .141f}));
+        assertNull(nearTie.nearest(new float[] {1, 0}));
+    }
+
+    @Test
     void duplicateFamiliesReceiveOneReciprocalRankContributionPerList() {
         var actual = SearchIndex.fuse(List.of("a", "a", "b"), List.of("b","c"));
         assertEquals(List.of("b", "a", "c"), actual);

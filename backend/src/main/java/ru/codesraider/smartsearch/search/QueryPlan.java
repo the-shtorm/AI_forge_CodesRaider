@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> additionalPurposes, String join) {
     enum Purpose {
         WORDS("", ""),
-        BACKUP("бэкап|бекап|backup|резервн[а-я]* коп|копи[юяий]|дубликат", "документ|файл|диск"),
+        BACKUP("бэкап|бекап|backup|резервн[а-я]* коп", "документ|файл|диск"),
         WEBINAR("вебинар|(?:онлайн|веб)[ -]семинар|видеовстреч|видеоконференц|онлайн[- ]встреч|лекци|презентаци.*слушател",
                 "встреч|слушател|презентаци"),
         REMOTE_ACCESS("удаленн[а-я]* (?:доступ|администрир|управлен)|управля[а-я]* .*компьютер|подключ[а-я]* .*рабоч[а-я]* стол|экран[а-я]* другого"
@@ -41,7 +41,7 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         int evidence(String query) {
             // A virtual machine can be the object of a backup, rather than a request for a hypervisor.
             if (this == VIRTUALIZATION) query = VM_BACKUP.matcher(query).replaceAll(" ");
-            if (strong.matcher(query).find()) return 2;
+            if (strong.matcher(query).find() || TaskGoals.matches(this, query)) return 2;
             return weak.matcher(query).find() ? 1 : 0;
         }
 
@@ -87,6 +87,26 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         return out.toString();
     }
 
+    /** Only expand an interior missing letter when the catalog vocabulary gives one destination. */
+    static String missingLetter(String word, Set<String> aliases) {
+        if (!word.matches("[a-z]{4,47}")) return null;
+        String match = omittedLetter(word, "server") ? "сервер" : null;
+        for (String alias : aliases) {
+            int space = alias.indexOf(' ');
+            String head = space < 0 ? alias : alias.substring(0, space);
+            if (!omittedLetter(word, head)) continue;
+            if (match != null && !match.equals(alias)) return null;
+            match = alias;
+        }
+        return match;
+    }
+
+    private static boolean omittedLetter(String word, String candidate) {
+        return candidate.length() == word.length() + 1 && word.charAt(0) == candidate.charAt(0)
+                && word.charAt(word.length() - 1) == candidate.charAt(candidate.length() - 1)
+                && CatalogNames.oneEdit(word, candidate, true);
+    }
+
     static String canonical(String q, Set<String> aliases) {
         if (aliases.contains(q) || INTENTS.containsKey(q)) return q;
         // Recover visually identical Cyrillic characters inside a Latin product name.
@@ -122,6 +142,7 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         return normalized.length() <= 512
                         && normalized.replaceAll("(?U)\\b(?:rack|zip|rar|ocr|ethernet|vm|backup)\\b", "").matches("[а-я -]*")
                         && !UNSUPPORTED_DETAIL.matcher(normalized).find()
+                        && !TaskGoals.literalRequest(normalized)
                         && aliases.stream().noneMatch(normalized::contains);
     }
 
@@ -140,6 +161,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         String normalized = sentenceText(terms);
         String exclusions = normalized.contains("чтобы") && Purpose.UPS.evidence(normalized) == 2
                 ? normalized.replaceAll("(?U)\\bне выключал[а-я]*\\b", "") : normalized;
+        if (TaskGoals.matches(Purpose.OCR, normalized))
+            exclusions = TaskGoals.MANUAL_ENTRY.matcher(exclusions).replaceAll("");
         if (Pattern.compile("(?U)\\b(не|без|кроме|исключая)\\b").matcher(exclusions).find())
             return new QueryPlan("rules", Purpose.UNKNOWN, normalized, List.of(), "all");
         Purpose purpose = INTENTS.get(normalized);
@@ -166,7 +189,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             long capabilities = Arrays.stream(Purpose.values()).filter(op -> op.evidence(normalized) > 0).count();
             boolean clearIntent = (!compound || capabilities == 1) && best == 2 && grounded.size() == 1;
             if (clearIntent && (!requestModel || !llm.configured() || compound))
-                return new QueryPlan("rules", grounded.getFirst(), normalized, List.of(), "all");
+                return new QueryPlan(TaskGoals.matches(grounded.getFirst(), normalized) ? "task_rules" : "rules",
+                        grounded.getFirst(), normalized, List.of(), "all");
             if (compound && best == 2) {
                 var clauses = normalized.split(" (?:или|и) ");
                 if (clauses.length == 2) {
@@ -208,11 +232,11 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
     }
 
     boolean interpretedTask() {
-        return compiler.equals("llm_paraphrase") || compiler.equals("llm_rewrite");
+        return compiler.equals("task_rules") || compiler.equals("llm_paraphrase") || compiler.equals("llm_rewrite") || compiler.equals("llm_semantic");
     }
 
     boolean appliedModel() {
-        return compiler.equals("llm") || interpretedTask();
+        return compiler.equals("llm") || (interpretedTask() && !compiler.equals("task_rules"));
     }
 
     boolean isSinglePurpose() {

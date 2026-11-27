@@ -503,6 +503,11 @@ final class SearchCatalog implements AutoCloseable {
     private static String interpretedPredicate(QueryPlan.Purpose purpose) {
         String category = predicate(purpose);
         String identity = switch (purpose) {
+            case BACKUP -> """
+                    (lower(o.name) LIKE '%backup%' OR o.name LIKE '%экап%' OR o.name LIKE '%екап%')
+                    AND lower(o.name) NOT LIKE '%plug-in%' AND o.name NOT LIKE '%исковое пространство%'
+                    AND o.name NOT LIKE '%ехподдержк%' AND o.name NOT LIKE '%бновлени%'
+                    """;
             case PHOTO_EDITOR -> """
                     lower(o.name) LIKE '%photo editor%' OR o.name LIKE '%оторедактор%' OR o.name LIKE '%отоМАСТЕР%'
                     OR (o.vendor_id='cyberlink-corp' AND lower(o.name) LIKE '% photodirector %')
@@ -531,6 +536,13 @@ final class SearchCatalog implements AutoCloseable {
                  AND NOT EXISTS (SELECT 1 FROM offer_param p WHERE p.offer_id=o.offer_id
                      AND p.field_key='license_type' AND p.value_norm IN ('модуль','дополнение','плагин')))
                 """;
+    }
+
+    boolean hasPurposeAmongTopCards(List<Row> direct, List<QueryPlan.Purpose> purposes) throws SQLException {
+        Where where = new Where();
+        where.oneOf("o.offer_id", direct.stream().limit(4).map(row -> row.str("offer_id")).toList());
+        where.add("(" + String.join(" OR ", purposes.stream().map(SearchCatalog::interpretedPredicate).toList()) + ")");
+        return !rows("SELECT 1 FROM offer o WHERE " + where.sql() + " LIMIT 1", where.args).isEmpty();
     }
 
     boolean hasInterpretablePurpose(QueryPlan.Purpose purpose) throws SQLException {

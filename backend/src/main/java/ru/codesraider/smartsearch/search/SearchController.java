@@ -74,6 +74,7 @@ public class SearchController {
         String reason = "LEXICAL_MATCH", mode = "lexical";
         List<String> ids = null, families = null;
         boolean includeServerSoftware = false;
+        String spelling = null;
         String missingModel = null;
         Requirements constraints = new Requirements();
         constraints.task = CatalogTask.parse(q);
@@ -121,6 +122,13 @@ public class SearchController {
                             && !CATALOG_CODE.matcher(terms).matches()) {
                         String family = index.namedFamily(terms);
                         if (family != null) target = db.byKey(family);
+                    }
+                }
+                if (target == null && constraints.task == null) {
+                    spelling = spellingIfUnknown(terms, aliases);
+                    if (spelling != null) {
+                        terms = spelling;
+                        target = db.alias(terms, category);
                     }
                 }
                 plan = target == null && constraints.task == null && !input.requestsFileRecovery()
@@ -171,12 +179,14 @@ public class SearchController {
                         default -> "CATEGORY_MATCH";
                     };
         } else if (ids == null && constraints.task != null) {
+            if (constraints.task.purpose() != QueryPlan.Purpose.WORDS)
+                plan = new QueryPlan("task_rules", constraints.task.purpose(), terms, List.of(), "all");
             reason = "PRODUCT_TYPE_MATCH";
         } else if (ids == null && !conflict && (input.requestsCompleteServer() || terms.equals("сервер") || terms.equals("серверы"))) {
             ids = db.serverOfferIds();
             reason = "PRODUCT_TYPE_MATCH";
             // Only the bare term is ambiguous. "Готовый сервер" still requests a device.
-            includeServerSoftware = (q.equals("сервер") || q.equals("серверы"))
+            includeServerSoftware = (q.equals("сервер") || q.equals("серверы") || ("сервер".equals(spelling) && !q.contains(" ")))
                     && ("software_admin".equals(input.context().get("profile_id"))
                         || "369".equals(filters.get("category_id"))
                         || "369".equals(input.context().get("category_id")));
@@ -208,7 +218,7 @@ public class SearchController {
         var selection = new Selection(target, ids,
                 input.requestsSupport(),
                 fileRecovery, fileRecovery && input.requestsStandaloneFileRecovery(), includeServerSoftware,
-                target == null && ids == null && !fileRecovery ? plan : null, constraints);
+                target == null && ids == null && !fileRecovery && constraints.task == null ? plan : null, constraints);
         List<Row> direct = conflict ? List.of() : db.representatives(filters, selection, families);
         if (direct.isEmpty() && !conflict && selection.program() != null && plan.isSinglePurpose()
                 && !db.hasPurpose(plan.purpose())) {
@@ -223,19 +233,24 @@ public class SearchController {
             reason = mode.equals("hybrid") ? "HYBRID_MATCH" : "LEXICAL_MATCH";
             direct = db.representatives(filters, selection, families);
         }
-        // A matching family may have no SKU that satisfies the buyer's filters.
-        if (direct.isEmpty() && !conflict && constraints.task == null && families != null && selection.program() != null
+        // Reassess an empty result or an off-topic relevance ranking. Explicit targets bypass this path.
+        if (!conflict && (direct.isEmpty() || input.sort().equals("relevance"))
+                && constraints.task == null && families != null && selection.program() != null
                 && plan.purpose() == QueryPlan.Purpose.WORDS && plan.compiler().equals("rules")) {
-            var interpreted = TaskInterpreter.interpret(terms, aliases, db, model);
+            var interpreted = TaskInterpreter.interpret(terms, aliases, db, model, ranking, direct);
             if (interpreted != null) {
-                plan = interpreted;
-                selection = new Selection(null, null, selection.support(), false, false, false, plan, constraints);
-                // Both facets and cards now execute the same verified operation and original SKU filters.
-                ranking = null;
-                families = null;
-                mode = "lexical";
-                reason = "PURPOSE_MATCH";
-                direct = db.representatives(filters, selection, null);
+                var alternative = new Selection(null, null, selection.support(), false, false, false, interpreted, constraints);
+                var eligible = db.representatives(filters, alternative, null);
+                if (direct.isEmpty() || !eligible.isEmpty()) {
+                    diagnostics.put("interpretation_trigger", direct.isEmpty() ? "empty" : "purpose_mismatch");
+                    plan = interpreted;
+                    selection = alternative;
+                    ranking = null;
+                    families = null;
+                    mode = "lexical";
+                    reason = "PURPOSE_MATCH";
+                    direct = eligible;
+                }
             }
         }
         if (selection.program() != null && plan.isSinglePurpose() && direct.size() > 1
@@ -428,6 +443,12 @@ public class SearchController {
         return conflict;
     }
 
+    private String spellingIfUnknown(String text, Set<String> aliases) throws IOException {
+        String suggestion = QueryPlan.missingLetter(text, aliases);
+        if (suggestion == null || !index.exactNames(text).isEmpty()) return null;
+        return index.rank(text, null, null, false).families().isEmpty() ? suggestion : null;
+    }
+
     @GetMapping("/suggest")
     public List<Map<String, Object>> suggest(
             @RequestParam("q") String q,
@@ -438,7 +459,20 @@ public class SearchController {
         if (category != null) SearchInput.text(category, "category_id");
         if (profile != null) SearchInput.text(profile, "profile_id");
         try (var db = open()) {
-            return db.suggest(prefix, category, profile, index.suggestNames(prefix));
+            var literal = db.suggest(prefix, category, profile, index.suggestNames(prefix));
+            if (!prefix.matches("[a-z]{4,47}") || !db.exact(prefix).isEmpty()) return literal;
+            var aliases = db.aliasTerms(category);
+            if (aliases.contains(prefix)) return literal;
+            String correction = spellingIfUnknown(prefix, aliases);
+            if (correction == null) return literal;
+            var corrected = db.suggest(correction, category, profile, index.suggestNames(correction));
+            if (literal.isEmpty()) return corrected;
+            // A shorter input can also be a real brand prefix (sever → Severcart).
+            var choices = new LinkedHashSet<Map<String, Object>>();
+            choices.add(literal.getFirst());
+            corrected.stream().limit(2).forEach(choices::add);
+            choices.addAll(literal);
+            return choices.stream().limit(6).toList();
         }
     }
 

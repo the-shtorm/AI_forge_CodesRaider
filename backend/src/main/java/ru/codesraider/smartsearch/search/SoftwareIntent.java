@@ -57,7 +57,7 @@ interface SoftwareIntent extends CatalogTask {
         if (BACKUP_ACTION.matcher(q).find() && SERVER.matcher(q).find() && SCHEDULE.matcher(q).find()
                 && covers(q, BACKUP_ACTION, SERVER, SCHEDULE, BACKUP_CONTEXT, PROGRAM, EDUCATION)) {
             boolean education = EDUCATION.matcher(q).find();
-            return where -> scheduledServerBackup(where, education);
+            return new ScheduledServerBackup(education);
         }
         if (CAMERA.matcher(q).find() && RECORD.matcher(q).find() && PROGRAM.matcher(q).find()
                 && !CAMERA_WITH_PROGRAM.matcher(q).find()
@@ -105,6 +105,11 @@ interface SoftwareIntent extends CatalogTask {
                 AND o.name NOT LIKE '%аспознаван%' AND o.name NOT LIKE '%налитик%'
                 AND lower(o.name) NOT LIKE '%recognition%' AND lower(o.name) NOT LIKE '%analytics%'
                 """);
+    }
+
+    record ScheduledServerBackup(boolean education) implements SoftwareIntent {
+        @Override public QueryPlan.Purpose purpose() { return QueryPlan.Purpose.BACKUP; }
+        @Override public void constrain(SearchCatalog.Where where) { scheduledServerBackup(where, education); }
     }
 
     private static void scheduledServerBackup(SearchCatalog.Where where, boolean education) {

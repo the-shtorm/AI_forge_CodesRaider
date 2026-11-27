@@ -1,0 +1,9 @@
+{
+  "backup": "backup|бэкап|rubackup|кибер бэкап|резервн.*копир|veeam|bacula",
+  "ocr": "finereader|pdfelement.*professional|\\bocr\\b|распознаван.*текст",
+  "archive": "winrar|7-zip|winzip|архиватор",
+  "photo": "photodirector|фотомастер|paintshop|photo editor|photoshop|фоторедактор|фотошоп",
+  "video": "filmora|powerdirector|видеомонтаж|видеоредактор|video editor|premiere pro|vegas pro",
+  "meet": "trueconf|webinar|вебинар|мтс линк|zoom meetings|webex meetings|видеоконференц",
+  "exclude": "техподдерж|техническ[а-я ]*поддерж|плагин|plug-?in|обновлени|продлени|дополнени|расширение лицензии|ai tokens|только для обновления"
+}

@@ -82,7 +82,7 @@ class ProgramTest {
 
     @Test
     void emptyTextSearchUsesOnlyTheConfirmedOperationAndKeepsSkuFilters() throws Exception {
-        String q = "Хранить запасной экземпляр базы";
+        String q = "Сохранить содержимое базы";
         instruction = "Yes.";
         var hit = run(q, Map.of());
         assertEquals("llm_paraphrase", hit.at("/program/compiler").asString());
@@ -99,7 +99,7 @@ class ProgramTest {
     }
 
     @Test
-    void anUnavailableTextMatchStillAllowsAConfirmedTaskWithEligibleProducts() throws Exception {
+    void reinterpretsOnlyUnusableOrOffTopicTextMatches() throws Exception {
         Path feed = temp.resolve("books-and-editors.xml"), snapshots = temp.resolve("books-and-editors");
         Files.writeString(feed, """
                 <yml_catalog><shop><categories>
@@ -108,7 +108,7 @@ class ProgramTest {
                   <offer id="11" group_id="11" available="false"><name>Руководство: как склеить видеофрагменты</name>
                     <url>https://example.org/p/11/</url><vendor>Studio</vendor><vendorUrl>https://example.org/studio/</vendorUrl>
                     <categoryId>10</categoryId><price>100</price><currencyId>RUR</currencyId></offer>
-                  <offer id="22" group_id="22" available="true"><name>Studio Video Editor Pro</name>
+                  <offer id="22" group_id="22" available="true"><name>Studio Video Editor Pro</name><description>Наложить титры на ролик</description>
                     <url>https://example.org/p/22/</url><vendor>Studio</vendor><vendorUrl>https://example.org/studio/</vendorUrl>
                     <categoryId>495</categoryId><price>200</price><currencyId>RUR</currencyId></offer>
                 </offers></shop></yml_catalog>
@@ -119,18 +119,31 @@ class ProgramTest {
             bookIndex.open();
             var controller = new SearchController(bookIndex, new EventStore(temp.resolve("books.db").toString(), json), model);
             String query = "Склеить видеофрагменты";
+            instruction = "{\"tool\":\"unknown\"}";
             var unfiltered = json.valueToTree(controller.search(Map.of("q", query)));
             assertEquals("11", unfiltered.at("/top4/0/offer_id").asString());
-            assertEquals(0, calls);
-
-            instruction = "yes";
+            assertFalse(unfiltered.get("llm_applied").asBoolean());
+            instruction = "{\"tool\":\"video editing software\"}";
+            var corrected = json.valueToTree(controller.search(Map.of("q", query)));
+            assertEquals("llm_rewrite", corrected.at("/program/compiler").asString());
+            assertEquals("22", corrected.at("/top4/0/offer_id").asString());
+            assertEquals("495", corrected.at("/facets/categories/0/id").asString());
+            var scoped = json.valueToTree(controller.search(Map.of("q", query, "filters", Map.of("category_id", "10"))));
+            assertEquals("11", scoped.at("/top4/0/offer_id").asString());
+            assertFalse(scoped.get("llm_applied").asBoolean());
+            assertEquals(3, calls);
+            instruction = "Yes.";
             var filtered = json.valueToTree(controller.search(Map.of("q", query, "filters", Map.of("available_only", true))));
             assertEquals("llm_paraphrase", filtered.at("/program/compiler").asString());
             assertEquals(1, filtered.get("direct_count").asInt());
             assertEquals("22", filtered.at("/top4/0/offer_id").asString());
             assertTrue(filtered.at("/top4/0/available").asBoolean());
             assertEquals("495", filtered.at("/facets/categories/0/id").asString());
-            assertEquals(1, calls);
+            assertEquals(4, calls);
+            var suitable = json.valueToTree(controller.search(Map.of("q", "Наложить титры на ролик")));
+            assertEquals("22", suitable.at("/top4/0/offer_id").asString());
+            assertFalse(suitable.get("llm_applied").asBoolean());
+            assertEquals(4, calls);
         }
     }
 
@@ -186,7 +199,7 @@ class ProgramTest {
 
     @Test
     void openEndedTranslationMustNameAKnownToolForTheOriginalSubject() throws Exception {
-        String q = "Застраховать базу от утраты";
+        String q = "Подстраховать базу на всякий случай";
         instruction = "{\"tool\":\"Backup software\"}";
         var result = run(q, Map.of());
         assertEquals("llm_rewrite", result.at("/program/compiler").asString());
@@ -202,16 +215,64 @@ class ProgramTest {
     void rejectedAndMalformedParaphrasesKeepTheOriginalResult() throws Exception {
         for (String reply : List.of("no", "yes, if you buy something else", "invalid")) {
             instruction = reply;
-            var result = run("Хранить запасной экземпляр базы", Map.of());
+            var result = run("Сохранить содержимое базы", Map.of());
             assertEquals("WORDS", result.at("/program/purpose").asString());
             assertFalse(result.get("llm_applied").asBoolean());
             assertEquals(0, result.get("direct_count").asInt());
         }
         assertEquals(3, calls);
         run("Склеить видеофрагменты", Map.of()); // Demo snapshot has no video editors.
-        run("Хранить запасной экземпляр базы без шифрования", Map.of());
+        run("Сохранить содержимое базы без шифрования", Map.of());
         run("Купить питание для ребенка", Map.of());
         assertEquals(3, calls);
+    }
+
+    @Test
+    void explicitTaskBeatsAnIncidentalServerAndPreservesRestrictions() throws Exception {
+        String query = "Делать запасной экземпляр содержимого сервера по расписанию";
+        var found = run(query, Map.of());
+        assertEquals("BACKUP", found.at("/program/purpose").asString());
+        assertEquals("task_rules", found.at("/program/compiler").asString());
+        assertFalse(found.get("llm_applied").asBoolean());
+        assertTrue(found.get("direct_count").asInt() > 0);
+        assertEquals(0, run(query, Map.of("vendor_id", "pantum")).get("direct_count").asInt());
+        assertEquals("BACKUP", run("Дубликат документов на случай сбоя", Map.of()).at("/program/purpose").asString());
+        assertEquals(0, calls);
+    }
+
+    @Test
+    void manualEntryIsAnOcrGoalOnlyWhenTheRestOfTheTaskSupportsIt() throws Exception {
+        String query = "Перенести текст со снимка без ручного набора";
+        try (var db = new SearchCatalog(index.catalogPath())) {
+            var ocr = QueryPlan.compile(query.toLowerCase(Locale.ROOT), Set.of(), db, null);
+            assertEquals(QueryPlan.Purpose.OCR, ocr.purpose());
+            assertEquals(QueryPlan.Purpose.UNKNOWN,
+                    QueryPlan.compile(query.toLowerCase(Locale.ROOT) + " без шифрования", Set.of(), db, null).purpose());
+        }
+        assertFalse(TaskGoals.matches(QueryPlan.Purpose.ARCHIVER, "извлечь архивную справку"));
+    }
+
+    @Test
+    void askingForSuppliesOrAServiceDoesNotSelectATool() throws Exception {
+        for (String query : List.of("Купить фотобумагу для печати портрета",
+                "Заказать нотариальную копию документа", "Записаться на фотосессию с размытым фоном")) {
+            var result = run(query, Map.of());
+            assertEquals("WORDS", result.at("/program/purpose").asString());
+            assertFalse(result.get("llm_applied").asBoolean());
+            assertEquals(0, result.get("direct_count").asInt());
+        }
+        assertEquals(0, calls);
+    }
+
+    @Test
+    void shortTyposShareSearchAndSuggestDestinations() throws Exception {
+        assertEquals("121231", run("asra", Map.of()).at("/primary_target/id").asString());
+        assertEquals("121231", search.suggest("asra", null, null).getFirst().get("target_id"));
+        assertEquals(run("сервер", Map.of()).at("/top4/0/offer_id"), run("sever", Map.of()).at("/top4/0/offer_id"));
+        assertEquals(0, run("asra", Map.of("vendor_id", "pantum")).get("direct_count").asInt());
+        assertNull(QueryPlan.missingLetter("asra", Set.of("astra linux", "astra cloud")));
+        assertNull(QueryPlan.missingLetter("asr4", Set.of("astra linux")));
+        assertEquals(0, calls);
     }
 
     @Test
