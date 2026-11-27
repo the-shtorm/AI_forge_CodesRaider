@@ -46,6 +46,19 @@ public class EventStore {
         this.json = json;
     }
 
+    public boolean isWritable() {
+        try {
+            return transaction(sql -> {
+                // Exercise both tables and SQLite write permissions without changing any rows.
+                sql.update("UPDATE search_log SET search_id=search_id WHERE 0");
+                sql.update("UPDATE event SET event_id=event_id WHERE 0");
+                return true;
+            });
+        } catch (ApiProblem unavailable) {
+            return false;
+        }
+    }
+
     private synchronized Database database() {
         if (database != null) return database;
         try {

@@ -77,7 +77,7 @@ docker compose run --rm --no-deps -v "/absolute/path/Mindbox.yml.gz.xml:/catalog
 docker compose --profile dev up --build -d
 ```
 
-PowerShell принимает путь к файлу в форме `D:/path/Mindbox.yml.gz.xml:/catalog.xml:ro`. После импорта нового снимка выполните `docker compose restart app`, чтобы Spring открыл его. Снимки и журнал хранятся в именованных томах `snapshots` и `events`. Поле `search_ready` в `GET /health` показывает, открыт ли снимок.
+PowerShell принимает путь к файлу в форме `D:/path/Mindbox.yml.gz.xml:/catalog.xml:ro`. После импорта нового снимка выполните `docker compose restart app`, чтобы Spring открыл его. Снимки и журнал хранятся в именованных томах `snapshots` и `events`. Поле `search_ready` в `GET /health` показывает, открыт ли снимок и доступен ли журнал для записи. Docker проверяет эти же условия через `/actuator/health/readiness`.
 
 | Сервис | Адрес | Назначение |
 |---|---|---|
