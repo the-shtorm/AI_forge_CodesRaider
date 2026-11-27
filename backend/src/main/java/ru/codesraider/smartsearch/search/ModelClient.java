@@ -47,6 +47,29 @@ class ModelClient {
         return choices.contains(op) ? op : null;
     }
 
+    boolean confirmsTool(String tool, String query) {
+        String question = "Determine if " + tool + " would accomplish the user's requested task. Answer yes or no.";
+        String answer = complete(question, query, null, 4);
+        if (answer == null) return false;
+        String decision = answer.strip();
+        return decision.equalsIgnoreCase("yes") || decision.equalsIgnoreCase("yes.");
+    }
+
+    /** An unrelated product need never be forced into a catalog class. The caller accepts only exact tool names. */
+    String toolName(String query) {
+        String task = """
+                Translate the buyer's goal into the common English name of the tool they would use
+                themselves. Give a short product type, not a brand. Any kind of product is allowed.
+                For content, a service or no identifiable tool, write "unknown".
+                Examples: послушать музыку с телефона -> music player; вызвать мастера на дом -> unknown.
+                Return a JSON object with the field tool.
+                """;
+        var parsed = generate(task, query, objectSchema(Map.of("tool", Map.of("type", "string"))));
+        if (parsed == null || parsed.size() != 1 || !parsed.path("tool").isString()) return null;
+        String name = parsed.get("tool").asString().strip().toLowerCase(Locale.ROOT);
+        return name.length() <= 64 ? name : null;
+    }
+
     record Instructions(List<QueryPlan.Purpose> find, String join) {}
 
     Instructions compile(String task, String query, List<String> operations) {
@@ -113,36 +136,27 @@ class ModelClient {
     }
 
     private JsonNode generate(String task, Object data, Map<String, Object> schema) {
+        String content = complete(task, data, schema, 80);
+        if (content == null) return null;
+        try {
+            JsonNode parsed = json.readTree(content);
+            return parsed != null && parsed.isObject() ? parsed : null;
+        } catch (RuntimeException invalid) {
+            return null;
+        }
+    }
+
+    private String complete(String task, Object data, Map<String, Object> schema, int maxTokens) {
         if (endpoint == null || !slots.tryAcquire()) return null;
         try {
-            var payload =
-                    Map.of(
-                            "model",
-                            model,
-                            "temperature",
-                            0,
-                            "max_tokens",
-                            80,
-                            "messages",
-                            List.of(
-                                    Map.of("role", "system", "content", task),
-                                    Map.of(
-                                            "role",
-                                            "user",
-                                            "content",
-                                            json.writeValueAsString(data))),
-                            "response_format",
-                            Map.of(
-                                    "type",
-                                    "json_schema",
-                                    "json_schema",
-                                    Map.of(
-                                            "name",
-                                            "instruction",
-                                            "strict",
-                                            true,
-                                            "schema",
-                                            schema)));
+            var payload = new LinkedHashMap<String, Object>();
+            payload.put("model", model);
+            payload.put("temperature", 0);
+            payload.put("max_tokens", maxTokens);
+            payload.put("messages", List.of(Map.of("role", "system", "content", task),
+                    Map.of("role", "user", "content", json.writeValueAsString(data))));
+            if (schema != null) payload.put("response_format", Map.of("type", "json_schema",
+                    "json_schema", Map.of("name", "instruction", "strict", true, "schema", schema)));
             var request =
                     HttpRequest.newBuilder(endpoint)
                             .header("Content-Type", "application/json")
@@ -153,10 +167,9 @@ class ModelClient {
             if (!key.isBlank()) request.header("Authorization", "Bearer " + key);
             var result = client.send(request.build(), HttpResponse.BodyHandlers.ofString());
             if (result.statusCode() != 200) return null;
-            String content =
-                    json.readTree(result.body()).at("/choices/0/message/content").asString("");
-            JsonNode parsed = json.readTree(content);
-            return parsed != null && parsed.isObject() ? parsed : null;
+            var choice = json.readTree(result.body()).at("/choices/0");
+            if ("length".equals(choice.path("finish_reason").asString(""))) return null;
+            return choice.at("/message/content").asString("");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return null;

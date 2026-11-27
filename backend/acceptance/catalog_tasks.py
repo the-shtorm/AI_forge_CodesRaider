@@ -72,6 +72,10 @@ def measure(cases, endpoint, fingerprint, products, ideals, repeat):
             if not result["index_version"].startswith(fingerprint):
                 raise ValueError("The feed and the running catalog snapshot differ")
             ids = [card["offer_id"] for card in result["top4"] if card["role"] == "direct"]
+            if case["intent"] == "absent":
+                yield {**case, "repeat": repetition, "top1": None, "hit4": None, "ndcg4": None,
+                       "empty": int(not ids), "ids": "|".join(ids), "ms": latency}
+                continue
             bits = [int(relevant(case["intent"], *products[id_])) for id_ in ids]
             yield {**case, "repeat": repetition, "top1": int(bool(bits and bits[0])),
                    "hit4": int(any(bits)), "ndcg4": dcg(bits) / ideals[case["intent"]] if ideals[case["intent"]] else 0,
@@ -102,6 +106,9 @@ def main():
         splits[row["split"]].append(row)
     for split, samples in splits.items():
         first = [r for r in samples if r["repeat"] == 0]
+        if split == "abstention":
+            print(split, "correctly empty", sum(r["empty"] for r in first), "out of", len(first))
+            continue
         latency = sorted(r["ms"] for r in samples)
         print(split, "Hit@1", sum(r["top1"] for r in first), "Hit@4", sum(r["hit4"] for r in first),
               "nDCG@4", round(statistics.mean(r["ndcg4"] for r in first), 3),
