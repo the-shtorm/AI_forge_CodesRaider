@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { requestAssistant } from "../src/assistant.js";
+import { cardTarget, entityHref } from "../src/api.js";
 import { upsellCards } from "../src/upsell.js";
 
 const direct = { offer_id: "printer", name: "Принтер", role: "direct" };
@@ -13,13 +14,20 @@ const related = {
   recommendation_kind: "catalog_pick", recommendation_reason: "В каталоге",
 };
 
-test("legacy duplicate retains its top4 event coordinates; new cards keep their upsell positions", () => {
+test("duplicate recommendations use their upsell event coordinates", () => {
   const response = { top4: [direct, verified], upsell: [
     verified, { ...verified, offer_id: "unverified", checks: [{ result: "unknown" }] },
     { ...verified, offer_id: "orphan", anchor_offer_id: "unknown" }, related,
   ] };
   assert.deepEqual(upsellCards(response).map(card => [card.item.offer_id, card.block, card.position]),
-    [[verified.offer_id, "top4", 2], ["related", "upsell", 4]]);
+    [[verified.offer_id, "upsell", 1], ["related", "upsell", 4]]);
+});
+
+test("family navigation uses the family ID and preserves the representative in the card", () => {
+  const family = { ...direct, family_key: "family/acme/plus", target_kind: "family", target_id: "acme/plus" };
+  assert.equal(entityHref(cardTarget(family)), "/?kind=family&id=acme%2Fplus");
+  assert.equal(family.offer_id, "printer");
+  assert.equal(entityHref(cardTarget(direct)), "/?kind=offer&id=printer");
 });
 
 test("assistant retains separate recommendations and event coordinates when top4 is full", async t => {
@@ -40,4 +48,11 @@ test("a query without a match can show independent catalog picks; an empty block
   const miss = { top4: [], upsell: [related] };
   assert.ok(upsellCards(miss).some(({ item }) => !item.anchor_offer_id && item.recommendation_kind === "catalog_pick"));
   assert.deepEqual(upsellCards({ top4: [direct], upsell: [] }), []);
+});
+
+test("curated recommendations use at most eight distinct groups", () => {
+  const curated = Array.from({ length: 10 }, (_, index) => ({ ...related, offer_id: `offer${index}`,
+    family_key: `family/${Math.max(1, index)}`, recommendation_kind: "curated_fallback" }));
+  const cards = upsellCards({ top4: [], upsell: curated });
+  assert.deepEqual(cards.map(card => card.position), [1, 3, 4, 5, 6, 7, 8, 9]);
 });

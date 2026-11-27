@@ -58,6 +58,10 @@ export function entityHref(target, filters) {
   return `/?${params}`;
 }
 
+export function cardTarget(item) {
+  return { kind: item.target_kind ?? "offer", id: item.target_id ?? item.offer_id };
+}
+
 export function safeLink(url) {
   if (typeof url !== "string" || /[\s\\]/u.test(url)) return undefined;
   return url.startsWith("/") && !url.startsWith("//") ? url : undefined;

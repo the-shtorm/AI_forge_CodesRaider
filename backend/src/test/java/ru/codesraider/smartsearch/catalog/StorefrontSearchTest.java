@@ -23,6 +23,61 @@ class StorefrontSearchTest {
     @TempDir Path temp;
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    @Test
+    void searchesStandaloneOffersAndPreservesFamilyNavigation() throws Exception {
+        Path feed = temp.resolve("feed.xml"), snapshots = temp.resolve("snapshots");
+        String standalone = offer(201, 1, "alpha", 2, 20, "Термобутылка с логотипом, 500 мл.")
+                .replace(" group_id=\"1\"", "").replace("SKU-201", "BTL-005");
+        Files.writeString(feed, """
+                <yml_catalog><shop><categories><category id="2">Аксессуары</category>
+                <category id="3">Электроника</category></categories><offers>
+                """ + standalone + offer(202, 72, "beta", 2, 50, "Acme Studio (годовая лицензия)")
+                        .replace("</offer>", "<param name=\"Версия\">1.0</param></offer>")
+                + offer(203, 72, "beta", 2, 80, "Acme Studio (бессрочная лицензия)")
+                        .replace("</offer>", "<param name=\"Версия\">2.0</param></offer>")
+                + offer(204, 73, "alpha", 3, 50, "Мышь SKU-204").replace(" group_id=\"73\"", "")
+                + "</offers></shop></yml_catalog>");
+        String offline = "http://127.0.0.1:1";
+        try (var encoder = new EncoderClient(offline);
+             var index = new SearchIndex(snapshots.toString(), offline, "lexical", 10)) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+            index.open();
+            var controller = new SearchController(index, new EventStore(temp.resolve("events.db").toString(), JSON));
+            for (String query : List.of("термобутылка", "Термобутылка с логотипом, 500 мл.", "BTL-005")) {
+                JsonNode result = JSON.valueToTree(controller.search(Map.of("q", query)));
+                assertEquals(1, result.path("direct_count").asInt(), query);
+                assertEquals("offer/201", result.at("/top4/0/family_key").asString());
+                assertEquals("offer", result.at("/top4/0/result_kind").asString());
+                assertEquals("201", result.at("/top4/0/target_id").asString());
+                assertEquals(1, result.at("/top4/0/offer_count").asInt());
+            }
+            JsonNode family = JSON.valueToTree(controller.search(Map.of("q", "Acme Studio")));
+            assertEquals(1, family.path("direct_count").asInt());
+            assertEquals("family", family.at("/top4/0/result_kind").asString());
+            assertEquals("72", family.at("/top4/0/target_id").asString());
+            assertEquals(2, family.at("/top4/0/offer_count").asInt());
+            JsonNode entity = JSON.valueToTree(controller.entity("family", "72", Map.of()));
+            assertEquals(List.of("202", "203"), entity.path("offers").valueStream()
+                    .map(item -> item.path("offer_id").asString()).toList());
+            JsonNode hardware = JSON.valueToTree(controller.search(Map.of("q", "мышь")));
+            assertEquals("family", hardware.at("/top4/0/target_kind").asString());
+            assertEquals("alpha~sku-204", hardware.at("/top4/0/target_id").asString());
+            JsonNode exactTitle = JSON.valueToTree(controller.search(Map.of("q", "Acme Studio (годовая лицензия)")));
+            assertEquals("offer", exactTitle.at("/top4/0/target_kind").asString());
+            assertEquals("202", exactTitle.at("/top4/0/target_id").asString());
+            JsonNode version = JSON.valueToTree(controller.search(Map.of("q", "Acme Studio", "filters", Map.of("version", "2.0"))));
+            assertEquals("offer", version.at("/top4/0/target_kind").asString());
+            assertEquals("203", version.at("/top4/0/target_id").asString());
+            assertTrue(controller.suggest("термобут", null, null).stream()
+                    .anyMatch(item -> "offer".equals(item.get("kind")) && "201".equals(item.get("target_id"))));
+            JsonNode selected = JSON.valueToTree(controller.search(Map.of("q", "Acme Studio",
+                    "selected_target", Map.of("kind", "offer", "target_id", "203"))));
+            assertEquals("offer", selected.at("/top4/0/target_kind").asString());
+            assertEquals("203", selected.at("/top4/0/target_id").asString());
+            assertEquals("family/72", selected.at("/top4/0/family_key").asString());
+        }
+    }
+
     private static String offer(int id, int family, String vendor, int category, int price) {
         return offer(id, family, vendor, category, price, "Редактор " + id);
     }

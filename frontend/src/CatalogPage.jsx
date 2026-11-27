@@ -3,7 +3,7 @@ import Filters from "./Filters";
 import ProductCard from "./ProductCard";
 import RelatedProducts from "./RelatedProducts";
 import ResultExplanation from "./ResultExplanation";
-import { api, entityHref, filterParams, sessionId, targetLabels } from "./api";
+import { api, cardTarget, entityHref, filterParams, sessionId, targetLabels } from "./api";
 import { catalogHref, readCatalogRoute, tabs } from "./catalogRoute";
 import { cardEvent, trackEvents } from "./events";
 import { upsellCards } from "./upsell";
@@ -133,7 +133,7 @@ export default function CatalogPage({ route, go, navigate }) {
   const facets = data?.facets ?? emptyFacets;
   const top = entries(data?.top4 ?? [], "top4");
   const direct = [...top.filter(({ item }) => item.role === "direct"), ...entries(data?.more_results ?? [], "more_results")];
-  const recommendations = upsellCards(data).slice(0, 4);
+  const recommendations = upsellCards(data);
   const total = data?.total ?? direct.length;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const current = data?.page ?? Math.min(route.page, pageCount);
@@ -171,7 +171,7 @@ export default function CatalogPage({ route, go, navigate }) {
     const pageRows = [...entries(data.top4, "top4").filter(({ item }) => item.role === "direct"), ...entries(data.more_results, "more_results")]
       .slice((current - 1) * pageSize, current * pageSize);
     if (current === 1) {
-      pageRows.push(...upsellCards(data).slice(0, 4));
+      pageRows.push(...upsellCards(data));
       pageRows.push(...entries(data.alternatives ?? [], "alternatives"));
     }
     trackEvents(data.session, pageRows.map(({ item, block, position }) => cardEvent("impression", item, block, position, data.search_id)));
@@ -193,10 +193,11 @@ export default function CatalogPage({ route, go, navigate }) {
     return <div className="product-grid" data-size={items.length}>
       {items.map(entry => {
         const { item } = entry;
-        const target = { kind: "offer", id: item.offer_id };
+        const target = cardTarget(item);
+        const action = target.kind === "family" ? "К семейству" : "К товару";
         return <ProductCard key={item.offer_id} item={item} action={
           <a className="button secondary card-link" href={entityHref(target, data.applied_filters)}
-            aria-label={`К товару ${item.name}`} onClick={event => visit(event, target, entry)}>К товару</a>
+            aria-label={`${action} ${item.name}`} onClick={event => visit(event, target, entry)}>{action}</a>
         } explanation={data.search_id && <ResultExplanation key={data.search_id} searchId={data.search_id} offerId={item.offer_id} />} />;
       })}
     </div>;
@@ -236,13 +237,13 @@ export default function CatalogPage({ route, go, navigate }) {
           {data && route.tab === "products" && <>
             {current === 1 && primary && <a className="primary-target" href={entityHref(primary, data.applied_filters)}
               onClick={event => visit(event, primary)}>{`Открыть: ${primary.label ?? targetLabels[primary.kind]}`}</a>}
-            {rows.length ? grid(rows) : <p className="result-state">Подходящих товаров не найдено.</p>}
+            {rows.length ? grid(rows) : <p className="result-state">{route.q ? "Точных совпадений не найдено." : "Подходящих товаров не найдено."}</p>}
             <Pagination current={current} count={pageCount} href={page => catalogHref({ ...route, page })} navigate={navigate} />
             {current === 1 && <>
-              <RelatedProducts heading={recommendations.some(({ anchor }) => anchor) ? "Покупают вместе" : "Предложения каталога"}
-                items={recommendations.map(({ item }) => item)}
-                onVisit={(event, target) => visit(event, target, recommendations.find(({ item }) => item.offer_id === target.id), {})} />
               {!!data.alternatives?.length && <section className="result-group"><h2>Альтернативы</h2>{grid(entries(data.alternatives, "alternatives"))}</section>}
+              <RelatedProducts heading={recommendations.every(({ anchor }) => anchor) ? "Покупают вместе" : "Возможно, вас заинтересует"}
+                items={recommendations.map(({ item }) => item)}
+                onVisit={(event, target, picked) => visit(event, target, recommendations.find(({ item }) => item === picked), {})} />
             </>}
             {data.direct_count > total && <p className="summary-text">Показаны первые {total} результатов. Уточните запрос или фильтры.</p>}
           </>}

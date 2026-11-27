@@ -70,6 +70,7 @@ CREATE TABLE offer (
 );
 CREATE INDEX offer_by_sku ON offer(sku_norm);
 CREATE INDEX offer_by_family ON offer(family_key);
+CREATE INDEX offer_by_card ON offer(coalesce(family_key,entity_key));
 CREATE INDEX offer_by_vendor_category ON offer(vendor_id, category_id, family_key);
 CREATE INDEX offer_by_category ON offer(category_id, family_key);
 -- Optional rows from the labelled synthetic merchandising dataset.
