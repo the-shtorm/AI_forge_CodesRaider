@@ -3,11 +3,11 @@ import { entityHref } from "./api";
 import { priceLabel } from "./ProductCard";
 import ProductImage from "./ProductImage";
 
-export default function RelatedProducts({ items, filters, onVisit }) {
+export default function RelatedProducts({ heading = "С этим товаром ещё покупают", items, filters, onVisit }) {
   const title = useId();
   if (!items.length) return null;
   return <section className="result-group" aria-labelledby={title}>
-    <h2 id={title}>С этим товаром ещё покупают</h2>
+    <h2 id={title}>{heading}</h2>
     <div className="related-grid">
       {items.slice(0, 4).map(item => {
         const target = { kind: "offer", id: item.offer_id };

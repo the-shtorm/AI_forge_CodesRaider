@@ -20,6 +20,7 @@ export default function AssistantChat({ navigate, profileId }) {
   const request = useRef(null);
   const conversation = useRef(null);
   const input = useRef(null);
+  const launcher = useRef(null);
   const lastImpression = useRef(null);
   const activeChat = chats.find(chat => chat.id === activeId);
   const messages = activeChat?.messages ?? [];
@@ -48,6 +49,9 @@ export default function AssistantChat({ navigate, profileId }) {
   useEffect(() => {
     if (expanded && conversation.current) conversation.current.scrollTop = conversation.current.scrollHeight;
   }, [activeChat, expanded, pending]);
+  useEffect(() => {
+    if (expanded) input.current?.focus({ preventScroll: true });
+  }, [expanded]);
 
   useEffect(() => {
     const answer = activeChat?.messages.at(-1);
@@ -58,6 +62,11 @@ export default function AssistantChat({ navigate, profileId }) {
       trackEvents(search.session, answer.products.map(item => cardEvent("impression", item, "top4", item.position, search.searchId)));
     }
   }, [activeChat, expanded]);
+
+  function collapse() {
+    setExpanded(false);
+    requestAnimationFrame(() => launcher.current?.focus({ preventScroll: true }));
+  }
 
   function chooseChat(id) {
     setActiveId(id || null);
@@ -101,15 +110,19 @@ export default function AssistantChat({ navigate, profileId }) {
     }
   }
 
-  return (
-    <aside className="assistant-panel" aria-labelledby="assistant-title">
+  return <>
+    {!expanded && <button className="button primary assistant-launcher" type="button" ref={launcher}
+      aria-controls="assistant-chat" aria-expanded={false} onClick={() => setExpanded(true)}>
+      <span aria-hidden="true">✦</span>Подбор с ИИ
+    </button>}
+    <aside className="assistant-panel" id="assistant-chat" aria-labelledby="assistant-title" hidden={!expanded}
+      onKeyDown={event => { if (event.key === "Escape") collapse(); }}>
       <div className="assistant-heading">
         <span className="assistant-icon" aria-hidden="true">✦</span>
-        <h2 id="assistant-title">Чат-помощник</h2>
-        <button className="text-button assistant-toggle" type="button" aria-expanded={expanded} aria-controls="assistant-content"
-          onClick={() => setExpanded(!expanded)}>{expanded ? "Свернуть" : "Развернуть"}</button>
+        <h2 id="assistant-title">Подбор с ИИ</h2>
+        <button className="text-button assistant-toggle" type="button" onClick={collapse}>Свернуть</button>
       </div>
-      <div className="assistant-body" id="assistant-content" hidden={!expanded}>
+      <div className="assistant-body">
         {!!chats.length && <div className="assistant-history">
           <label className="sr-only" htmlFor="assistant-chat-history">История чатов</label>
           <select id="assistant-chat-history" disabled={pending} value={activeChat?.id ?? ""} onChange={event => chooseChat(event.target.value)}>
@@ -153,5 +166,5 @@ export default function AssistantChat({ navigate, profileId }) {
         <button className="button primary" type="submit" disabled={pending || !draft.trim()}>Отправить</button>
       </form>
     </aside>
-  );
+  </>;
 }

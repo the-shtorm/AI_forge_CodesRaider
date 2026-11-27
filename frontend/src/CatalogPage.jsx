@@ -8,8 +8,7 @@ import { catalogHref, readCatalogRoute, tabs, taskQueries } from "./catalogRoute
 import { cardEvent, trackEvents } from "./events";
 
 const emptyFacets = { vendors: [], categories: [] };
-const searchPageSize = 4;
-const catalogPageSize = 8;
+const pageSize = 20;
 
 function SearchBox({ route, submit, update }) {
   const [draft, setDraft] = useState(route.q);
@@ -108,7 +107,7 @@ function readProducts(requestKey, signal) {
     const params = filterParams(route.filters);
     params.set("sort", route.sort);
     params.set("page", String(route.page));
-    params.set("page_size", String(catalogPageSize));
+    params.set("page_size", String(pageSize));
     return api(`/v1/catalog?${params}`, { signal });
   }
   const session = sessionId();
@@ -135,10 +134,10 @@ export default function CatalogPage({ route, go, navigate }) {
   const direct = [...top.filter(({ item }) => item.role === "direct"), ...entries(data?.more_results ?? [], "more_results")];
   const complements = top.filter(({ item }) => item.role === "complement");
   const total = data?.total ?? direct.length;
-  const pageCount = Math.max(1, Math.ceil(total / (route.q ? searchPageSize : catalogPageSize)));
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const current = data?.page ?? Math.min(route.page, pageCount);
   const rows = route.q
-    ? direct.slice((current - 1) * searchPageSize, current * searchPageSize) : entries(data?.offers ?? [], "");
+    ? direct.slice((current - 1) * pageSize, current * pageSize) : entries(data?.offers ?? [], "");
   const primary = data?.primary_target;
 
   function update(change) {
@@ -169,7 +168,7 @@ export default function CatalogPage({ route, go, navigate }) {
     if (shown.current.has(marker)) return;
     shown.current.add(marker);
     const pageRows = [...entries(data.top4.filter(item => item.role === "direct"), "top4"), ...entries(data.more_results, "more_results")]
-      .slice((current - 1) * searchPageSize, current * searchPageSize);
+      .slice((current - 1) * pageSize, current * pageSize);
     if (current === 1) {
       pageRows.push(...entries(data.top4, "top4").filter(({ item }) => item.role === "complement"));
       pageRows.push(...entries(data.alternatives ?? [], "alternatives"));
@@ -243,12 +242,12 @@ export default function CatalogPage({ route, go, navigate }) {
             {current === 1 && primary && <a className="primary-target" href={entityHref(primary, data.applied_filters)}
               onClick={event => visit(event, primary)}>{`Открыть: ${primary.label ?? targetLabels[primary.kind]}`}</a>}
             {rows.length ? grid(rows) : <p className="result-state">Подходящих товаров не найдено.</p>}
+            <Pagination current={current} count={pageCount} href={page => catalogHref({ ...route, page })} navigate={navigate} />
             {current === 1 && <>
-              <RelatedProducts items={complements.map(({ item }) => item)}
+              <RelatedProducts heading="Покупают вместе" items={complements.map(({ item }) => item)}
                 onVisit={(event, target) => visit(event, target, complements.find(({ item }) => item.offer_id === target.id), {})} />
               {!!data.alternatives?.length && <section className="result-group"><h2>Альтернативы</h2>{grid(entries(data.alternatives, "alternatives"))}</section>}
             </>}
-            <Pagination current={current} count={pageCount} href={page => catalogHref({ ...route, page })} navigate={navigate} />
             {data.direct_count > total && <p className="summary-text">Показаны первые {total} результатов. Уточните запрос или фильтры.</p>}
           </>}
           {data && route.tab !== "products" && (facets[route.tab].length ? <ul className="facet-results">
