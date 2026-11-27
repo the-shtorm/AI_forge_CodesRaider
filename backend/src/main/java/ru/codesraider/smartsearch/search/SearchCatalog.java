@@ -542,25 +542,57 @@ final class SearchCatalog implements AutoCloseable {
             throws SQLException {
         Where w = candidateWhere(filters, selection, families);
         // Select one SKU per family in SQL before reading the result across JDBC.
-        var hits =
-                rows(
-                        "SELECT * FROM (SELECT "
-                                + COLUMNS
-                                + "," + GROUP_KEY + " AS card_key,row_number() OVER (PARTITION BY " + GROUP_KEY + " ORDER BY "
-                                + TIER
-                                + ","
-                                + PURCHASE_ORDER
-                                + ",o.offer_id) AS rn FROM offer o JOIN entity v ON"
-                                + " v.entity_key='vendor/'||o.vendor_id WHERE "
-                                + w.sql()
-                                + ") WHERE rn=1 ORDER BY tier,card_key",
-                        w.args);
+        var hits = rows(representativeSql(w) + " ORDER BY tier,card_key", w.args);
         for (var row : hits) row.put("family_key", row.remove("card_key"));
         if (hits.isEmpty()) return hits;
         int best = hits.getFirst().number("tier");
         hits.removeIf(row -> row.number("tier") != best);
         if (families != null) orderByFamilies(hits, families, selection.fileRecovery());
         return hits;
+    }
+
+    private static String representativeSql(Where where) {
+        return """
+                SELECT * FROM (SELECT %s,%s AS card_key,
+                    row_number() OVER (PARTITION BY %s ORDER BY %s,%s,o.offer_id) AS rn
+                    FROM offer o JOIN entity v ON v.entity_key='vendor/'||o.vendor_id WHERE %s)
+                WHERE rn=1
+                """.formatted(COLUMNS, GROUP_KEY, GROUP_KEY, TIER, PURCHASE_ORDER, where.sql());
+    }
+
+    Map<String, Object> browse(Map<String, Object> filters, String sort, int requestedPage, int size)
+            throws SQLException {
+        Where where = where(filters);
+        int total = rows("SELECT count(DISTINCT " + GROUP_KEY + ") AS total FROM offer o WHERE "
+                + where.sql(), where.args).getFirst().number("total");
+        int page = Math.min(requestedPage, Math.max(1, (total + size - 1) / size));
+        String order = switch (sort) {
+            case "price_asc" -> "(price_minor IS NULL OR price_minor<=0),price_minor ASC,card_key";
+            case "price_desc" -> "(price_minor IS NULL OR price_minor<=0),price_minor DESC,card_key";
+            default -> "tier,card_key";
+        };
+        where.args.add(size);
+        where.args.add((page - 1) * size);
+        var offers = rows(representativeSql(where) + " ORDER BY " + order + " LIMIT ? OFFSET ?", where.args);
+        return Map.of("offers", offers.stream().map(Row::offer).toList(), "total", total,
+                "page", page, "page_size", size,
+                "facets", Map.of("categories", browseFacet(filters, "category"), "vendors", browseFacet(filters, "vendor")));
+    }
+
+    private List<Row> browseFacet(Map<String, Object> filters, String kind) throws SQLException {
+        String field = kind + "_id";
+        var remaining = new LinkedHashMap<>(filters);
+        remaining.remove(field);
+        Where where = where(remaining);
+        where.args.add(kind);
+        return rows("""
+                WITH counts AS (
+                    SELECT o.%s AS id,count(DISTINCT %s) AS count FROM offer o
+                    WHERE %s GROUP BY o.%s
+                )
+                SELECT c.id,e.name AS label,c.count FROM counts c
+                JOIN entity e ON e.id=c.id AND e.kind=? ORDER BY e.name,c.id
+                """.formatted(field, GROUP_KEY, where.sql(), field), where.args);
     }
 
     static void orderByFamilies(List<Row> hits, List<String> families, boolean fileRecovery) {
@@ -643,11 +675,13 @@ final class SearchCatalog implements AutoCloseable {
                 anchors.stream().map(r -> r.str("family_key")).collect(Collectors.toSet());
         List<Map<String, Object>> cards = new ArrayList<>();
         for (Row anchor : anchors) {
+            String anchorFamily = anchor.str("family_key");
+            if (anchorFamily == null) continue;
             for (var relation :
                     rows(
                             "SELECT * FROM relation WHERE anchor_family=? ORDER BY"
                                     + " candidate_family,rule_id",
-                            List.of(anchor.str("family_key")))) {
+                            List.of(anchorFamily))) {
                 String family = relation.str("candidate_family");
                 if (used.contains(family)) continue;
                 Row candidateFamily = byKey(family);

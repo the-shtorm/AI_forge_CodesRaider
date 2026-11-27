@@ -8,6 +8,7 @@ services:
       SEARCH_SNAPSHOTS_DIR: /app/data/snapshots
       SEARCH_EVENTS_DB: /app/data/events/events.db
       CATALOG_PATH: /catalog.xml
+      SEED_DEMO_CATALOG: ${SEED_DEMO_CATALOG:-true}
       SEMANTIC_MODE: ${SEMANTIC_MODE:-auto}
       MODEL_QUERY_TIMEOUT_MS: ${MODEL_QUERY_TIMEOUT_MS:-200}
     volumes:
@@ -60,6 +61,7 @@ services:
     volumes:
       - ./frontend/index.html:/workspace/frontend/index.html:ro
       - ./frontend/public:/workspace/frontend/public:ro
+      - ./frontend/src:/workspace/frontend/src:ro
     depends_on:
       app:
         condition: service_healthy

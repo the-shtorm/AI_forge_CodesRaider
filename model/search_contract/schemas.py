@@ -187,6 +187,20 @@ class SearchFacets(DTO):
     categories: list[SearchFacet]
 
 
+class CatalogQuery(Filters):
+    page: int = Field(1, ge=1, le=2147483647, description="Страница за пределами выдачи округляется до последней.")
+    page_size: int = Field(8, ge=1, le=48)
+    sort: Literal["relevance", "price_asc", "price_desc"] = "relevance"
+
+
+class CatalogPage(DTO):
+    offers: list[Offer]
+    total: NonNegativeInt
+    page: PositiveInt
+    page_size: PositiveInt
+    facets: SearchFacets
+
+
 Purpose = Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
                   "SERVER", "SERVER_SOFTWARE", "PRINTER", "OCR", "VIDEO_EDITOR", "PHOTO_EDITOR",
                   "VIRTUALIZATION", "ARCHIVER", "UPS", "SWITCH", "MONITOR", "UNKNOWN"]
@@ -266,6 +280,10 @@ class Entity(DTO):
     )
     children: list[Target] = Field(
         description="Для вендора, категории и collection — переходы внутри выбранной области."
+    )
+    related_offers: list[ComplementCard] = Field(
+        default_factory=list, max_length=4,
+        description="Для карточки товара — товары с подтверждённой совместимостью."
     )
 
 

@@ -13,6 +13,8 @@ from search_contract import examples as ex
 from search_contract.schemas import (
     AnalyticsPeriod,
     AnalyticsResponse,
+    CatalogPage,
+    CatalogQuery,
     Entity,
     ExplainRequest,
     Explanation,
@@ -138,6 +140,19 @@ def suggest_targets(
 ):
     """Выбор мышью или Enter передаёт kind и target_id в selected_target обычного поиска.
     Клиент сохраняет исходный q. Вызов подсказок не создаёт отправленный поиск."""
+    return pending()
+
+
+@app.get(
+    "/v1/catalog",
+    operation_id="browseCatalog",
+    tags=["Каталог"],
+    summary="Получить страницу каталога",
+    response_model=CatalogPage,
+    responses={400: INVALID, 503: NO_CATALOG},
+)
+def browse_catalog(query: Annotated[CatalogQuery, Query()]):
+    """Страницы уникальных семейств и фасеты по фильтрам активного снимка."""
     return pending()
 
 

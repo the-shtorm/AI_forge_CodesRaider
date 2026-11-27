@@ -377,6 +377,30 @@ public class SearchController {
         }
     }
 
+    @GetMapping("/catalog")
+    public Map<String, Object> catalog(@RequestParam Map<String, String> query) throws SQLException {
+        var params = new LinkedHashMap<>(query);
+        String sort = params.remove("sort");
+        if (sort == null) sort = "relevance";
+        if (!Set.of("relevance", "price_asc", "price_desc").contains(sort)) throw SearchInput.invalid("sort");
+        int page = catalogPageValue(params.remove("page"), "page", 1, Integer.MAX_VALUE);
+        int size = catalogPageValue(params.remove("page_size"), "page_size", 8, 48);
+        try (var db = open()) {
+            return db.browse(SearchInput.filters(params, true), sort, page, size);
+        }
+    }
+
+    private static int catalogPageValue(String raw, String field, int defaultValue, int maximum) {
+        if (raw == null) return defaultValue;
+        try {
+            int value = Integer.parseInt(raw);
+            if (value < 1 || value > maximum) throw SearchInput.invalid(field);
+            return value;
+        } catch (NumberFormatException invalid) {
+            throw SearchInput.invalid(field);
+        }
+    }
+
     @GetMapping("/entities/{kind}/{id}")
     public Map<String, Object> entity(
             @PathVariable("kind") String kind,
@@ -402,6 +426,10 @@ public class SearchController {
             if (kind.equals("offer") || kind.equals("family")) {
                 var variants = db.variants(target, scope);
                 result.put("offers", db.detailedOffers(variants));
+                if (kind.equals("offer") && !variants.isEmpty()) {
+                    result.put("related_offers", db.complements(
+                            List.of(variants.getFirst()), Map.of(), 4, new ArrayList<>()));
+                }
                 if (kind.equals("offer")
                         && !variants.isEmpty()
                         && variants.getFirst().get("family_key") != null) {

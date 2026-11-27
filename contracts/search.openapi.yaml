@@ -625,6 +625,225 @@ paths:
                     status: 503
                     detail: Активный снимок каталога ещё не опубликован.
                     code: CATALOG_UNAVAILABLE
+  /v1/catalog:
+    get:
+      tags:
+      - Каталог
+      summary: Получить страницу каталога
+      description: Страницы уникальных семейств и фасеты по фильтрам активного снимка.
+      operationId: browseCatalog
+      parameters:
+      - name: category_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Обязательный раздел каталога.
+          title: Category Id
+        description: Обязательный раздел каталога.
+      - name: vendor_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Ключ вендора из каталога.
+          title: Vendor Id
+        description: Ключ вендора из каталога.
+      - name: platform
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Требуемая ОС или платформа.
+          title: Platform
+        description: Требуемая ОС или платформа.
+      - name: version
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            minLength: 1
+            pattern: \S
+          - type: 'null'
+          description: Версия продукта как строка, например 5.0.
+          title: Version
+        description: Версия продукта как строка, например 5.0.
+      - name: license_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - new
+            - renewal
+            - upgrade
+            type: string
+          - type: 'null'
+          description: Покупка новой лицензии, продление или обновление.
+          title: License Type
+        description: Покупка новой лицензии, продление или обновление.
+      - name: term_months
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Срок лицензии в месяцах.
+          title: Term Months
+        description: Срок лицензии в месяцах.
+      - name: device_count
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Сколько устройств должна покрывать лицензия.
+          title: Device Count
+        description: Сколько устройств должна покрывать лицензия.
+      - name: seat_count
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            exclusiveMinimum: 0
+          - type: 'null'
+          description: Сколько рабочих мест должна покрывать лицензия.
+          title: Seat Count
+        description: Сколько рабочих мест должна покрывать лицензия.
+      - name: available_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: При true исключить недоступные предложения, включая резерв.
+          default: false
+          title: Available Only
+        description: При true исключить недоступные предложения, включая резерв.
+      - name: max_price_minor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: integer
+            minimum: 0
+          - type: 'null'
+          description: Бюджет всей запрошенной конфигурации в минимальных единицах валюты.
+          title: Max Price Minor
+        description: Бюджет всей запрошенной конфигурации в минимальных единицах валюты.
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^[A-Z]{3}$
+          description: Валюта бюджета по ISO 4217. Для рублей сумма дана в копейках.
+          default: RUB
+          title: Currency
+        description: Валюта бюджета по ISO 4217. Для рублей сумма дана в копейках.
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 2147483647
+          minimum: 1
+          description: Страница за пределами выдачи округляется до последней.
+          default: 1
+          title: Page
+        description: Страница за пределами выдачи округляется до последней.
+      - name: page_size
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 48
+          minimum: 1
+          default: 8
+          title: Page Size
+      - name: sort
+        in: query
+        required: false
+        schema:
+          enum:
+          - relevance
+          - price_asc
+          - price_desc
+          type: string
+          default: relevance
+          title: Sort
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogPage'
+        default:
+          description: Другие ошибки используют тот же формат Problem Details.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '501':
+          description: Справочный стенд
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CONTRACT_ONLY:
+                  value:
+                    type: about:blank
+                    title: Справочный стенд
+                    status: 501
+                    detail: Формат запроса принят. Обработчик реализуется в Spring Boot.
+                    code: CONTRACT_ONLY
+        '400':
+          description: Ошибка входных данных
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                INVALID_REQUEST:
+                  value:
+                    type: about:blank
+                    title: Ошибка входных данных
+                    status: 400
+                    detail: Проверьте типы полей и ограничения запроса.
+                    code: INVALID_REQUEST
+        '503':
+          description: Каталог недоступен
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                CATALOG_UNAVAILABLE:
+                  value:
+                    type: about:blank
+                    title: Каталог недоступен
+                    status: 503
+                    detail: Активный снимок каталога ещё не опубликован.
+                    code: CATALOG_UNAVAILABLE
   /v1/entities/{kind}/{id}:
     get:
       tags:
@@ -1549,6 +1768,36 @@ components:
       - position
       - type
       title: CardClick
+    CatalogPage:
+      properties:
+        offers:
+          items:
+            $ref: '#/components/schemas/Offer'
+          type: array
+          title: Offers
+        total:
+          type: integer
+          minimum: 0.0
+          title: Total
+        page:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Page
+        page_size:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Page Size
+        facets:
+          $ref: '#/components/schemas/SearchFacets'
+      additionalProperties: false
+      type: object
+      required:
+      - offers
+      - total
+      - page
+      - page_size
+      - facets
+      title: CatalogPage
     CompatibilityCheck:
       properties:
         field:
@@ -1956,6 +2205,13 @@ components:
           type: array
           title: Children
           description: Для вендора, категории и collection — переходы внутри выбранной области.
+        related_offers:
+          items:
+            $ref: '#/components/schemas/ComplementCard'
+          type: array
+          maxItems: 4
+          title: Related Offers
+          description: Для карточки товара — товары с подтверждённой совместимостью.
       additionalProperties: false
       type: object
       required:
