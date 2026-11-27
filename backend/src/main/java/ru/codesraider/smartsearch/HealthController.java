@@ -16,14 +16,16 @@ import ru.codesraider.smartsearch.search.SearchIndex;
 class HealthController {
     private final RestClient modelClient;
     private final SearchIndex index;
+    private final SearchReadiness readiness;
 
-    HealthController(RestClient.Builder builder, SearchIndex index,
+    HealthController(RestClient.Builder builder, SearchIndex index, SearchReadiness readiness,
                      @Value("${MODEL_BASE_URL:http://localhost:8000}") String modelBaseUrl) {
         var factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(1));
         factory.setReadTimeout(Duration.ofSeconds(1));
         modelClient = builder.baseUrl(modelBaseUrl).requestFactory(factory).build();
         this.index = index;
+        this.readiness = readiness;
     }
 
     @GetMapping("/health")
@@ -32,7 +34,7 @@ class HealthController {
         Map<String, Object> health = new LinkedHashMap<>();
         health.put("status", "up");
         health.put("model_service", modelUp ? "up" : "unavailable");
-        health.put("search_ready", index.ready());
+        health.put("search_ready", readiness.ready());
         if (index.ready()) health.put("index_version", index.version());
         health.put("semantic_ready", modelUp && index.semanticReady());
         return health;
