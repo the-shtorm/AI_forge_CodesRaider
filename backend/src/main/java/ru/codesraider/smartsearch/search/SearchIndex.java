@@ -72,6 +72,7 @@ public class SearchIndex implements AutoCloseable {
     private DirectoryReader reader;
     private IndexSearcher searcher;
     private ProductSpelling spelling;
+    private CatalogNames catalogNames;
     private Path catalog;
     private String version;
     private String profile;
@@ -117,6 +118,11 @@ public class SearchIndex implements AutoCloseable {
                     }
                 }
             }
+            if (hasSchema) {
+                try (var conn = DriverManager.getConnection(sqliteUrl(db))) {
+                    catalogNames = new CatalogNames(conn);
+                }
+            }
             directory = FSDirectory.open(folder.resolve("lucene"));
             reader = DirectoryReader.open(directory);
             var metadata = reader.getIndexCommit().getUserData();
@@ -158,6 +164,7 @@ public class SearchIndex implements AutoCloseable {
 
     public boolean ready() { return searcher != null; }
     public String version() { return version; }
+    String namedFamily(String query) { return catalogNames == null ? null : catalogNames.family(query); }
     public Path catalogPath() { return catalog; }
     public boolean semanticReady() { return compatible && ready(); }
     private static String sqliteUrl(Path db) { return "jdbc:sqlite:" + db.toUri().toASCIIString() + "?mode=ro"; }
@@ -195,10 +202,24 @@ public class SearchIndex implements AutoCloseable {
 
     private Ranked rank(String query, String vendorId, String categoryId, CompletableFuture<float[]> vector, boolean requireAll)
             throws IOException {
-        List<String> lexical = lexical(query, vendorId, categoryId, requireAll);
+        String normalized = normalize(query);
+        List<String> lexical = lexical(words(normalized, requireAll), vendorId, categoryId);
+        if (requireAll && lexical.isEmpty()) {
+            Query correction = spelling.titleQuery(normalized);
+            if (correction != null) {
+                var corrected = lexical(correction, vendorId, categoryId);
+                if (corrected.size() == 1) lexical = corrected;
+            }
+            if (lexical.isEmpty()) lexical = lexical(titleEvidence(normalized), vendorId, categoryId);
+        }
         if (vector != null) {
             try {
                 List<String> semantic = neighbors(vector.join(), vendorId, categoryId);
+                if (requireAll) {
+                    // A nearest neighbour alone is never evidence for a weak query.
+                    var allowed = Set.copyOf(lexical);
+                    semantic = semantic.stream().filter(allowed::contains).toList();
+                }
                 return new Ranked(fuse(lexical, semantic), "hybrid");
             } catch (CompletionException failure) {
                 // A restart, mismatched profile or timeout degrades only semantic retrieval.
@@ -248,17 +269,7 @@ public class SearchIndex implements AutoCloseable {
         return List.copyOf(keys);
     }
 
-    private List<String> lexical(String text, String vendorId, String categoryId, boolean requireAll) throws IOException {
-        String normalized = normalize(text);
-        var hits = lexicalFamilies(words(normalized, requireAll), vendorId, categoryId);
-        if (!hits.isEmpty() || !requireAll) return hits;
-        Query correction = spelling.titleQuery(normalized);
-        if (correction == null) return hits;
-        var corrected = lexicalFamilies(correction, vendorId, categoryId);
-        return corrected.size() == 1 ? corrected : hits;
-    }
-
-    private List<String> lexicalFamilies(Query content, String vendorId, String categoryId) throws IOException {
+    private List<String> lexical(Query content, String vendorId, String categoryId) throws IOException {
         var query = new BooleanQuery.Builder().add(content, Occur.MUST)
                 .add(term(legacy ? "type" : "doc_type", "offer"), Occur.FILTER);
         if (vendorId != null) query.add(term("vendor_id", vendorId), Occur.FILTER);
@@ -296,7 +307,34 @@ public class SearchIndex implements AutoCloseable {
         return List.copyOf(result);
     }
 
-    private Query words(String text, boolean requireAll) throws IOException {
+    private static final Pattern REQUEST_WORDS = Pattern.compile(
+            "(?U)\\b(?:как|хочу|хотим|нужно|нужны|надо|купить|ищу|подобрать|подбираю|заказать|чем|"
+                    + "программа|программу|программы|сервис|средство|офисный|рабочий)\\b");
+    private static final Pattern FIREWALL_TERM = Pattern.compile("(?U)\\b(?:ngfw|firewall)\\b");
+    private static final Pattern FIREWALL_RU = Pattern.compile("(?U)\\bмежсетев[а-я]*\\s+экран[а-я]*\\b");
+
+    private Query titleEvidence(String text) throws IOException {
+        // NGFW and firewall titles already identify the product type spelled out in Russian.
+        if (FIREWALL_TERM.matcher(text).find()) text = FIREWALL_RU.matcher(text).replaceAll(" ");
+        var terms = tokens(REQUEST_WORDS.matcher(text).replaceAll(" "));
+        if (terms.isEmpty()) return new MatchNoDocsQuery();
+        var query = new BooleanQuery.Builder();
+        int optional = 0;
+        for (String word : terms) {
+            var title = new DisjunctionMaxQuery(List.of(term("name", word),
+                    term(legacy ? "family" : "family_name", word)), 0f);
+            if (word.chars().anyMatch(Character::isDigit)) query.add(title, Occur.MUST);
+            else {
+                query.add(title, Occur.SHOULD);
+                optional++;
+            }
+        }
+        // Require two thirds of the content words in the title, not scattered in descriptions.
+        query.setMinimumNumberShouldMatch((optional * 2 + 2) / 3);
+        return query.build();
+    }
+
+    private Set<String> tokens(String text) throws IOException {
         if (legacy) text = text.replaceAll("(?U)\\b(?:найди|найдите|подбери|покажи|нужен|нужна|купить)\\b", " ");
         Set<String> terms = new LinkedHashSet<>();
         try (var stream = analyzer.tokenStream("name", text)) {
@@ -305,6 +343,11 @@ public class SearchIndex implements AutoCloseable {
             while (terms.size() < 32 && stream.incrementToken()) terms.add(token.toString());
             stream.end();
         }
+        return terms;
+    }
+
+    private Query words(String text, boolean requireAll) throws IOException {
+        var terms = tokens(text);
         if (terms.isEmpty()) return new MatchNoDocsQuery();
         var result = new BooleanQuery.Builder();
         for (String word : terms) {

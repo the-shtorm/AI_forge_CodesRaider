@@ -8,17 +8,24 @@ import java.util.regex.Pattern;
 record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> additionalPurposes, String join) {
     enum Purpose {
         WORDS("", ""),
-        BACKUP("бэкап|бекап|backup|резерв|копи[юяий]|восстанов", "документ|файл|фотограф|диск"),
-        WEBINAR(
-                "вебинар|(?:онлайн|веб)[ -]семинар|видеовстреч|видеоконференц|лекци",
-                "встреч|собрать|слушател|интернет|презентаци"),
-        REMOTE_ACCESS(
-                "удаленн[а-я]* доступ|рабоч[а-я]* стол",
-                "удален|рабоч|подключ|компьютер|сети|оператор|сеть|экран"),
-        ANTIVIRUS("антивир|вредонос|заражен|троян", "защит|компьютер|файл"),
-        SERVER("стойк|серверн[а-я]* стойк", "сервер"),
+        BACKUP("бэкап|бекап|backup|резервн[а-я]* коп|копи[юяий]|дубликат", "документ|файл|диск"),
+        WEBINAR("вебинар|(?:онлайн|веб)[ -]семинар|видеовстреч|видеоконференц|онлайн[- ]встреч|лекци|презентаци.*слушател",
+                "встреч|слушател|презентаци"),
+        REMOTE_ACCESS("удаленн[а-я]* (?:доступ|администрир|управлен)|управля[а-я]* .*компьютер|подключ[а-я]* .*рабоч[а-я]* стол|экран[а-я]* другого"
+                        + "|чуж[а-я]* (?:пк|компьютер).*по сети",
+                "подключ|управля|из дома"),
+        ANTIVIRUS("антивир|вредонос|заражен|троян|от вирус", "защит|обезопас"),
+        SERVER("стоечн[а-я]* сервер|rack[- ]сервер|серверн[а-я]* стойк|сервер .*стойк|аппаратн[а-я]* сервер", "сервер"),
         SERVER_SOFTWARE("серверн[а-я]* программ|серверн[а-я]* лиценз", "сервер|установ"),
-        PRINTER("принтер|печат|бумаг", "документ|фотограф|счет"),
+        PRINTER("принтер|печатать|распечата|для печати", "счет"),
+        OCR("распозна[а-я]* текст|скан.* в (?:редактируемый )?текст|ocr", ""),
+        VIDEO_EDITOR("видеоредактор|видеомонтаж|монтаж[а-я ]*видео|смонтир|редактир[а-я ]*видео", ""),
+        PHOTO_EDITOR("фоторедактор|ретуш|отретуш|обработ[а-я]* (?:цифров[а-я]* )?фото|редактир[а-я ]*фото", ""),
+        VIRTUALIZATION("виртуализац|гипервизор|виртуальн[а-я]* машин", ""),
+        ARCHIVER("архиватор|сжа[а-я]* .*архив|распакова[а-я ]*архив|(?:zip|rar)\\b", ""),
+        UPS("ибп\\b|бесперебой|отключени[а-я]* электричеств", ""),
+        SWITCH("(?:соедин|объедин)[а-я]* .*компьютер.* проводн[а-я]* .*сети|коммутатор|свитч\\b", ""),
+        MONITOR("монитор(?:ы|а|ов)?\\b|дисплей", ""),
         UNKNOWN("", "");
         final Pattern strong, weak;
 
@@ -32,11 +39,16 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         }
 
         int evidence(String query) {
+            // A virtual machine can be the object of a backup, rather than a request for a hypervisor.
+            if (this == VIRTUALIZATION) query = VM_BACKUP.matcher(query).replaceAll(" ");
             if (strong.matcher(query).find()) return 2;
             return weak.matcher(query).find() ? 1 : 0;
         }
 
     }
+
+    private static final Pattern UNSUPPORTED_DETAIL = Pattern.compile("(?U)\\b(?:только|дешевле|дороже|рублей|дюйм|цветн|беспроводн|монохром|лазерн|"
+                + "картридж|кабел|адаптер|креплен|кронштейн|подставк|чехол|ремонт|драйвер|расходник)");
 
     static final Map<String, Purpose> INTENTS =
             Map.ofEntries(
@@ -58,7 +70,9 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             restoring copies of files. WEBINAR means holding an online meeting, lesson or video conference.
             REMOTE_ACCESS means operating another computer remotely. ANTIVIRUS means protecting endpoints
             from malicious software. SERVER means physical server hardware. SERVER_SOFTWARE means software
-            to install on a server. PRINTER means a printing device. Use UNKNOWN for unrelated, ambiguous,
+            to install on a server. PRINTER means a printing device. OCR extracts text from scans.
+            VIDEO_EDITOR and PHOTO_EDITOR edit video and still images. VIRTUALIZATION runs guest machines.
+            ARCHIVER packs files. UPS supplies backup power, SWITCH connects network devices and MONITOR is a display. Use UNKNOWN for unrelated, ambiguous,
             unsupported or unrepresentable requirements.
             """;
     private static final String EN = "qwertyuiop[]asdfghjkl;'zxcvbnm,.";
@@ -87,22 +101,9 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         if (q.length() < 5 || q.matches(".*\\d.*")) return q;
         var matches =
                 aliases.stream()
-                        .filter(a -> Math.abs(a.length() - q.length()) <= 1 && oneEdit(a, q))
+                        .filter(a -> Math.abs(a.length() - q.length()) <= 1 && CatalogNames.oneEdit(a, q, false))
                         .toList();
         return matches.size() == 1 ? matches.getFirst() : q;
-    }
-
-    private static boolean oneEdit(String a, String b) {
-        if (a.length() > b.length()) return oneEdit(b, a);
-        int i = 0;
-        while (i < a.length() && a.charAt(i) == b.charAt(i)) i++;
-        if (i == a.length()) return b.length() - i <= 1;
-        if (a.length() != b.length()) return a.substring(i).equals(b.substring(i + 1));
-        return a.substring(i + 1).equals(b.substring(i + 1))
-                || i + 1 < a.length()
-                        && a.charAt(i) == b.charAt(i + 1)
-                        && a.charAt(i + 1) == b.charAt(i)
-                        && a.substring(i + 2).equals(b.substring(i + 2));
     }
 
     static QueryPlan words(String text) {
@@ -117,25 +118,34 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         return VM_BACKUP.matcher(text).find();
     }
 
-    static QueryPlan compile(String normalized, Set<String> aliases, SearchCatalog db, ModelClient llm,
-                             boolean requestModel)
+    static boolean freeForm(String normalized, Set<String> aliases) {
+        return normalized.length() <= 512
+                        && normalized.replaceAll("(?U)\\b(?:rack|zip|rar|ocr|ethernet|vm|backup)\\b", "").matches("[а-я -]*")
+                        && !UNSUPPORTED_DETAIL.matcher(normalized).find()
+                        && aliases.stream().noneMatch(normalized::contains);
+    }
+
+    // Strip sentence punctuation only at the end of a Russian word. Embedded dots and versions stay intact.
+    static String sentenceText(String terms) {
+        return terms.replaceFirst("(?<=[а-я])\\.+$", "");
+    }
+
+    static QueryPlan compile(String terms, Set<String> aliases, SearchCatalog db, ModelClient llm)
             throws SQLException {
-        if (Pattern.compile("(?U)\\b(не|без|кроме|исключая)\\b").matcher(normalized).find())
+        return compile(terms, aliases, db, llm, false);
+    }
+
+    static QueryPlan compile(String terms, Set<String> aliases, SearchCatalog db, ModelClient llm,
+                             boolean requestModel) throws SQLException {
+        String normalized = sentenceText(terms);
+        String exclusions = normalized.contains("чтобы") && Purpose.UPS.evidence(normalized) == 2
+                ? normalized.replaceAll("(?U)\\bне выключал[а-я]*\\b", "") : normalized;
+        if (Pattern.compile("(?U)\\b(не|без|кроме|исключая)\\b").matcher(exclusions).find())
             return new QueryPlan("rules", Purpose.UNKNOWN, normalized, List.of(), "all");
         Purpose purpose = INTENTS.get(normalized);
         if (purpose != null) return new QueryPlan("rules", purpose, normalized, List.of(), "all");
-        boolean vmBackup = requestsVmBackup(normalized);
-        boolean freeForm =
-                (normalized.split(" ").length >= 3 || vmBackup)
-                        && (normalized.matches("[а-я -]+") || vmBackup && normalized.matches("[а-яa-z -]+\\.?"))
-                        && !Pattern.compile(
-                                        "(?U)\\b(только|дешевле|дороже|рублей|дюймов|цветной|цветная|беспроводной|монохромный|лазерный)\\b")
-                                .matcher(normalized)
-                                .find()
-                        && aliases.stream().noneMatch(normalized::contains)
-                        && !db.mentionsVendor(normalized);
         String compiler = "rules";
-        if (freeForm) {
+        if (freeForm(normalized, aliases)) {
             // Ground the instruction vocabulary in the request before asking the model to choose.
             // Specific capability words outrank ambiguous objects such as files or computers.
             int best =
@@ -143,9 +153,10 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
                             .mapToInt(op -> op.evidence(normalized))
                             .max()
                             .orElse(0);
+            if (best == 0 || db.mentionsVendor(normalized)) return words(normalized);
             List<Purpose> grounded =
                     Arrays.stream(Purpose.values())
-                            .filter(op -> best > 0 && op.evidence(normalized) == best)
+                            .filter(op -> op.evidence(normalized) == best)
                             .toList();
             boolean compound =
                     Arrays.stream(normalized.split(" "))
@@ -156,7 +167,16 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             boolean clearIntent = (!compound || capabilities == 1) && best == 2 && grounded.size() == 1;
             if (clearIntent && (!requestModel || !llm.configured() || compound))
                 return new QueryPlan("rules", grounded.getFirst(), normalized, List.of(), "all");
-            if (grounded.isEmpty() || !llm.configured())
+            if (compound && best == 2) {
+                var clauses = normalized.split(" (?:или|и) ");
+                if (clauses.length == 2) {
+                    List<Purpose> left = strongPurposes(clauses[0]), right = strongPurposes(clauses[1]);
+                    if (left.size() == 1 && right.size() == 1 && !left.equals(right))
+                        return new QueryPlan("rules", left.getFirst(), normalized, right,
+                                normalized.contains(" или ") ? "any" : "all");
+                }
+            }
+            if (!llm.configured() || normalized.split(" ").length < 3)
                 return words(normalized);
             if (compound)
                 grounded =
@@ -166,7 +186,9 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             List<String> ops = new ArrayList<>(grounded.stream().map(Enum::name).toList());
             ops.add(Purpose.UNKNOWN.name());
             var program = llm.compile(SYSTEM, normalized, ops);
-            if (program != null && !program.find().contains(Purpose.UNKNOWN)) {
+            if (program != null && !program.find().contains(Purpose.UNKNOWN)
+                    && (best == 2 || program.find().size() > 1
+                        || !program.find().contains(Purpose.BACKUP))) {
                 return new QueryPlan(
                         "llm",
                         program.find().getFirst(),
@@ -181,8 +203,20 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         return new QueryPlan(compiler, Purpose.WORDS, normalized, List.of(), "all");
     }
 
-    boolean hasEvidence() {
-        return Arrays.stream(Purpose.values()).anyMatch(op -> op.evidence(text) > 0);
+    private static List<Purpose> strongPurposes(String clause) {
+        return Arrays.stream(Purpose.values()).filter(p -> p.evidence(clause) == 2).toList();
+    }
+
+    boolean interpretedTask() {
+        return compiler.equals("llm_paraphrase") || compiler.equals("llm_rewrite");
+    }
+
+    boolean appliedModel() {
+        return compiler.equals("llm") || interpretedTask();
+    }
+
+    boolean isSinglePurpose() {
+        return purpose != Purpose.UNKNOWN && purpose != Purpose.WORDS && additionalPurposes.isEmpty();
     }
 
     Map<String, Object> trace(Requirements filters) {

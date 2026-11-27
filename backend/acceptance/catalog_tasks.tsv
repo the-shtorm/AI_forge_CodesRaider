@@ -1,0 +1,107 @@
+split	intent	query
+development	backup	Настроить резервное копирование рабочих каталогов
+development	backup	Нужна вторая копия данных на случай поломки диска
+development	recovery	Программа для восстановления удалённых файлов
+development	recovery	Как вернуть фотографии с поврежденной карты памяти
+development	meet	Сервис для проведения вебинаров с клиентами
+development	meet	Хотим показать презентацию слушателям через интернет
+development	remote	Программа для удаленного доступа к ПК
+development	remote	Как подключиться из дома к рабочему столу коллеги
+development	antivirus	Антивирусное ПО для компьютеров
+development	antivirus	Чем защитить рабочие ноутбуки от троянов
+development	server	Готовый сервер для установки в стойку
+development	server	Нужен стоечный сервер
+development	printer	Купить офисный принтер
+development	printer	Чем печатать документы на бумаге в офисе
+development	ocr	Программа для распознавания текста со сканов
+development	ocr	Хочу перевести скан бумаги в редактируемый текст
+development	video	Видеоредактор для монтажа
+development	video	Нужно нарезать ролики и смонтировать клип
+development	photo	Программа для обработки цифровых фотографий
+development	photo	Как отретушировать снимки с камеры
+development	virtual	Программы для виртуализации
+development	virtual	Хочу запустить несколько виртуальных машин на одном хосте
+development	archive	Архиватор для файлов
+development	archive	Нужно сжать папку в один архив
+development	ups	Источник бесперебойного питания
+development	ups	Что купить чтобы компьютер не выключался при отключении электричества
+development	switch	Сетевой коммутатор для офиса
+development	switch	Как соединить компьютеры в одной проводной локальной сети
+development	monitor	Монитор для компьютера
+development	monitor	Нужен второй монитор для рабочего стола
+holdout	backup	Средство для бэкапа рабочих станций
+holdout	backup	Сохранять запасной экземпляр базы каждую ночь
+holdout	recovery	Восстановить стертые документы на флешке
+holdout	recovery	Удалили снимки с накопителя, как их вернуть
+holdout	meet	Организуем онлайн-встречу для слушателей
+holdout	meet	Нужна площадка для трансляции лекций
+holdout	remote	Управлять чужим ПК на расстоянии
+holdout	remote	Удалённое администрирование рабочего компьютера
+holdout	antivirus	Обнаружить вредоносные программы на ноутбуке
+holdout	antivirus	Защита от вирусов для офиса
+holdout	server	Купить аппаратный сервер в серверную
+holdout	server	Подбираем rack сервер
+holdout	printer	Хочу принтер домой
+holdout	printer	Аппарат для печати счетов
+holdout	ocr	Как сделать поиск по тексту отсканированной страницы
+holdout	ocr	Преобразовать изображение с буквами в текст
+holdout	video	Софт для редактирования видео
+holdout	video	Склеить видеофрагменты
+holdout	photo	Редактирование фотографий с фотосессии
+holdout	photo	Исправить цвета на фотоснимке
+holdout	virtual	Платформа виртуализации серверов
+holdout	virtual	Гипервизор для нескольких гостевых ОС
+holdout	archive	Упаковать данные в zip
+holdout	archive	Открыть архив rar
+holdout	ups	ИБП для системного блока
+holdout	ups	Автономное питание ПК при перебоях
+holdout	switch	Коммутатор Ethernet
+holdout	switch	Хочу свитч с сетевыми портами
+holdout	monitor	Подобрать монитор для работы
+holdout	monitor	Дисплей для настольного ПК
+paraphrase	video	Соединить несколько роликов в один фильм
+paraphrase	video	Убрать лишние секунды из записи и добавить титры
+paraphrase	video	Хочу вырезать середину из клипа
+paraphrase	ocr	Достать слова с фотографии книжного разворота
+paraphrase	ocr	Как перенести надпись со снимка в документ без ручного набора
+paraphrase	ocr	Счёт прислали картинкой, хочу скопировать из него реквизиты
+paraphrase	ups	Нужно несколько минут для сохранения работы когда пропадает ток
+paraphrase	ups	Чтобы при аварии в электросети системник еще немного работал
+paraphrase	ups	Чем на время запитать рабочую станцию при отключении света
+paraphrase	photo	Сделать светлее тёмный снимок
+paraphrase	photo	Убрать красные глаза на семейной фотографии
+paraphrase	photo	Выровнять горизонт на фото с телефона
+paraphrase	backup	Делать запасной экземпляр содержимого сервера по расписанию
+paraphrase	backup	Как хранить вторую версию рабочих папок на случай потери
+paraphrase	archive	Собрать файлы в один сжатый пакет
+paraphrase	archive	Распаковать присланную сжатую папку
+paraphrase	meet	Собрать заказчиков на живую трансляцию с вопросами
+paraphrase	meet	Обсудить проект с командой по видеосвязи
+paraphrase	remote	Хочу из квартиры работать на офисной машине
+paraphrase	remote	Помочь коллеге управляя его мышью на расстоянии
+paraphrase	virtual	Разместить несколько независимых операционных систем на одном железе
+paraphrase	virtual	Запустить гостевую ОС внутри основной
+paraphrase	antivirus	Проверить рабочую станцию на заражение
+paraphrase	printer	Получить бумажный экземпляр договора из электронного
+paraphrase	video	Синхронизировать звук и картинку в моем ролике
+paraphrase	video	Развернуть видеозапись на девяносто градусов
+paraphrase	photo	Размыть задний план на портрете
+paraphrase	ocr	Оцифровать надпись на вывеске для вставки в письмо
+paraphrase	archive	Извлечь содержимое присланного архива
+paraphrase	backup	Застраховать папки от случайного стирания
+abstention	absent	Посмотреть сериал в дороге
+abstention	absent	Заказать съёмку свадебного видео
+abstention	absent	Подобрать рамку для фотографии
+abstention	absent	Напечатать фотоснимки в ближайшем салоне
+abstention	absent	Приготовить питание для малыша
+abstention	absent	Купить аккумулятор для велосипеда
+abstention	absent	Поменять кнопку питания на ноутбуке
+abstention	absent	Найти слова песни по первой строчке
+abstention	absent	Перевести текст с французского на русский
+abstention	absent	Открыть книгу и прочитать её вслух
+abstention	absent	Купить билеты в кино на вечер
+abstention	absent	Склеить бумажные страницы альбома
+abstention	absent	Заказать доставку готовых блюд
+abstention	absent	Раскрасить стену в комнате
+abstention	absent	Найти архивную справку о рождении
+abstention	absent	Взять напрокат видеокамеру

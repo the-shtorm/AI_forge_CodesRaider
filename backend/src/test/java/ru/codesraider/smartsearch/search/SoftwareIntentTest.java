@@ -26,7 +26,7 @@ class SoftwareIntentTest {
                 <yml_catalog><shop><categories>
                   <category id="1">ПО для видеонаблюдения</category><category id="2">Камеры</category>
                   <category id="3">Конвертеры и кодировщики</category><category id="4">Переводчики</category>
-                  <category id="5">Схемы и диаграммы</category>
+                  <category id="5">Схемы и диаграммы</category><category id="6">Резервное копирование</category>
                 </categories><offers>
                 """ + offer("rec", "rec", 1, "ПО видеонаблюдения, лицензия на канал", "")
                     + offer("face", "face", 1, "VideoRecord аналитика, распознавание лиц", "")
@@ -42,6 +42,10 @@ class SoftwareIntentTest {
                     + offer("charts-web", "web", 5, "Chart library for Web", "")
                     + offer("charts-wpf", "wpf", 5, "Chart library for WPF", "")
                     + offer("drawing", "drawing", 5, "Standalone drawing tool for Web", "")
+                    + offer("server-backup", "backup", 6, "Acme Server Backup", "<param name=\"Копирование по расписанию\">Да</param>")
+                    + offer("manual", "manual", 6, "Acme Server Backup Lite", "<param name=\"Копирование по расписанию\">Нет</param>")
+                    + offer("edu", "edu", 6, "Acme Server Backup Education", "<param name=\"Копирование по расписанию\">Да</param>")
+                    + offer("workstation", "backup", 6, "Acme Workstation Backup", "<param name=\"Копирование по расписанию\">Да</param>")
                     + "</offers></shop></yml_catalog>");
         String offline = "http://127.0.0.1:1";
         try (var encoder = new EncoderClient(offline)) {
@@ -59,6 +63,8 @@ class SoftwareIntentTest {
             assertEquals(Set.of("reverse"), result(api, mapper, "Ищу переводчик с русского на английский для Windows"));
             assertEquals(Set.of("charts-web", "charts-wpf"), result(api, mapper, "Библиотека диаграмм для веба либо WPF"));
             assertEquals(Set.of(), result(api, mapper, "Библиотека диаграмм для веба и WPF"));
+            assertEquals(Set.of("server-backup"), result(api, mapper, "Делать запасной экземпляр содержимого сервера по расписанию."));
+            assertEquals(Set.of("server-backup","edu"), result(api, mapper, "Для школы резервное копирование сервера ежедневно"));
         }
         assertNull(SoftwareIntent.parse("купить камеру с по для записи"));
         assertNull(SoftwareIntent.parse("acme video converter"));

@@ -26,6 +26,8 @@ public class SearchController {
             Pattern.compile("(?U)[\\p{L}\\d]+(?:-[\\p{L}\\d]+)*-\\d{3,}");
     private static final Pattern PANTUM_MODEL = Pattern.compile("\\b(?:p|bm|bp)\\d{4}[a-z]*\\b");
 
+    private static final Pattern IDENTIFIER = Pattern.compile("(?U)^(id|sku|артикул)[:# ]+(.+)$");
+
     private final ModelClient model;
 
     public SearchController(SearchIndex index, EventStore events) {
@@ -78,6 +80,7 @@ public class SearchController {
         String licensingQuery = constraints.task instanceof InventoryIntent inventory ? inventory.licensingQuery() : q;
         QueryPlan plan = QueryPlan.words(q);
         String terms = q;
+        Set<String> aliases = Set.of();
         if (!input.target().isEmpty()) {
             constraints.extractQuery(licensingQuery);
             target =
@@ -88,11 +91,13 @@ public class SearchController {
                 throw new ApiProblem(
                         HttpStatus.BAD_REQUEST, "UNKNOWN_TARGET", "Подсказка отсутствует в активном снимке.");
         } else {
-            Row byId = db.entity("offer", q);
-            var exact = byId == null ? db.exact(SearchIndex.normalizeSku(q)) : List.of(byId);
+            var identifier = IDENTIFIER.matcher(q);
+            boolean qualified = identifier.matches();
+            var exact = qualified ? db.identifier(identifier.group(1), identifier.group(2))
+                    : db.exact(SearchIndex.normalizeSku(q));
             if (exact.isEmpty() && q.matches("(?iu)[a-z][a-z0-9]* \\d+"))
                 exact = db.exact(q.replace(' ', '-'));
-            if (!exact.isEmpty()) {
+            if (qualified || !exact.isEmpty()) {
                 ids = exact.stream().map(r -> r.str("id")).toList();
                 if (exact.size() == 1) target = exact.getFirst();
                 reason = "EXACT_SKU";
@@ -103,16 +108,21 @@ public class SearchController {
                 target = db.purchaseTarget(terms);
                 terms = terms.replaceAll("(?U)\\b(?:покажи|найди|мне|нужен|нужна|купить|пожалуйста)\\b", " ")
                         .strip().replaceAll(" +", " ");
-                Set<String> aliases = db.aliasTerms(category);
+                aliases = db.aliasTerms(category);
                 terms = QueryPlan.canonical(terms, aliases);
                 if (constraints.edition != null && terms.matches("[a-z][a-z0-9 -]+ (?:19|20)\\d{2}"))
                     constraints.editionYear = terms.substring(terms.length() - 4);
                 if (target == null) target = db.alias(q, category);
                 if (target == null) target = db.alias(terms, category);
                 if (target == null) target = db.qualifiedSku(terms);
-                if (target == null && constraints.task == null && !input.requestsCompleteServer() && !input.requestsFileRecovery())
-                    target = db.exactName(terms, index.exactNames(terms),
-                            !constraints.values.isEmpty() || !input.filters().isEmpty());
+                if (target == null && constraints.task == null && !input.requestsCompleteServer() && !input.requestsFileRecovery()) {
+                    target = db.exactName(terms, index.exactNames(terms));
+                    if (target == null && !terms.isEmpty() && !MODEL_CODE.matcher(terms).matches()
+                            && !CATALOG_CODE.matcher(terms).matches()) {
+                        String family = index.namedFamily(terms);
+                        if (family != null) target = db.byKey(family);
+                    }
+                }
                 plan = target == null && constraints.task == null && !input.requestsFileRecovery()
                         ? QueryPlan.compile(terms, aliases, db, model, input.strategy().equals("llm")) : QueryPlan.words(terms);
             }
@@ -180,8 +190,8 @@ public class SearchController {
         } else if (ids == null) {
             boolean task = q.contains(" ") && !MODEL_CODE.matcher(q).find();
             boolean failedProgram = plan.compiler().equals("llm_fallback");
-            boolean semantic = task && !failedProgram && (plan.hasEvidence() || input.requestsFileRecovery());
-            ranking = index.prepareRanking(terms, semantic, failedProgram || (task && !semantic));
+            boolean semantic = task && !failedProgram;
+            ranking = index.prepareRanking(terms, semantic, failedProgram || (task && !input.requestsFileRecovery()));
             if (!conflict) {
                 var ranked = ranking.in((String) filters.get("vendor_id"), (String) filters.get("category_id"));
                 families = ranked.families();
@@ -197,9 +207,45 @@ public class SearchController {
         }
         var selection = new Selection(target, ids,
                 input.requestsSupport(),
-                fileRecovery, fileRecovery && input.requestsDeletedDesktopFiles(), includeServerSoftware,
+                fileRecovery, fileRecovery && input.requestsStandaloneFileRecovery(), includeServerSoftware,
                 target == null && ids == null && !fileRecovery ? plan : null, constraints);
         List<Row> direct = conflict ? List.of() : db.representatives(filters, selection, families);
+        if (direct.isEmpty() && !conflict && selection.program() != null && plan.isSinglePurpose()
+                && !db.hasPurpose(plan.purpose())) {
+            // Missing taxonomy in this snapshot. Keep every SKU constraint and require text evidence.
+            diagnostics.put("unavailable_purpose", plan.purpose().name());
+            plan = new QueryPlan("catalog_fallback", QueryPlan.Purpose.WORDS, terms, List.of(), "all");
+            selection = new Selection(null, null, selection.support(), false, false, false, plan, constraints);
+            ranking = index.prepareRanking(terms, true, true);
+            var ranked = ranking.in((String) filters.get("vendor_id"), (String) filters.get("category_id"));
+            families = ranked.families();
+            mode = ranked.mode();
+            reason = mode.equals("hybrid") ? "HYBRID_MATCH" : "LEXICAL_MATCH";
+            direct = db.representatives(filters, selection, families);
+        }
+        // A matching family may have no SKU that satisfies the buyer's filters.
+        if (direct.isEmpty() && !conflict && constraints.task == null && families != null && selection.program() != null
+                && plan.purpose() == QueryPlan.Purpose.WORDS && plan.compiler().equals("rules")) {
+            var interpreted = TaskInterpreter.interpret(terms, aliases, db, model);
+            if (interpreted != null) {
+                plan = interpreted;
+                selection = new Selection(null, null, selection.support(), false, false, false, plan, constraints);
+                // Both facets and cards now execute the same verified operation and original SKU filters.
+                ranking = null;
+                families = null;
+                mode = "lexical";
+                reason = "PURPOSE_MATCH";
+                direct = db.representatives(filters, selection, null);
+            }
+        }
+        if (selection.program() != null && plan.isSinglePurpose() && direct.size() > 1
+                && input.sort().equals("relevance")) {
+            // The catalog decides eligibility. BM25 breaks ties inside the verified purpose.
+            var ranked = index.rank(terms, (String) filters.get("vendor_id"), (String) filters.get("category_id"), false);
+            SearchCatalog.orderByFamilies(direct, ranked.families(), false);
+            if (TaskInterpreter.wantsDesktopUps(plan))
+                direct.sort(Comparator.comparing(row -> TaskInterpreter.highCapacityUps(row.str("name"))));
+        }
         if (direct.size() > 1) {
             if (!input.sort().equals("relevance")) {
                 Comparator<Long> byPrice = input.sort().equals("price_asc")
@@ -334,7 +380,7 @@ public class SearchController {
         var trace = plan.trace(constraints);
         result.put("program", trace);
         diagnostics.put("program", trace);
-        result.put("llm_applied", plan.compiler().equals("llm"));
+        result.put("llm_applied", plan.appliedModel());
         if (input.strategy().equals("llm")) {
             String message = "Показаны совпадения каталога по текущей фразе. Для уточнения примените фильтры.";
             if (direct.isEmpty()) {

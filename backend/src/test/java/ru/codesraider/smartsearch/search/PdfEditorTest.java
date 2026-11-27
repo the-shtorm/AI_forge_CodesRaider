@@ -43,6 +43,9 @@ class PdfEditorTest {
             assertEquals("linux", result.at("/applied_filters/platform").asString());
             assertEquals(Set.of("linux-in-title", "linux-glibc"), result.required("top4").valueStream()
                     .map(c -> c.required("offer_id").asString()).collect(Collectors.toSet()));
+            JsonNode branded = json.valueToTree(controller.search(Map.of("q", "Master PDF Editor для Linux")));
+            assertEquals(Set.of("linux-glibc"), branded.required("top4").valueStream()
+                    .map(c -> c.required("offer_id").asString()).collect(Collectors.toSet()));
         }
     }
 

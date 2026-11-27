@@ -19,7 +19,9 @@ class InventoryAndSeatsTest {
                 + offer("099", "inventory", "Инвентаризация компьютеров, лицензия на 1 компьютер, учет 78 ПК", "")
                 + offer("101", "inventory", "Инвентаризация компьютеров, лицензия на 1 компьютер, учет 75 ПК", "")
                 + offer("102", "kit", "Комплект Эксперт, коробочная версия", "<param name=\"К-во пользователей до\">5</param>"
-                        + "<param name=\"Срок действия\">12 мес.</param>");
+                        + "<param name=\"Срок действия\">12 мес.</param>")
+                + offer("103", "firewall", "Acme NGFW (лицензия), 50 Users", "<description>К-во пользователей: 50</description>")
+                + offer("104", "firewall", "Acme NGFW (лицензия), 150 Users", "<description>К-во пользователей: 150</description>");
         Path feed = dir.resolve("input.xml"), snapshots = dir.resolve("snapshots");
         Files.writeString(feed, "<yml_catalog date=\"test\"><shop><categories><category id=\"1\">ПО</category></categories><offers>"
                 + offers + "</offers></shop></yml_catalog>");
@@ -42,6 +44,11 @@ class InventoryAndSeatsTest {
             JsonNode devices = json.valueToTree(controller.search(Map.of("q", seats.replace("пользователей", "устройств"))));
             assertEquals(5, devices.at("/applied_filters/device_count").asInt());
             assertEquals(0, devices.required("direct_count").asInt());
+            String firewall = "Межсетевой экран Acme NGFW минимум на 125 пользователей";
+            JsonNode license = json.valueToTree(controller.search(Map.of("q", firewall)));
+            assertEquals("104", license.at("/top4/0/offer_id").asString());
+            assertEquals(125, license.at("/applied_filters/seat_count").asInt());
+            assertEquals(0, controller.search(Map.of("q", firewall.replace("125", "180"))).get("direct_count"));
         }
     }
 

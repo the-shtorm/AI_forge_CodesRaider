@@ -15,6 +15,7 @@ class UpsellSuggestionsTest {
     @Test
     void selectsMerchandiseWithoutAnIndexMigration(@TempDir Path dir) throws Exception {
         String offers = offer("pc", "computer", "1", 400, true, "")
+                + offer("ungrouped", "orphan", "1", 420, true, "").replace(" group_id=\"orphan\"", "")
                 + offer("stand", "support", "2", 50, true, "")
                 + offer("term12", "subscription", "3", 100, true, months(12))
                 + offer("term24", "subscription", "3", 180, true, months(24))
@@ -42,6 +43,10 @@ class UpsellSuggestionsTest {
             assertEquals("pc", stand.get("anchor_offer_id"));
             assertEquals("paired_category", stand.get("recommendation_kind"));
             assertFalse(stand.containsKey("checks"));
+            var orphan = catalog.upsellSuggestions(List.of(anchor("ungrouped")), Map.of(), Map.of(),
+                    Set.of("offer/ungrouped"), null, 4, null).getFirst();
+            assertEquals("stand", orphan.get("offer_id"));
+            assertEquals("ungrouped", orphan.get("anchor_offer_id"));
 
             var upgrade = catalog.upsellSuggestions(List.of(anchor("term12")), Map.of(), Map.of(), Set.of("family/subscription"), null, 1, null).getFirst();
             assertEquals("term24", upgrade.get("offer_id"));

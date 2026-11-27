@@ -41,9 +41,26 @@ class DeletedFileRecoveryTest {
             assertEquals(1, restored.at("/direct_count").asInt());
             assertEquals("101", restored.at("/top4/0/offer_id").asString());
             assertEquals("windows", restored.at("/applied_filters/platform").asString());
-            JsonNode fromBackup = json.valueToTree(search.search(Map.of(
-                    "q", "Как восстановить удаленные файлы из резервной копии?", "filters", Map.of("category_id","1033"))));
-            assertEquals("104", fromBackup.at("/top4/0/offer_id").asString());
+            JsonNode linux = json.valueToTree(search.search(Map.of("q", "Восстановить файлы на Linux")));
+            assertEquals(1, linux.at("/direct_count").asInt());
+            assertEquals("102", linux.at("/top4/0/offer_id").asString());
+            JsonNode mac = json.valueToTree(search.search(Map.of("q", "Восстановить файлы на macOS")));
+            assertEquals(0, mac.at("/direct_count").asInt());
+            JsonNode generic = json.valueToTree(search.search(Map.of("q", "Как восстановить файлы после сбоя?",
+                    "filters", Map.of("category_id", "1033"))));
+            assertEquals("104", generic.at("/top4/0/offer_id").asString());
+            for (Map<String, Object> strict : java.util.List.<Map<String, Object>>of(
+                    Map.of("q", "Как восстановить файлы после сбоя без резервной копии?", "filters", Map.of("category_id", "1033")),
+                    Map.of("q", "Как восстановить файлы после сбоя?", "filters", Map.of("category_id", "1033", "platform", "linux")))) {
+                JsonNode result = json.valueToTree(search.search(strict));
+                assertEquals(0, result.at("/direct_count").asInt());
+            }
+            for (String query : java.util.List.of("Как восстановить удаленные файлы из резервной копии?",
+                    "Как восстановить данные из резервной копии?")) {
+                JsonNode fromBackup = json.valueToTree(search.search(Map.of(
+                        "q", query, "filters", Map.of("category_id", "1033"))));
+                assertEquals("104", fromBackup.at("/top4/0/offer_id").asString());
+            }
         }
     }
 

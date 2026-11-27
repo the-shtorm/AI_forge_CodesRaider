@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.regex.*;
 
 class Requirements {
+    private static final String CAPACITY_PREFIX = "(?:на\\s+)?(?:(?:минимум|не (?:менее|меньше)(?: чем)?)\\s+(?:на\\s+)?)?";
     private static final String SERVER_DESTINATION = "(?:на\\s+сервер(?:е)?|для\\s+сервера)";
     private static final String SERVER_LICENSE = "(?:серверн(?:ая|ую|ой)\\s+лицензи[яюи]"
             + "|лицензи[яюи]\\s+(?:именно\\s+)?" + SERVER_DESTINATION + ")";
@@ -27,7 +28,7 @@ class Requirements {
     private static final String PDF = "(?:pdf|пдф)";
     static final Pattern PDF_EDITOR_TITLE = Pattern.compile(
             "(?iuU)\\b(?:" + PDF + "[ -]+(?:editor|редактор)|(?:editor|редактор)[ -]+" + PDF + ")\\b");
-    private static final Pattern EDIT_PDF = Pattern.compile(
+    static final Pattern EDIT_PDF = Pattern.compile(
             "(?U)\\b(?:редактир\\w*|правк[ауи]|edit(?:ing)?|редактор\\w*)\\s+"
                     + "(?:(?:текст\\w*|документ\\w*)\\s+)?(?:(?:в|для)\\s+)?" + PDF + "\\b");
     Long audience;
@@ -130,12 +131,12 @@ class Requirements {
         text =
                 take(
                         text,
-                        "(?:на\\s+)?(\\d+)\\s*(?:пк|устройств[а-я]*|компьютер[а-я]*)\\b",
+                        CAPACITY_PREFIX + "(\\d+)\\s*(?:пк|устройств[а-я]*|компьютер[а-я]*)\\b",
                         m -> require("device_count", Long.parseLong(m.group(1))));
         text =
                 take(
                         text,
-                        "(?:на\\s+)?(\\d+)\\s*(?:мест[а-я]*|пользовател[а-я]*)\\b",
+                        CAPACITY_PREFIX + "(\\d+)\\s*(?:мест[а-я]*|пользовател[а-я]*)\\b",
                         m -> require("seat_count", Long.parseLong(m.group(1))));
         text =
                 take(

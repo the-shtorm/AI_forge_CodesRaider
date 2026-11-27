@@ -1383,7 +1383,8 @@ components:
           minLength: 1
           pattern: \S
           title: Family Key
-          description: Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}.
+          description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
+            без семейства — offer/{offer_id}.
         reason_codes:
           items:
             type: string
@@ -1703,7 +1704,8 @@ components:
           minLength: 1
           pattern: \S
           title: Family Key
-          description: Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}.
+          description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
+            без семейства — offer/{offer_id}.
         reason_codes:
           items:
             type: string
@@ -1921,7 +1923,8 @@ components:
           minLength: 1
           pattern: \S
           title: Family Key
-          description: Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}.
+          description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
+            без семейства — offer/{offer_id}.
         reason_codes:
           items:
             type: string
@@ -2656,7 +2659,8 @@ components:
           minLength: 1
           pattern: \S
           title: Family Key
-          description: Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}.
+          description: Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения
+            без семейства — offer/{offer_id}.
         reason_codes:
           items:
             type: string
@@ -2760,6 +2764,9 @@ components:
           - llm
           - llm_fallback
           - llm_abstained
+          - catalog_fallback
+          - llm_paraphrase
+          - llm_rewrite
           title: Compiler
         purpose:
           type: string
@@ -2772,6 +2779,14 @@ components:
           - SERVER
           - SERVER_SOFTWARE
           - PRINTER
+          - OCR
+          - VIDEO_EDITOR
+          - PHOTO_EDITOR
+          - VIRTUALIZATION
+          - ARCHIVER
+          - UPS
+          - SWITCH
+          - MONITOR
           - UNKNOWN
           title: Purpose
         additional_purposes:
@@ -2786,6 +2801,14 @@ components:
             - SERVER
             - SERVER_SOFTWARE
             - PRINTER
+            - OCR
+            - VIDEO_EDITOR
+            - PHOTO_EDITOR
+            - VIRTUALIZATION
+            - ARCHIVER
+            - UPS
+            - SWITCH
+            - MONITOR
             - UNKNOWN
           type: array
           maxItems: 1

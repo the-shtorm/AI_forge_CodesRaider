@@ -24,7 +24,14 @@ interface SoftwareIntent extends CatalogTask {
     Pattern DISJUNCTION = Pattern.compile("(?U)\\b(?:или|либо)\\b");
     Pattern REQUEST_WORDS = Pattern.compile("(?U)\\b(?:ищу|ищем|найди|нужен|нужна|нужно|нужны|мне|нам|подбери|пожалуйста|для|на|с|из|под|в|только)\\b");
     Pattern CAMERA_CONTEXT = Pattern.compile("(?U)\\b(?:уже есть|этой|чтобы)\\b");
+    Pattern BACKUP_ACTION = Pattern.compile("(?U)\\b(?:б[еэ]кап\\w*|резервн\\w* копи\\w*|запасн\\w* (?:копи\\w*|экземпляр\\w*))\\b");
+    Pattern SERVER = Pattern.compile("(?U)\\b(?:физическ\\w* )?сервер(?:а|ов|у)?\\b");
+    Pattern SCHEDULE = Pattern.compile("(?U)\\b(?:по расписанию|ежедневно|каждую ночь|каждый день)\\b");
+    Pattern BACKUP_CONTEXT = Pattern.compile("(?U)\\b(?:делать|сделать|создавать|создать|сохранять|настроить|содержимого|данных|файлов)\\b");
+    Pattern EDUCATION = Pattern.compile("(?U)\\b(?:школ[а-я]*|вуз[а-я]*|учебн[а-я]* заведени[а-я]*|образовательн[а-я]* организаци[а-я]*)\\b");
     Pattern PURCHASE_CONTEXT = Pattern.compile("(?U)\\b(?:отделу маркетинга|лицензи(?:я|ю|ей|и))\\b");
+    Pattern PDF_CONTEXT = Pattern.compile("(?U)\\b(?:какой|редактор|поставить|установить|чтобы|вносить|внести|документ[а-я]*)\\b");
+    SoftwareIntent PDF_EDITOR = where -> where.add("pdf_editor(o.name)");
     Pattern TEXT_CONTEXT = Pattern.compile("(?U)\\b(?:(?:техническ(?:ий|ого|их) )?текст(?:а|ов|ы)?|язык)\\b");
     Pattern CHART_CONTEXT = Pattern.compile("(?U)\\b(?:библиотек[ауи]|компонент(?:ы|а)?|диаграмм[уы]?|график(?:и|ов|а)?"
             + "|приложени(?:е|я|й)|подойдет|вариант|и)\\b");
@@ -44,6 +51,14 @@ interface SoftwareIntent extends CatalogTask {
 
     static SoftwareIntent parse(String q) {
         if (NEGATED.matcher(q).find()) return null;
+        if ((Requirements.PDF_EDITOR_TITLE.matcher(q).find() || Requirements.EDIT_PDF.matcher(q).find())
+                && covers(q, Requirements.PDF_EDITOR_TITLE, Requirements.EDIT_PDF, PDF_CONTEXT))
+            return PDF_EDITOR;
+        if (BACKUP_ACTION.matcher(q).find() && SERVER.matcher(q).find() && SCHEDULE.matcher(q).find()
+                && covers(q, BACKUP_ACTION, SERVER, SCHEDULE, BACKUP_CONTEXT, PROGRAM, EDUCATION)) {
+            boolean education = EDUCATION.matcher(q).find();
+            return where -> scheduledServerBackup(where, education);
+        }
         if (CAMERA.matcher(q).find() && RECORD.matcher(q).find() && PROGRAM.matcher(q).find()
                 && !CAMERA_WITH_PROGRAM.matcher(q).find()
                 && (q.contains("уже есть") || q.contains("только программ") || SOFTWARE_FOR_RECORDING.matcher(q).find())
@@ -89,6 +104,24 @@ interface SoftwareIntent extends CatalogTask {
                  OR (o.name LIKE '%идеонаблюдени%' AND o.name LIKE '% канал%'))
                 AND o.name NOT LIKE '%аспознаван%' AND o.name NOT LIKE '%налитик%'
                 AND lower(o.name) NOT LIKE '%recognition%' AND lower(o.name) NOT LIKE '%analytics%'
+                """);
+    }
+
+    private static void scheduledServerBackup(SearchCatalog.Where where, boolean education) {
+        category(where, "%езервн%копирован%");
+        // Education-only licenses require a buyer in that customer segment.
+        if (!education) where.add("o.name NOT LIKE '%бразовательн%' AND lower(o.name) NOT LIKE '%education%'");
+        // Server entitlement is per SKU. Standard and Advanced Cyber Backup document scheduled plans:
+        // https://docs.cyberprotect.ru/ru-RU/CyberBackup/18.0/user/schedule.html
+        where.add("""
+                (o.name LIKE '%ля физического сервера%' OR lower(o.name) LIKE '%server backup%'
+                 OR lower(o.name) LIKE '%backup for server%')
+                AND coalesce(o.license_type,'') NOT IN ('upgrade','renewal')
+                AND ((o.vendor_id='cyberprotect' AND (o.name LIKE '%ибер Бэкап Стандартная редакция%'
+                    OR o.name LIKE '%ибер Бэкап Расширенная редакция%'))
+                    OR EXISTS (SELECT 1 FROM offer_param p WHERE p.offer_id=o.offer_id
+                        AND p.name IN ('Копирование по расписанию','Резервное копирование по расписанию')
+                        AND p.value_norm IN ('да','есть','поддерживается','yes')))
                 """);
     }
 

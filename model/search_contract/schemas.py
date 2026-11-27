@@ -138,7 +138,7 @@ class Offer(DTO):
 
 class Card(Offer):
     family_key: Text = Field(
-        description="Непрозрачный ключ группировки. Для ПО имеет вид family/{group_id}."
+        description="Непрозрачный ключ группировки. Для ПО с группой — family/{group_id}, для отдельного предложения без семейства — offer/{offer_id}."
     )
     reason_codes: list[Text] = Field(
         min_length=1,
@@ -196,11 +196,12 @@ class SearchFacets(DTO):
 
 
 Purpose = Literal["WORDS", "BACKUP", "WEBINAR", "REMOTE_ACCESS", "ANTIVIRUS",
-                  "SERVER", "SERVER_SOFTWARE", "PRINTER", "UNKNOWN"]
+                  "SERVER", "SERVER_SOFTWARE", "PRINTER", "OCR", "VIDEO_EDITOR", "PHOTO_EDITOR",
+                  "VIRTUALIZATION", "ARCHIVER", "UPS", "SWITCH", "MONITOR", "UNKNOWN"]
 
 
 class SearchProgram(DTO):
-    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained"]
+    compiler: Literal["rules", "llm", "llm_fallback", "llm_abstained", "catalog_fallback", "llm_paraphrase", "llm_rewrite"]
     purpose: Purpose
     additional_purposes: list[Purpose] = Field(max_length=1)
     join: Literal["all", "any"]

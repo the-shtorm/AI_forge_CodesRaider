@@ -87,6 +87,51 @@ class StorefrontSearchTest {
     }
 
     @Test
+    void exactIdentifiersAndCatalogNamesSurviveGroupingAndEmptyCategories() throws Exception {
+        Path feed = temp.resolve("feed.xml"), snapshots = temp.resolve("snapshots");
+        String standalone = offer(201, 1, "alpha", 2, 20).replace(" group_id=\"1\"", "")
+                .replace("SKU-201", "500");
+        Files.writeString(feed, """
+                <yml_catalog><shop><categories><category id="1">Acme Studio</category>
+                <category id="2">Приложения</category></categories><offers>
+                """ + standalone + offer(500, 72, "beta", 2, 50).replace("Редактор 500", "Acme Studio (годовая лицензия)")
+                + offer(503, 75, "beta", 2, 80).replace("Редактор 503", "Видеоредактор Studio")
+                        .replace("SKU-503", "460000 085 54")
+                + "</offers></shop></yml_catalog>");
+        String offline = "http://127.0.0.1:1";
+        try (var encoder = new EncoderClient(offline);
+             var index = new SearchIndex(snapshots.toString(), offline, "lexical", 10)) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+            index.open();
+            var search = new SearchController(index, new EventStore(temp.resolve("events.db").toString(), JSON));
+            var bare = JSON.valueToTree(search.search(Map.of("q", "500")));
+            assertTrue(bare.path("primary_target").isNull());
+            assertEquals(2, bare.path("direct_count").asInt());
+            assertEquals(2, bare.at("/facets/categories/0/count").asInt());
+            var choices = search.suggest("500", null, null);
+            assertTrue(choices.stream().anyMatch(c -> c.get("label").toString().endsWith(" · ID 500")));
+            assertTrue(choices.stream().anyMatch(c -> c.get("label").toString().endsWith(" · артикул 500")));
+            assertEquals("500", JSON.valueToTree(search.search(Map.of("q", "id:500"))).at("/primary_target/id").asString());
+            var sku = JSON.valueToTree(search.search(Map.of("q", "артикул 500")));
+            assertEquals("201", sku.at("/primary_target/id").asString());
+            assertEquals("offer/201", sku.at("/top4/0/family_key").asString());
+            assertEquals("201", search.explain(Map.of("search_id", sku.path("search_id").asString(),
+                    "offer_id", "201")).get("offer_id"));
+            assertEquals(0, search.search(Map.of("q", "sku:500", "filters", Map.of("vendor_id", "beta"))).get("direct_count"));
+            for (String query : List.of("460000 085 54", "sku: 460000 085 54", "артикул 460000 085 54")) {
+                assertEquals("503", JSON.valueToTree(search.search(Map.of("q", query))).at("/primary_target/id").asString());
+            }
+            for (String name : List.of("Acme Studio", "Acme Stduio")) {
+                assertEquals("72", JSON.valueToTree(search.search(Map.of("q", name))).at("/primary_target/id").asString());
+            }
+            var fallback = JSON.valueToTree(search.search(Map.of("q", "Подобрать видеоредактор")));
+            assertEquals("catalog_fallback", fallback.at("/program/compiler").asString());
+            assertEquals("503", fallback.at("/top4/0/offer_id").asString());
+            assertEquals(0, search.search(Map.of("q", "Подобрать видеоредактор", "filters", Map.of("vendor_id", "alpha"))).get("direct_count"));
+        }
+    }
+
+    @Test
     void compressedCatalogPreservesMasterPlatformCoverageAndBudgetFilters() throws Exception {
         Path feed = temp.resolve("catalog.xml.gz"), snapshots = temp.resolve("snapshots");
         try (var output = new GZIPOutputStream(Files.newOutputStream(feed))) {

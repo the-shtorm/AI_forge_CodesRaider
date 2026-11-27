@@ -1,0 +1,157 @@
+split,query,topic,mode,compiler,operation,top1,hit4,ndcg,empty,ms,ids,titles
+adjacent,Взять напрокат видеокамеру,unknown,before,rules,WORDS,,,,1,57.61,,
+adjacent,Взять напрокат видеокамеру,unknown,final,rules,WORDS,,,,1,1525.4,,
+adjacent,Взять напрокат видеокамеру,unknown,rules,rules,WORDS,,,,1,55.16,,
+adjacent,Заказать доставку готовых блюд,unknown,before,rules,WORDS,,,,1,26.7,,
+adjacent,Заказать доставку готовых блюд,unknown,final,rules,WORDS,,,,1,46.0,,
+adjacent,Заказать доставку готовых блюд,unknown,rules,rules,WORDS,,,,1,48.54,,
+adjacent,Заказать съёмку свадебного видео,unknown,before,rules,WORDS,,,,1,43.98,,
+adjacent,Заказать съёмку свадебного видео,unknown,final,rules,WORDS,,,,1,2055.21,,
+adjacent,Заказать съёмку свадебного видео,unknown,rules,rules,WORDS,,,,1,81.83,,
+adjacent,Купить аккумулятор для велосипеда,unknown,before,rules,WORDS,,,,1,57.91,,
+adjacent,Купить аккумулятор для велосипеда,unknown,final,rules,WORDS,,,,1,81.46,,
+adjacent,Купить аккумулятор для велосипеда,unknown,rules,rules,WORDS,,,,1,57.07,,
+adjacent,Купить билеты в кино на вечер,unknown,before,rules,WORDS,,,,1,21.98,,
+adjacent,Купить билеты в кино на вечер,unknown,final,rules,WORDS,,,,1,42.63,,
+adjacent,Купить билеты в кино на вечер,unknown,rules,rules,WORDS,,,,1,44.9,,
+adjacent,Найти архивную справку о рождении,unknown,before,rules,WORDS,,,,1,53.11,,
+adjacent,Найти архивную справку о рождении,unknown,final,rules,WORDS,,,,1,1800.06,,
+adjacent,Найти архивную справку о рождении,unknown,rules,rules,WORDS,,,,1,42.26,,
+adjacent,Найти слова песни по первой строчке,unknown,before,rules,WORDS,,,,1,42.85,,
+adjacent,Найти слова песни по первой строчке,unknown,final,rules,WORDS,,,,1,106.19,,
+adjacent,Найти слова песни по первой строчке,unknown,rules,rules,WORDS,,,,1,93.02,,
+adjacent,Напечатать фотоснимки в ближайшем салоне,unknown,before,rules,WORDS,,,,1,61.61,,
+adjacent,Напечатать фотоснимки в ближайшем салоне,unknown,final,rules,WORDS,,,,1,2762.02,,
+adjacent,Напечатать фотоснимки в ближайшем салоне,unknown,rules,rules,WORDS,,,,1,73.22,,
+adjacent,Открыть книгу и прочитать её вслух,unknown,before,rules,WORDS,,,,1,34.21,,
+adjacent,Открыть книгу и прочитать её вслух,unknown,final,rules,WORDS,,,,1,50.41,,
+adjacent,Открыть книгу и прочитать её вслух,unknown,rules,rules,WORDS,,,,1,84.44,,
+adjacent,Перевести текст с французского на русский,unknown,before,rules,WORDS,,,,1,35.64,,
+adjacent,Перевести текст с французского на русский,unknown,final,rules,WORDS,,,,1,95.81,,
+adjacent,Перевести текст с французского на русский,unknown,rules,rules,WORDS,,,,1,84.98,,
+adjacent,Подобрать рамку для фотографии,unknown,before,rules,WORDS,,,,1,26.6,,
+adjacent,Подобрать рамку для фотографии,unknown,final,rules,WORDS,,,,1,1614.64,,
+adjacent,Подобрать рамку для фотографии,unknown,rules,rules,WORDS,,,,1,54.17,,
+adjacent,Поменять кнопку питания на ноутбуке,unknown,before,rules,WORDS,,,,1,56.49,,
+adjacent,Поменять кнопку питания на ноутбуке,unknown,final,rules,WORDS,,,,1,1634.58,,
+adjacent,Поменять кнопку питания на ноутбуке,unknown,rules,rules,WORDS,,,,1,59.9,,
+adjacent,Посмотреть сериал в дороге,unknown,before,rules,WORDS,,,,1,46.83,,
+adjacent,Посмотреть сериал в дороге,unknown,final,rules,WORDS,,,,1,55.91,,
+adjacent,Посмотреть сериал в дороге,unknown,rules,rules,WORDS,,,,1,47.56,,
+adjacent,Приготовить питание для малыша,unknown,before,rules,WORDS,,,,1,28.68,,
+adjacent,Приготовить питание для малыша,unknown,final,rules,WORDS,,,,1,1240.05,,
+adjacent,Приготовить питание для малыша,unknown,rules,rules,WORDS,,,,1,75.89,,
+adjacent,Раскрасить стену в комнате,unknown,before,rules,WORDS,,,,1,54.9,,
+adjacent,Раскрасить стену в комнате,unknown,final,rules,WORDS,,,,1,108.95,,
+adjacent,Раскрасить стену в комнате,unknown,rules,rules,WORDS,,,,1,94.87,,
+adjacent,Склеить бумажные страницы альбома,unknown,before,rules,WORDS,,,,1,36.37,,
+adjacent,Склеить бумажные страницы альбома,unknown,final,rules,WORDS,,,,1,2755.0,,
+adjacent,Склеить бумажные страницы альбома,unknown,rules,rules,WORDS,,,,1,58.15,,
+examples,Автономное питание ПК при перебоях,ups,before,rules,WORDS,0,0,0.0,1,23.83,,
+examples,Автономное питание ПК при перебоях,ups,final,llm_paraphrase,UPS,1,1,1.0,0,779.28,321837|320182|320223|538243,ибп apc easy ups  800va (bv800i-gr) | ибп apc back-ups  1600va (bx1600mi) | ибп apc back-ups  2200va (bx2200mi) | ибп apc back-ups  2200va (bx2200mi-gr)
+examples,Автономное питание ПК при перебоях,ups,rules,rules,WORDS,0,0,0.0,1,30.22,,
+examples,Исправить цвета на фотоснимке,photo,before,rules,WORDS,0,0,0.0,1,41.88,,
+examples,Исправить цвета на фотоснимке,photo,final,llm_paraphrase,PHOTO_EDITOR,1,1,1.0,0,497.73,541904|371421|526974|541870,"cyberlink corporation cyberlink photodirector (подписка), windows | ams software фотомастер (лицензия на 1 год), профи | corel corporation corel paintshop pro 2023 (лицензия ultimate), цена за 1 лицензию | cyberlink corporation cyberlink photodirector 2027 (лицензия ultra), цена за 1 лицензию"
+examples,Исправить цвета на фотоснимке,photo,rules,rules,WORDS,0,0,0.0,1,42.95,,
+examples,Как сделать поиск по тексту отсканированной страницы,ocr,before,rules,WORDS,0,0,0.0,1,68.32,,
+examples,Как сделать поиск по тексту отсканированной страницы,ocr,final,llm_paraphrase,OCR,1,1,0.8319,0,1479.65,375704|324027|324029,"wondershare pdfelement (коммерческие лицензии), professional for windows team, бессрочная версия | content ai finereader 15 standard (лицензия standalone на 1 год), электронная лицензия | content ai finereader 15 corporate (лицензия standalone на 1 год), электронная лицензия"
+examples,Как сделать поиск по тексту отсканированной страницы,ocr,rules,rules,WORDS,0,0,0.0,1,73.87,,
+examples,Преобразовать изображение с буквами в текст,ocr,before,rules,WORDS,0,0,0.0,1,45.45,,
+examples,Преобразовать изображение с буквами в текст,ocr,final,llm_paraphrase,OCR,1,1,0.8319,0,548.28,375704|324027|324029,"wondershare pdfelement (коммерческие лицензии), professional for windows team, бессрочная версия | content ai finereader 15 standard (лицензия standalone на 1 год), электронная лицензия | content ai finereader 15 corporate (лицензия standalone на 1 год), электронная лицензия"
+examples,Преобразовать изображение с буквами в текст,ocr,rules,rules,WORDS,0,0,0.0,1,109.82,,
+examples,Склеить видеофрагменты,video,before,rules,WORDS,0,0,0.0,1,38.04,,
+examples,Склеить видеофрагменты,video,final,llm_paraphrase,VIDEO_EDITOR,1,1,1.0,0,1111.8,499317|415519|541428|434182,"cyberlink corporation cyberlink powerdirector 365 (подписка на 1 год), для версии win | wondershare filmora (лицензия education на 1 год), team license for windows | ams software видеомонтаж (лицензия на 1 год), делюкс | icecream apps icecream video editor pro (лицензия на 1 пк), цена за 1 лицензию"
+examples,Склеить видеофрагменты,video,rules,rules,WORDS,0,0,0.0,1,60.59,,
+examples,Сохранять запасной экземпляр базы каждую ночь,backup,before,rules,WORDS,0,0,0.0,1,45.85,,
+examples,Сохранять запасной экземпляр базы каждую ночь,backup,final,llm_paraphrase,BACKUP,1,1,1.0,0,452.99,408149|536456|418698|421468,"2bt rsbss - синхронизация распределенных гетерогенных баз данных, unicode/32bit/64bit 1.8 (электронная лиц | киберпротект кибер бэкап облачный (лицензия), лицензия для физического сервера | киберпротект кибер бэкап расширенная редакция (бессрочная лицензия для коммерческих организаций), для физи | киберпротект кибер бэкап стандартная редакция (лицензия для коммерческих организаций), для платформы вирту"
+examples,Сохранять запасной экземпляр базы каждую ночь,backup,rules,rules,WORDS,0,0,0.0,1,67.34,,
+new,Выровнять горизонт на фото с телефона,photo,before,rules,WORDS,0,0,0.0,1,78.51,,
+new,Выровнять горизонт на фото с телефона,photo,final,llm_paraphrase,PHOTO_EDITOR,1,1,1.0,0,1879.95,541904|371421|526974|541870,"cyberlink corporation cyberlink photodirector (подписка), windows | ams software фотомастер (лицензия на 1 год), профи | corel corporation corel paintshop pro 2023 (лицензия ultimate), цена за 1 лицензию | cyberlink corporation cyberlink photodirector 2027 (лицензия ultra), цена за 1 лицензию"
+new,Выровнять горизонт на фото с телефона,photo,rules,rules,WORDS,0,0,0.0,1,70.47,,
+new,Делать запасной экземпляр содержимого сервера по расписанию,backup,before,llm,SERVER_SOFTWARE,0,0,0.0,0,3214.45,474306|446973|436475|509604,"meetmeup meetmeu (лицензия на сервер бронирования, бессрочная), | стрим лабс vrec (лицензии по сервер записи), функция управления видеомагнитофонами по интерфейсу rs-422. з | инфтех датаплат.сервер отчетов, клиентские лицензии (web доступ), для 1 пользователя | криптопро ключ (лицензия на право использования сервер версии 1.0), lite на одном сервере"
+new,Делать запасной экземпляр содержимого сервера по расписанию,backup,final,llm,SERVER_SOFTWARE,0,0,0.0,0,2661.33,474306|446973|436475|509604,"meetmeup meetmeu (лицензия на сервер бронирования, бессрочная), | стрим лабс vrec (лицензии по сервер записи), функция управления видеомагнитофонами по интерфейсу rs-422. з | инфтех датаплат.сервер отчетов, клиентские лицензии (web доступ), для 1 пользователя | криптопро ключ (лицензия на право использования сервер версии 1.0), lite на одном сервере"
+new,Делать запасной экземпляр содержимого сервера по расписанию,backup,rules,rules,WORDS,0,0,0.0,1,144.37,,
+new,Достать слова с фотографии книжного разворота,ocr,before,rules,WORDS,0,0,0.0,1,68.71,,
+new,Достать слова с фотографии книжного разворота,ocr,final,llm_paraphrase,OCR,1,1,0.8319,0,812.58,324027|324029|375704,"content ai finereader 15 standard (лицензия standalone на 1 год), электронная лицензия | content ai finereader 15 corporate (лицензия standalone на 1 год), электронная лицензия | wondershare pdfelement (коммерческие лицензии), professional for windows team, бессрочная версия"
+new,Достать слова с фотографии книжного разворота,ocr,rules,rules,WORDS,0,0,0.0,1,93.76,,
+new,Запустить гостевую ОС внутри основной,virtual,before,rules,WORDS,0,0,0.0,1,59.66,,
+new,Запустить гостевую ОС внутри основной,virtual,final,llm_paraphrase,VIRTUALIZATION,1,1,1.0,0,671.77,474780|419403|540295|503263,"роса rosa virtualization (лицензия программная система управления средой виртуализации с подсистемой безаг | хайстекс лицензия на миграцию (единовременно), 1 виртуальной машины | лицензия на программный комплекс для организации виртуальных рабочих мест termidesk enterprise в составе:  | лицензия на программное обеспечение vmmanager 6 редакции infrastructure на 1 физический сервер не более 2 "
+new,Запустить гостевую ОС внутри основной,virtual,rules,rules,WORDS,0,0,0.0,1,69.07,,
+new,Застраховать папки от случайного стирания,backup,before,rules,WORDS,0,0,0.0,1,32.5,,
+new,Застраховать папки от случайного стирания,backup,final,rules,WORDS,0,0,0.0,1,797.56,,
+new,Застраховать папки от случайного стирания,backup,rules,rules,WORDS,0,0,0.0,1,42.4,,
+new,Извлечь содержимое присланного архива,archive,before,rules,WORDS,0,0,0.0,1,30.08,,
+new,Извлечь содержимое присланного архива,archive,final,rules,WORDS,0,0,0.0,1,706.44,,
+new,Извлечь содержимое присланного архива,archive,rules,rules,WORDS,0,0,0.0,1,48.37,,
+new,Как перенести надпись со снимка в документ без ручного набора,ocr,before,rules,UNKNOWN,0,0,0.0,1,6.2,,
+new,Как перенести надпись со снимка в документ без ручного набора,ocr,final,rules,UNKNOWN,0,0,0.0,1,11.18,,
+new,Как перенести надпись со снимка в документ без ручного набора,ocr,rules,rules,UNKNOWN,0,0,0.0,1,12.64,,
+new,Как хранить вторую версию рабочих папок на случай потери,backup,before,rules,WORDS,0,0,0.0,1,62.1,,
+new,Как хранить вторую версию рабочих папок на случай потери,backup,final,rules,WORDS,0,0,0.0,1,130.89,,
+new,Как хранить вторую версию рабочих папок на случай потери,backup,rules,rules,WORDS,0,0,0.0,1,164.45,,
+new,Нужно несколько минут для сохранения работы когда пропадает ток,ups,before,rules,WORDS,0,0,0.0,1,108.59,,
+new,Нужно несколько минут для сохранения работы когда пропадает ток,ups,final,llm_paraphrase,UPS,1,1,1.0,0,807.85,321837|320182|320223|538243,ибп apc easy ups  800va (bv800i-gr) | ибп apc back-ups  1600va (bx1600mi) | ибп apc back-ups  2200va (bx2200mi) | ибп apc back-ups  2200va (bx2200mi-gr)
+new,Нужно несколько минут для сохранения работы когда пропадает ток,ups,rules,rules,WORDS,0,0,0.0,1,73.36,,
+new,Обсудить проект с командой по видеосвязи,meet,before,rules,WORDS,0,0,0.0,1,49.15,,
+new,Обсудить проект с командой по видеосвязи,meet,final,llm_paraphrase,WEBINAR,1,1,0.8319,0,437.91,535950|541589|541591,"мтс линк (webinar group) мтс линк optimum 30 (лицензия в месяц при покупке на год, до 30 участников вебина | мтс линк (webinar group) мтс линк стандарт (лицензия), на 1 год | мтс линк (webinar group) мтс линк про (лицензия), на 1 год"
+new,Обсудить проект с командой по видеосвязи,meet,rules,rules,WORDS,0,0,0.0,1,105.56,,
+new,Оцифровать надпись на вывеске для вставки в письмо,ocr,before,rules,WORDS,0,0,0.0,1,24.05,,
+new,Оцифровать надпись на вывеске для вставки в письмо,ocr,final,rules,WORDS,0,0,0.0,1,37.21,,
+new,Оцифровать надпись на вывеске для вставки в письмо,ocr,rules,rules,WORDS,0,0,0.0,1,32.52,,
+new,Получить бумажный экземпляр договора из электронного,printer,before,rules,WORDS,0,0,0.0,1,74.67,,
+new,Получить бумажный экземпляр договора из электронного,printer,final,llm_paraphrase,PRINTER,1,1,1.0,0,319.37,510453|509921|493292|532541,мфу струйный canon pixma mg2541s (0727c071/0727c067) a4 черный | мфу струйный canon pixma g3416 (2315c052) a4 wifi | принтер лазерный canon i-sensys lbp122dw (5620c001aa) a4 duplex wifi черный | canon imagerunner c3326i
+new,Получить бумажный экземпляр договора из электронного,printer,rules,rules,WORDS,0,0,0.0,1,53.24,,
+new,Помочь коллеге управляя его мышью на расстоянии,remote,before,llm,REMOTE_ACCESS,1,1,1.0,0,1853.88,535437|402265|173820|487234,"сафиб ассистент (право использования программы для эвм система удаленного мониторинга и управления версия  | anydesk (лицензия на 1 год), solo | tektonit rms удалённый доступ 7.1 (лицензия), классическая лицензия. количество компьютеров | rudesktop, удаленный доступ (облачная версия, подписка 1 год), конкурентное подключение"
+new,Помочь коллеге управляя его мышью на расстоянии,remote,final,llm,REMOTE_ACCESS,1,1,1.0,0,2861.88,535437|402265|173820|487234,"сафиб ассистент (право использования программы для эвм система удаленного мониторинга и управления версия  | anydesk (лицензия на 1 год), solo | tektonit rms удалённый доступ 7.1 (лицензия), классическая лицензия. количество компьютеров | rudesktop, удаленный доступ (облачная версия, подписка 1 год), конкурентное подключение"
+new,Помочь коллеге управляя его мышью на расстоянии,remote,rules,rules,WORDS,0,0,0.0,1,272.11,,
+new,Проверить рабочую станцию на заражение,antivirus,before,rules,ANTIVIRUS,1,1,1.0,0,101.18,222172|356893|130063|366960,kaspersky endpoint security cloud лицензия на 1 год по количеству рабочих станций/файловых серверов | доктор веб dr.web curenet! неисключительное право на использование на 1 год 5 рабочих станций | kaspersky security для microsoft office 365 лицензия на 1 год. количество почтовых ящиков | смарт-cофт netpolice school для traffic inspector next generation лицензия на 1 год 30 учетных записей
+new,Проверить рабочую станцию на заражение,antivirus,final,rules,ANTIVIRUS,1,1,1.0,0,114.16,222172|356893|130063|366960,kaspersky endpoint security cloud лицензия на 1 год по количеству рабочих станций/файловых серверов | доктор веб dr.web curenet! неисключительное право на использование на 1 год 5 рабочих станций | kaspersky security для microsoft office 365 лицензия на 1 год. количество почтовых ящиков | смарт-cофт netpolice school для traffic inspector next generation лицензия на 1 год 30 учетных записей
+new,Проверить рабочую станцию на заражение,antivirus,rules,rules,ANTIVIRUS,1,1,1.0,0,154.82,222172|356893|130063|366960,kaspersky endpoint security cloud лицензия на 1 год по количеству рабочих станций/файловых серверов | доктор веб dr.web curenet! неисключительное право на использование на 1 год 5 рабочих станций | kaspersky security для microsoft office 365 лицензия на 1 год. количество почтовых ящиков | смарт-cофт netpolice school для traffic inspector next generation лицензия на 1 год 30 учетных записей
+new,Развернуть видеозапись на девяносто градусов,video,before,rules,WORDS,0,0,0.0,1,34.23,,
+new,Развернуть видеозапись на девяносто градусов,video,final,rules,WORDS,0,0,0.0,1,737.42,,
+new,Развернуть видеозапись на девяносто градусов,video,rules,rules,WORDS,0,0,0.0,1,40.24,,
+new,Разместить несколько независимых операционных систем на одном железе,virtual,before,rules,WORDS,0,0,0.0,1,46.9,,
+new,Разместить несколько независимых операционных систем на одном железе,virtual,final,llm_paraphrase,VIRTUALIZATION,1,1,1.0,0,565.22,474780|540295|503263|419403,"роса rosa virtualization (лицензия программная система управления средой виртуализации с подсистемой безаг | лицензия на программный комплекс для организации виртуальных рабочих мест termidesk enterprise в составе:  | лицензия на программное обеспечение vmmanager 6 редакции infrastructure на 1 физический сервер не более 2  | хайстекс лицензия на миграцию (единовременно), 1 виртуальной машины"
+new,Разместить несколько независимых операционных систем на одном железе,virtual,rules,rules,WORDS,0,0,0.0,1,127.63,,
+new,Размыть задний план на портрете,photo,before,rules,WORDS,0,0,0.0,1,30.8,,
+new,Размыть задний план на портрете,photo,final,rules,WORDS,0,0,0.0,1,926.55,,
+new,Размыть задний план на портрете,photo,rules,rules,WORDS,0,0,0.0,1,40.9,,
+new,Распаковать присланную сжатую папку,archive,before,rules,WORDS,0,0,0.0,1,37.19,,
+new,Распаковать присланную сжатую папку,archive,final,llm_paraphrase,ARCHIVER,1,1,1.0,0,357.24,149018,"rarsoft winrar (лицензия), количество пользователей (от 1 до 999)"
+new,Распаковать присланную сжатую папку,archive,rules,rules,WORDS,0,0,0.0,1,120.27,,
+new,Сделать светлее тёмный снимок,photo,before,rules,WORDS,0,0,0.0,1,39.0,,
+new,Сделать светлее тёмный снимок,photo,final,llm_paraphrase,PHOTO_EDITOR,1,1,1.0,0,413.79,541904|371421|526974|541870,"cyberlink corporation cyberlink photodirector (подписка), windows | ams software фотомастер (лицензия на 1 год), профи | corel corporation corel paintshop pro 2023 (лицензия ultimate), цена за 1 лицензию | cyberlink corporation cyberlink photodirector 2027 (лицензия ultra), цена за 1 лицензию"
+new,Сделать светлее тёмный снимок,photo,rules,rules,WORDS,0,0,0.0,1,123.87,,
+new,Синхронизировать звук и картинку в моем ролике,video,before,rules,WORDS,0,0,0.0,1,33.01,,
+new,Синхронизировать звук и картинку в моем ролике,video,final,llm_rewrite,VIDEO_EDITOR,1,1,1.0,0,783.38,499317|415519|541428|434182,"cyberlink corporation cyberlink powerdirector 365 (подписка на 1 год), для версии win | wondershare filmora (лицензия education на 1 год), team license for windows | ams software видеомонтаж (лицензия на 1 год), делюкс | icecream apps icecream video editor pro (лицензия на 1 пк), цена за 1 лицензию"
+new,Синхронизировать звук и картинку в моем ролике,video,rules,rules,WORDS,0,0,0.0,1,242.37,,
+new,Собрать заказчиков на живую трансляцию с вопросами,meet,before,rules,WORDS,0,0,0.0,1,40.95,,
+new,Собрать заказчиков на живую трансляцию с вопросами,meet,final,rules,WORDS,0,0,0.0,1,161.33,,
+new,Собрать заказчиков на живую трансляцию с вопросами,meet,rules,rules,WORDS,0,0,0.0,1,47.59,,
+new,Собрать файлы в один сжатый пакет,archive,before,llm_abstained,WORDS,0,0,0.0,1,3355.03,,
+new,Собрать файлы в один сжатый пакет,archive,final,llm_abstained,WORDS,0,0,0.0,1,1924.93,,
+new,Собрать файлы в один сжатый пакет,archive,rules,rules,WORDS,0,0,0.0,1,60.94,,
+new,Соединить несколько роликов в один фильм,video,before,rules,WORDS,0,0,0.0,1,42.96,,
+new,Соединить несколько роликов в один фильм,video,final,llm_paraphrase,VIDEO_EDITOR,1,1,1.0,0,374.91,499317|415519|541428|434182,"cyberlink corporation cyberlink powerdirector 365 (подписка на 1 год), для версии win | wondershare filmora (лицензия education на 1 год), team license for windows | ams software видеомонтаж (лицензия на 1 год), делюкс | icecream apps icecream video editor pro (лицензия на 1 пк), цена за 1 лицензию"
+new,Соединить несколько роликов в один фильм,video,rules,rules,WORDS,0,0,0.0,1,48.96,,
+new,"Счёт прислали картинкой, хочу скопировать из него реквизиты",ocr,before,llm_abstained,WORDS,0,0,0.0,1,1246.14,,
+new,"Счёт прислали картинкой, хочу скопировать из него реквизиты",ocr,final,llm_abstained,WORDS,0,0,0.0,1,3256.72,,
+new,"Счёт прислали картинкой, хочу скопировать из него реквизиты",ocr,rules,rules,WORDS,0,0,0.0,1,135.17,,
+new,Убрать красные глаза на семейной фотографии,photo,before,rules,WORDS,0,0,0.0,1,32.89,,
+new,Убрать красные глаза на семейной фотографии,photo,final,llm_paraphrase,PHOTO_EDITOR,1,1,1.0,0,390.88,541904|371421|526974|541870,"cyberlink corporation cyberlink photodirector (подписка), windows | ams software фотомастер (лицензия на 1 год), профи | corel corporation corel paintshop pro 2023 (лицензия ultimate), цена за 1 лицензию | cyberlink corporation cyberlink photodirector 2027 (лицензия ultra), цена за 1 лицензию"
+new,Убрать красные глаза на семейной фотографии,photo,rules,rules,WORDS,0,0,0.0,1,41.86,,
+new,Убрать лишние секунды из записи и добавить титры,video,before,rules,WORDS,0,0,0.0,1,58.32,,
+new,Убрать лишние секунды из записи и добавить титры,video,final,llm_paraphrase,VIDEO_EDITOR,1,1,1.0,0,842.86,499317|415519|541428|434182,"cyberlink corporation cyberlink powerdirector 365 (подписка на 1 год), для версии win | wondershare filmora (лицензия education на 1 год), team license for windows | ams software видеомонтаж (лицензия на 1 год), делюкс | icecream apps icecream video editor pro (лицензия на 1 пк), цена за 1 лицензию"
+new,Убрать лишние секунды из записи и добавить титры,video,rules,rules,WORDS,0,0,0.0,1,68.38,,
+new,Хочу вырезать середину из клипа,video,before,rules,WORDS,0,0,0.0,1,82.63,,
+new,Хочу вырезать середину из клипа,video,final,llm_paraphrase,VIDEO_EDITOR,1,1,1.0,0,498.99,499317|415519|541428|434182,"cyberlink corporation cyberlink powerdirector 365 (подписка на 1 год), для версии win | wondershare filmora (лицензия education на 1 год), team license for windows | ams software видеомонтаж (лицензия на 1 год), делюкс | icecream apps icecream video editor pro (лицензия на 1 пк), цена за 1 лицензию"
+new,Хочу вырезать середину из клипа,video,rules,rules,WORDS,0,0,0.0,1,78.2,,
+new,Хочу из квартиры работать на офисной машине,remote,before,rules,WORDS,0,0,0.0,1,60.37,,
+new,Хочу из квартиры работать на офисной машине,remote,final,llm_paraphrase,REMOTE_ACCESS,1,1,1.0,0,1396.18,535437|402265|173820|487234,"сафиб ассистент (право использования программы для эвм система удаленного мониторинга и управления версия  | anydesk (лицензия на 1 год), solo | tektonit rms удалённый доступ 7.1 (лицензия), классическая лицензия. количество компьютеров | rudesktop, удаленный доступ (облачная версия, подписка 1 год), конкурентное подключение"
+new,Хочу из квартиры работать на офисной машине,remote,rules,rules,WORDS,0,0,0.0,1,89.0,,
+new,Чем на время запитать рабочую станцию при отключении света,ups,before,rules,WORDS,0,0,0.0,1,30.88,,
+new,Чем на время запитать рабочую станцию при отключении света,ups,final,llm_paraphrase,UPS,1,1,1.0,0,184.64,321837|320182|320223|538243,ибп apc easy ups  800va (bv800i-gr) | ибп apc back-ups  1600va (bx1600mi) | ибп apc back-ups  2200va (bx2200mi) | ибп apc back-ups  2200va (bx2200mi-gr)
+new,Чем на время запитать рабочую станцию при отключении света,ups,rules,rules,WORDS,0,0,0.0,1,32.95,,
+new,Чтобы при аварии в электросети системник еще немного работал,ups,before,rules,WORDS,0,0,0.0,1,52.44,,
+new,Чтобы при аварии в электросети системник еще немного работал,ups,final,llm_paraphrase,UPS,1,1,1.0,0,968.83,171400|237874|237877|237881,ибп powercom raptor rpt rpt-1025ap | ибп powercom raptor rpt rpt-1500ap (rpt-1500ap lcd) | ибп powercom raptor rpt rpt-600ap | ибп powercom macan mac mac-2000
+new,Чтобы при аварии в электросети системник еще немного работал,ups,rules,rules,WORDS,0,0,0.0,1,79.8,,

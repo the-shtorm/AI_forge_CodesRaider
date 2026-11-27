@@ -15,6 +15,7 @@ import ru.codesraider.smartsearch.analytics.EventStore;
 import ru.codesraider.smartsearch.modelclient.EncoderClient;
 import ru.codesraider.smartsearch.web.ApiProblem;
 import java.net.InetSocketAddress;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -23,6 +24,7 @@ class ProgramTest {
     SearchIndex index;
     HttpServer endpoint;
     SearchController search;
+    ModelClient model;
     private volatile String instruction;
     int calls;
     final JsonMapper json = JsonMapper.builder().build();
@@ -42,7 +44,7 @@ class ProgramTest {
                 exchange -> {
                     calls++;
                     var payload = json.readTree(exchange.getRequestBody());
-                    assertTrue(payload.has("response_format"));
+                    assertEquals(payload.path("max_tokens").asInt() == 80, payload.has("response_format"));
                     byte[] body =
                             json.writeValueAsBytes(
                                     Map.of(
@@ -57,7 +59,7 @@ class ProgramTest {
                     }
                 });
         endpoint.start();
-        var model =
+        model =
                 new ModelClient(
                         "http://127.0.0.1:" + endpoint.getAddress().getPort() + "/chat",
                         "test",
@@ -76,6 +78,161 @@ class ProgramTest {
     JsonNode run(String q, Map<String, Object> filters) throws Exception {
         return json.valueToTree(
                 search.search(Map.of("q", q, "filters", filters, "limit", 8)));
+    }
+
+    @Test
+    void emptyTextSearchUsesOnlyTheConfirmedOperationAndKeepsSkuFilters() throws Exception {
+        String q = "Хранить запасной экземпляр базы";
+        instruction = "Yes.";
+        var hit = run(q, Map.of());
+        assertEquals("llm_paraphrase", hit.at("/program/compiler").asString());
+        assertEquals("BACKUP", hit.at("/program/purpose").asString());
+        assertTrue(hit.get("llm_applied").asBoolean());
+        assertTrue(hit.get("direct_count").asInt() > 0);
+        assertEquals("1033", hit.at("/facets/categories/0/id").asString());
+
+        var filtered = run(q + ".", Map.of("vendor_id", "pantum"));
+        assertEquals("BACKUP", filtered.at("/program/purpose").asString());
+        assertEquals(0, filtered.get("direct_count").asInt());
+        assertTrue(filtered.at("/facets/vendors").size() > 0);
+        assertEquals(2, calls);
+    }
+
+    @Test
+    void anUnavailableTextMatchStillAllowsAConfirmedTaskWithEligibleProducts() throws Exception {
+        Path feed = temp.resolve("books-and-editors.xml"), snapshots = temp.resolve("books-and-editors");
+        Files.writeString(feed, """
+                <yml_catalog><shop><categories>
+                  <category id="10">Руководства</category><category id="495">Видеоредакторы</category>
+                </categories><offers>
+                  <offer id="11" group_id="11" available="false"><name>Руководство: как склеить видеофрагменты</name>
+                    <url>https://example.org/p/11/</url><vendor>Studio</vendor><vendorUrl>https://example.org/studio/</vendorUrl>
+                    <categoryId>10</categoryId><price>100</price><currencyId>RUR</currencyId></offer>
+                  <offer id="22" group_id="22" available="true"><name>Studio Video Editor Pro</name>
+                    <url>https://example.org/p/22/</url><vendor>Studio</vendor><vendorUrl>https://example.org/studio/</vendorUrl>
+                    <categoryId>495</categoryId><price>200</price><currencyId>RUR</currencyId></offer>
+                </offers></shop></yml_catalog>
+                """);
+        String offline = "http://127.0.0.1:1";
+        try (var encoder = new EncoderClient(offline); var bookIndex = new SearchIndex(snapshots.toString(), offline, "lexical", 10)) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+            bookIndex.open();
+            var controller = new SearchController(bookIndex, new EventStore(temp.resolve("books.db").toString(), json), model);
+            String query = "Склеить видеофрагменты";
+            var unfiltered = json.valueToTree(controller.search(Map.of("q", query)));
+            assertEquals("11", unfiltered.at("/top4/0/offer_id").asString());
+            assertEquals(0, calls);
+
+            instruction = "yes";
+            var filtered = json.valueToTree(controller.search(Map.of("q", query, "filters", Map.of("available_only", true))));
+            assertEquals("llm_paraphrase", filtered.at("/program/compiler").asString());
+            assertEquals(1, filtered.get("direct_count").asInt());
+            assertEquals("22", filtered.at("/top4/0/offer_id").asString());
+            assertTrue(filtered.at("/top4/0/available").asBoolean());
+            assertEquals("495", filtered.at("/facets/categories/0/id").asString());
+            assertEquals(1, calls);
+        }
+    }
+
+    @Test
+    void videoTasksSelectStandaloneEditorsAndCountOnlyEligibleFacets() throws Exception {
+        var xml = new StringBuilder("<yml_catalog><shop><categories><category id='495'>Видеоредакторы</category>"
+                + "</categories><offers>");
+        record Offer(String vendor, String name, String license) {}
+        var offers = List.of(new Offer("studio", "Studio Video Editor Pro", "полная версия"),
+                new Offer("studio", "Lens Effects", "модуль"),
+                new Offer("studio", "Subtitle plug-in for Studio Video Editor", ""),
+                new Offer("corel", "Corel Pinnacle Studio 26 (лицензия), Standard", "полная версия"),
+                new Offer("wondershare", "Wondershare Filmora (Annual Plan), Boris FX", "модуль"));
+        for (int i = 0; i < offers.size(); i++) {
+            Offer offer = offers.get(i);
+            xml.append("""
+                    <offer id="%1$d" group_id="%1$d" available="true"><name>%2$s</name>
+                    <url>https://example.org/p/%1$d/</url><vendor>%3$s</vendor>
+                    <vendorUrl>https://example.org/%3$s/</vendorUrl><categoryId>495</categoryId>
+                    <price>100</price><currencyId>RUR</currencyId><param name="Тип лицензии">%4$s</param></offer>
+                    """.formatted(i + 1, offer.name(), offer.vendor(), offer.license()));
+        }
+        Path feed = temp.resolve("editors.xml"), snapshots = temp.resolve("media");
+        Files.writeString(feed, xml.append("</offers></shop></yml_catalog>"));
+        try (var encoder = new EncoderClient("http://127.0.0.1:1")) {
+            CatalogImporter.importSnapshot(feed, snapshots, false, encoder);
+        }
+        String version = Files.readString(snapshots.resolve("active")).strip();
+        try (var db = new SearchCatalog(snapshots.resolve(version).resolve("catalog.db"))) {
+            for (String compiler : List.of("rules", "llm_rewrite")) {
+                var plan = new QueryPlan(compiler, QueryPlan.Purpose.VIDEO_EDITOR, "ролики", List.of(), "all");
+                var selection = new SearchCatalog.Selection(null, null, false, false, false, false, plan, new Requirements());
+                assertEquals(List.of("1", "4"), db.representatives(Map.of(), selection, null).stream()
+                        .map(row -> row.str("offer_id")).sorted().toList());
+                assertEquals(2, db.facet("category_id", Map.of(), selection, null).getFirst().number("count"));
+                assertEquals(List.of("4"), db.representatives(Map.of("vendor_id", "corel"), selection, null)
+                        .stream().map(row -> row.str("offer_id")).toList());
+            }
+        }
+    }
+
+    @Test
+    void industrialUpsIsLowerPriorityForAnInferredSinglePcLoad() {
+        for (String name : List.of("ИБП 30000Вт 30000ВА", "ИБП 30 kVA", "UPS 10 000 ВA"))
+            assertTrue(TaskInterpreter.highCapacityUps(name), name);
+        for (String name : List.of("APC 800VA", "ИБП 1,5 кВА", "BX1600MI", "ИБП 20000 Вт"))
+            assertFalse(TaskInterpreter.highCapacityUps(name), name);
+        for (String q : List.of("автономное питание пк", "питать компьютер при аварии"))
+            assertTrue(TaskInterpreter.wantsDesktopUps(new QueryPlan("llm_paraphrase", QueryPlan.Purpose.UPS, q, List.of(), "all")));
+        assertFalse(TaskInterpreter.wantsDesktopUps(new QueryPlan("llm_rewrite", QueryPlan.Purpose.UPS,
+                "запитать пк и серверную стойку", List.of(), "all")));
+    }
+
+    @Test
+    void openEndedTranslationMustNameAKnownToolForTheOriginalSubject() throws Exception {
+        String q = "Застраховать базу от утраты";
+        instruction = "{\"tool\":\"Backup software\"}";
+        var result = run(q, Map.of());
+        assertEquals("llm_rewrite", result.at("/program/compiler").asString());
+        assertEquals("BACKUP", result.at("/program/purpose").asString());
+        assertTrue(result.get("llm_applied").asBoolean());
+        for (String reply : List.of("printer", "backup software please", "unknown")) {
+            instruction = "{\"tool\":\"" + reply + "\"}";
+            assertEquals(0, run(q, Map.of()).get("direct_count").asInt());
+        }
+    }
+
+    @Test
+    void rejectedAndMalformedParaphrasesKeepTheOriginalResult() throws Exception {
+        for (String reply : List.of("no", "yes, if you buy something else", "invalid")) {
+            instruction = reply;
+            var result = run("Хранить запасной экземпляр базы", Map.of());
+            assertEquals("WORDS", result.at("/program/purpose").asString());
+            assertFalse(result.get("llm_applied").asBoolean());
+            assertEquals(0, result.get("direct_count").asInt());
+        }
+        assertEquals(3, calls);
+        run("Склеить видеофрагменты", Map.of()); // Demo snapshot has no video editors.
+        run("Хранить запасной экземпляр базы без шифрования", Map.of());
+        run("Купить питание для ребенка", Map.of());
+        assertEquals(3, calls);
+    }
+
+    @Test
+    void strongClausesCompileWithoutModelAndKeepIntersectionStrict() throws Exception {
+        var union = run("Нужны вебинары или удаленный доступ", Map.of());
+        assertEquals("rules", union.at("/program/compiler").asString());
+        assertEquals("any", union.at("/program/join").asString());
+        assertEquals(5, union.get("direct_count").asInt());
+        var intersection = run("Нужны вебинары и удаленный доступ", Map.of());
+        assertEquals("all", intersection.at("/program/join").asString());
+        assertTrue(intersection.get("top4").isEmpty());
+        assertEquals(0, calls);
+    }
+
+    @Test
+    void fuzzyNamesOnlyChangeLetters() {
+        assertEquals("astra linux", QueryPlan.canonical("astra-linux", Set.of("astra linux")));
+        assertTrue(CatalogNames.oneEdit("suite 10", "sutie 10", true));
+        assertFalse(CatalogNames.oneEdit("suite 10", "suite 11", true));
+        assertFalse(CatalogNames.oneEdit("suite 10", "suite 1", true));
+        assertFalse(CatalogNames.oneEdit("suite-10", "suite 10", true));
     }
 
     @Test
