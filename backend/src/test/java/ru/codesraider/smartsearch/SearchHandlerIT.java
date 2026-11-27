@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -183,6 +184,19 @@ class SearchHandlerIT {
     }
 
     @Test
+    void categoryConflictReturnsAnEmptySearchWithOrWithoutContext() throws Exception {
+        var wrongCategory = Map.of("category_id", "687");
+        for (Map<String, String> context : List.of(Map.<String, String>of(), wrongCategory)) {
+            var result = search(Map.of("q", "кибер бэкап", "selected_target", TARGET,
+                    "context", context, "filters", wrongCategory));
+            assertCollection(result.required("primary_target"));
+            assertEquals(0, result.required("direct_count").asInt());
+            assertEmptyList(result, "top4");
+            assertShortfall(result, 0);
+        }
+    }
+
+    @Test
     void staleSelectionAndUnknownEntityHaveDifferentErrors() throws Exception {
         var stale = Map.of("q", PREFIX, "selected_target", Map.of("kind", "collection", "target_id", "missing"));
         assertEquals("UNKNOWN_TARGET", request("/v1/search", stale, 400).required("code").asString());
@@ -227,6 +241,16 @@ class SearchHandlerIT {
             String q = bothDevices ? "Покажи устройства Pantum P2500W или BM1800W" : "Покажи устройство Pantum P2500W";
             assertPantumCards(search(Map.of("q", q)), bothDevices);
         }
+    }
+
+    @Test
+    void requestedCartridgesAreMatchedToEachNamedDevice() throws Exception {
+        var two = search(Map.of("q", "Нужны принтер Pantum P2500W и МФУ Pantum BM1800W с подходящим картриджем для каждого"));
+        assertPantumCards(two, true);
+        var one = search(Map.of("q", "Принтер Pantum P2500W со совместимыми картриджами"));
+        assertPantumCards(one, false);
+        var unsupported = search(Map.of("q", "Цветной принтер Pantum P2500W с картриджем"));
+        assertEmptyList(unsupported, "top4");
     }
 
     @Test

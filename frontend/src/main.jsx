@@ -4,6 +4,7 @@ import AssistantChat from "./AssistantChat";
 import { recordEvent, useCardImpression } from "./searchEvents";
 import ProductImage from "./ProductImage";
 import { demoSearch, demoSuggestions, fetchSearch, safeLink } from "./catalog";
+import { upsellCards } from "./upsell";
 import "./style.css";
 
 const DEFAULT_QUERY = "Pantum P2500W или BM1800W";
@@ -137,7 +138,8 @@ function ProductCard({ item, anchor, tracking }) {
       {attributes.length > 0 && <dl className="product-attributes">
         {attributes.map(([key, values]) => <div key={key}><dt>{key}</dt><dd>{values.join(", ")}</dd></div>)}
       </dl>}
-      {anchor && <p className="compatible-with">Подходит к {anchor.name}</p>}
+      {anchor && item.role === "complement" && <p className="compatible-with">Подходит к {anchor.name}</p>}
+      {item.role === "related" && <p className="compatible-with">{item.recommendation_reason}</p>}
       <div className="product-bottom">
         <div><p className="price">{formatPrice(item)}</p><p className={`stock${item.available ? " available" : ""}`}>{item.available ? "В наличии" : "Нет в наличии"}</p></div>
         {url && <a className="button secondary card-link" onClick={click} href={url} target="_blank" rel="noreferrer">К товару</a>}
@@ -145,7 +147,7 @@ function ProductCard({ item, anchor, tracking }) {
       {searchId && (explanation ? <p className="compatible-with" role="status">{explanation}</p>
         : <button type="button" className="text-button" onClick={explain} disabled={loading}>
           {loading ? "Готовим пояснение…" : failed ? "Повторить запрос пояснения" : "Почему этот товар?"}</button>)}
-      {!!item.checks?.length && <details className="proof"><summary>Почему подходит</summary>
+      {item.role === "complement" && !!item.checks?.length && <details className="proof"><summary>Почему подходит</summary>
         <ul>{item.checks.map((check, index) => {
           const source = safeLink(check.source_url);
           return <li key={index}>{check.candidate_value} подходит к {check.anchor_value}. {source && <a href={source} target="_blank" rel="noreferrer">Источник проверки</a>}</li>;
@@ -156,9 +158,10 @@ function ProductCard({ item, anchor, tracking }) {
   );
 }
 
-function ProductGrid({ items, anchors, session, result, block = "top4" }) {
-  return <div className="product-grid" data-size={items.length}>{items.map(item => <ProductCard key={[result?.search_id, item.offer_id].join("/")} item={item}
-    tracking={session && { session, searchId: result.search_id, block, position: result[block].indexOf(item) + 1 }} anchor={anchors?.get(item.anchor_offer_id)} />)}</div>;
+function ProductGrid({ items, entries, session, result, block = "top4" }) {
+  const cards = entries ?? items.map(item => ({ item, block, position: result ? result[block].indexOf(item) + 1 : undefined }));
+  return <div className="product-grid" data-size={cards.length}>{cards.map(card => <ProductCard key={[result?.search_id, card.item.offer_id].join("/")} item={card.item}
+    tracking={session && { session, searchId: result.search_id, block: card.block, position: card.position }} anchor={card.anchor} />)}</div>;
 }
 
 function entityLink(url, filters) {
@@ -334,8 +337,9 @@ function App() {
   const showSuggestions = activeInput && suggestions.length > 0;
   const facets = result?.facets ?? { vendors: [], categories: [] };
   const direct = (result?.top4 ?? []).filter(item => item.role === "direct");
-  const anchors = new Map(direct.map(item => [item.offer_id, item]));
-  const complements = (result?.top4 ?? []).filter(item => item.role === "complement" && anchors.has(item.anchor_offer_id) && item.checks?.length && item.checks.every(check => check.result === "pass"));
+  const upsell = upsellCards(result);
+  const complements = upsell.filter(({ item }) => item.role === "complement");
+  const related = upsell.filter(({ item }) => item.role === "related");
   const primary = result?.primary_target;
   const offerWithoutFamilyCard = primary?.kind === "offer" && !direct.length;
   const tracking = { session: demo ? null : sessionId.current, result };
@@ -428,10 +432,11 @@ function App() {
                     Открыть предложение № {primary.id}
                   </a>}
                   {!direct.length && !offerWithoutFamilyCard && <div className="result-state"><p>Подходящих товаров не найдено.</p><p>Уточните запрос или сбросьте фильтры.</p></div>}
-                  {!!complements.length && <section className="result-group" aria-labelledby="complements-title"><h2 id="complements-title">Совместимые дополнения</h2><ProductGrid {...tracking} items={complements} anchors={anchors} /></section>}
+                  {!!complements.length && <section className="result-group" aria-labelledby="complements-title"><h2 id="complements-title">Совместимые дополнения</h2><ProductGrid {...tracking} entries={complements} /></section>}
                   {result.shortfall_reason === "NOT_ENOUGH_VERIFIED_FAMILIES" && <p className="shortfall">В каталоге меньше четырёх подтверждённых семейств для этого запроса.</p>}
                   {!!result.more_results?.length && <section className="result-group"><h2>Другие подходящие товары</h2><ProductGrid {...tracking} block="more_results" items={result.more_results} /></section>}
                   {!!result.alternatives?.length && <section className="result-group"><h2>Альтернативы</h2><ProductGrid {...tracking} block="alternatives" items={result.alternatives} /></section>}
+                  {!!related.length && <section className="result-group"><h2>{direct.length ? "Рекомендации к покупке" : "Предложения каталога"}</h2><ProductGrid {...tracking} entries={related} /></section>}
                 </>}
 
                 {result && tab !== "products" && (facetItems.length ? <ul className="facet-results">

@@ -8,8 +8,8 @@ import java.util.regex.Pattern;
 record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> additionalPurposes, String join) {
     enum Purpose {
         WORDS("", ""),
-        BACKUP("бэкап|бекап|резервн[а-я]* коп|копи[юяий]|дубликат", "документ|файл|диск"),
-        WEBINAR("вебинар|видеовстреч|видеоконференц|онлайн[- ]встреч|лекци|презентаци.*слушател",
+        BACKUP("бэкап|бекап|backup|резервн[а-я]* коп|копи[юяий]|дубликат", "документ|файл|диск"),
+        WEBINAR("вебинар|(?:онлайн|веб)[ -]семинар|видеовстреч|видеоконференц|онлайн[- ]встреч|лекци|презентаци.*слушател",
                 "встреч|слушател|презентаци"),
         REMOTE_ACCESS("удаленн[а-я]* (?:доступ|администрир|управлен)|управля[а-я]* .*компьютер|подключ[а-я]* .*рабоч[а-я]* стол|экран[а-я]* другого"
                         + "|чуж[а-я]* (?:пк|компьютер).*по сети",
@@ -39,6 +39,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         }
 
         int evidence(String query) {
+            // A virtual machine can be the object of a backup, rather than a request for a hypervisor.
+            if (this == VIRTUALIZATION) query = VM_BACKUP.matcher(query).replaceAll(" ");
             if (strong.matcher(query).find()) return 2;
             return weak.matcher(query).find() ? 1 : 0;
         }
@@ -108,15 +110,34 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
         return new QueryPlan("rules", Purpose.WORDS, text, List.of(), "all");
     }
 
+    private static final Pattern VM_BACKUP = Pattern.compile(
+            "(?U)\\b(?:(?:резервн[а-я]* копи[а-я]*|б[эе]кап[а-я]*|backup) (?:для )?"
+                    + "(?:виртуальн[а-я]* машин[а-я]*|вм|vm)|vm backup)\\b");
+
+    static boolean requestsVmBackup(String text) {
+        return VM_BACKUP.matcher(text).find();
+    }
+
     static boolean freeForm(String normalized, Set<String> aliases) {
         return normalized.length() <= 512
-                        && normalized.replaceAll("(?U)\\b(?:rack|zip|rar|ocr|ethernet)\\b", "").matches("[а-я -]*")
+                        && normalized.replaceAll("(?U)\\b(?:rack|zip|rar|ocr|ethernet|vm|backup)\\b", "").matches("[а-я -]*")
                         && !UNSUPPORTED_DETAIL.matcher(normalized).find()
                         && aliases.stream().noneMatch(normalized::contains);
     }
 
-    static QueryPlan compile(String normalized, Set<String> aliases, SearchCatalog db, ModelClient llm)
+    // Strip sentence punctuation only at the end of a Russian word. Embedded dots and versions stay intact.
+    static String sentenceText(String terms) {
+        return terms.replaceFirst("(?<=[а-я])\\.+$", "");
+    }
+
+    static QueryPlan compile(String terms, Set<String> aliases, SearchCatalog db, ModelClient llm)
             throws SQLException {
+        return compile(terms, aliases, db, llm, false);
+    }
+
+    static QueryPlan compile(String terms, Set<String> aliases, SearchCatalog db, ModelClient llm,
+                             boolean requestModel) throws SQLException {
+        String normalized = sentenceText(terms);
         String exclusions = normalized.contains("чтобы") && Purpose.UPS.evidence(normalized) == 2
                 ? normalized.replaceAll("(?U)\\bне выключал[а-я]*\\b", "") : normalized;
         if (Pattern.compile("(?U)\\b(не|без|кроме|исключая)\\b").matcher(exclusions).find())
@@ -143,7 +164,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
             // «Разослать приглашения и провести видеоконференцию» describes one
             // capability. A compound instruction needs evidence for two different capabilities.
             long capabilities = Arrays.stream(Purpose.values()).filter(op -> op.evidence(normalized) > 0).count();
-            if ((!compound || capabilities == 1) && best == 2 && grounded.size() == 1)
+            boolean clearIntent = (!compound || capabilities == 1) && best == 2 && grounded.size() == 1;
+            if (clearIntent && (!requestModel || !llm.configured() || compound))
                 return new QueryPlan("rules", grounded.getFirst(), normalized, List.of(), "all");
             if (compound && best == 2) {
                 var clauses = normalized.split(" (?:или|и) ");
@@ -175,6 +197,8 @@ record QueryPlan(String compiler, Purpose purpose, String text, List<Purpose> ad
                         program.join());
             }
             compiler = program == null ? "llm_fallback" : "llm_abstained";
+            if (clearIntent)
+                return new QueryPlan(compiler, grounded.getFirst(), normalized, List.of(), "all");
         }
         return new QueryPlan(compiler, Purpose.WORDS, normalized, List.of(), "all");
     }

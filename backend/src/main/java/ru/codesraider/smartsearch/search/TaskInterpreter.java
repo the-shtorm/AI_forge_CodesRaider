@@ -81,8 +81,9 @@ final class TaskInterpreter {
         return va >= 10_000;
     }
 
-    static QueryPlan interpret(String terms, Set<String> aliases, SearchCatalog catalog, ModelClient model)
+    static QueryPlan interpret(String text, Set<String> aliases, SearchCatalog catalog, ModelClient model)
             throws SQLException {
+        String terms = QueryPlan.sentenceText(text);
         if (!model.configured() || !terms.contains(" ") || !QueryPlan.freeForm(terms, aliases)
                 || ALTERNATIVE.matcher(terms).find()) return null;
         var topics = TOPICS.stream().filter(topic -> topic.subject().matcher(terms).find()).toList();

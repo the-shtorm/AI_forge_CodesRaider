@@ -50,6 +50,19 @@ class PublishedExamplesTest(unittest.TestCase):
         self.assertEqual({(c.offer_id, c.url) for c in result.top4},
                          {(c.id, c.url) for c in entity.children if c.kind == "offer"})
 
+    def test_upsell_has_its_own_limit_and_separates_verified_pairs_from_catalog_picks(self):
+        responses = response_examples(search, "/v1/search", "post")
+        pantum = SearchResponse.model_validate(responses["pantum"]["value"])
+        self.assertEqual([c.offer_id for c in pantum.upsell], [c.offer_id for c in pantum.top4 if c.role == "complement"])
+        result = SearchResponse.model_validate(responses["absent"]["value"])
+        self.assertEqual((result.direct_count, result.top4), (0, []))
+        self.assertEqual(result.upsell[0].recommendation_kind, "catalog_pick")
+        self.assertTrue(result.upsell[0].recommendation_reason)
+        for invalid in (dict(responses["absent"]["value"], upsell=result.upsell * 5),
+                        dict(responses["absent"]["value"], top4=result.upsell)):
+            with self.assertRaises(ValueError):
+                SearchResponse.model_validate(invalid)
+
     def test_absent_model_keeps_the_analog_outside_top4(self):
         example = response_examples(search, "/v1/search", "post")["analog"]
         result = SearchResponse.model_validate(example["value"])
